@@ -2,9 +2,12 @@ import threading
 import socket
 from collections import deque
 from struct import unpack
+from time import sleep
 
 class CnsDataShare(threading.Thread):
-    def __init__(self, mother_mem, mother_mem_list, mother_mem_deque, ip='192.168.0.29', port=7000):
+    def __init__(self, mother_mem, mother_mem_list, mother_mem_deque, mother_memory_nub,
+                 clean, ip='192.168.0.29', port=7000):
+
         threading.Thread.__init__(self)
         # initial socket
         self.ip, self.port = ip, port  # remote computer
@@ -14,21 +17,26 @@ class CnsDataShare(threading.Thread):
         self.data_share_mem = mother_mem
         self.data_share_mem_list = mother_mem_list
         self.data_share_mem_deque = mother_mem_deque
+        self.data_share_mem__nub = mother_memory_nub
+        self.nub = 0
+
+        self.clean = clean
+
         # Make data_share_mem structure
         self.Make_shared_mem_structure(deque_line=5)
 
     # 0. While the process
     def run(self):
         print('Start_data_share process....')
-        i = 0
-        while True:
-            if i >= 20:
-                self.sock.close()
-                break
-            self.update_mem()
-            print(self.data_share_mem['UHOLEG3']['Val'])
 
-            i += 1
+        while True:
+            if self.clean['Sig']:
+                for __ in self.data_share_mem_list.keys():
+                    self.data_share_mem_list[__]['Val'] = []
+                self.data_share_mem__nub['Nub'] = []
+                self.nub = 0
+                self.clean['Sig'] = False
+            self.update_mem()
 
     # 2. update mem from read CNS
     def update_mem(self):
@@ -42,6 +50,8 @@ class CnsDataShare(threading.Thread):
                 self.data_share_mem[pid]['Val'] = val
                 self.data_share_mem_list[pid]['Val'].append(val)
                 self.data_share_mem_deque[pid]['Val'].append(val)
+        self.data_share_mem__nub['Nub'].append(self.nub)
+        self.nub += 1
 
     # (sub) make shared memory
     def Make_shared_mem_structure(self, deque_line = 5):

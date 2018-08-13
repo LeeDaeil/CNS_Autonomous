@@ -5,18 +5,19 @@ import tensorflow as tf
 from collections import deque
 from keras.models import Sequential
 from keras.optimizers import RMSprop
-from keras.layers import Dense, Flatten
+from keras.layers import Dense
 from keras import backend as K
-import pickle
 
 from CNS_gym import gym
-from CNS.Auto_cont.Auto_run_freeze import Aurorun
+from Auto_cont.Auto_run_freeze import Aurorun
 from time import sleep
 
+
 class PowerControl(threading.Thread):
-    def __init__(self, mother_mem):
+    def __init__(self, mother_mem, clean):
         threading.Thread.__init__(self)
         self.mother_mem = mother_mem
+        self.clean = clean
 
     def run(self):
         Auto_run = Aurorun()
@@ -26,22 +27,23 @@ class PowerControl(threading.Thread):
         Auto_run.initial()
         sleep(1)
         agent = DQNAgent(action_size=3)
-        Auto_run.run()
+        for i in range(3):
+            self.clean['Sig'] = True
+            sleep(1)
+            Auto_run.run()
 
-        print('[{}]Start_CNS_process....'.format(self))
-        step = 0
+            print('[{}]Start_CNS_process....'.format(self))
+            step = 0
 
-        done = False
-        while not done:
-
-            state = env.update_state()
-            state = np.reshape(state, [1, 20])
-            action = agent.get_action(state)
-            next_state, reward, done = env.step(action, iter=step, human=False)
-            print(self, action)
-
-        Auto_run.initial()
-
+            done = False
+            while not done:
+                state = env.update_state()
+                state = np.reshape(state, [1, 20])
+                action = agent.get_action(state)
+                next_state, reward, done = env.step(action, iter=step, human=False)
+                step += 1
+            Auto_run.initial()
+            sleep(1)
 
 class DQNAgent:
     def __init__(self, action_size):
@@ -112,7 +114,6 @@ class DQNAgent:
                         kernel_initializer='he_uniform'))
         model.add(Dense(512, activation='relu',
                         kernel_initializer='he_uniform'))
-
         model.add(Dense(512, activation='relu'))
         model.add(Dense(self.action_size))
         model.summary()
