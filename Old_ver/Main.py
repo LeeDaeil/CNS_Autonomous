@@ -1,7 +1,7 @@
 from multiprocessing import Manager
-from CNS_data_share import CnsDataShare
-from CNS_plot import DrawPlot
-from CNS_data_cleaner import CnsDataCleaner
+from Old_ver.CNS_data_share import CnsDataShare
+from Old_ver.CNS_plot import DrawPlot
+from Old_ver.CNS_data_cleaner import CnsDataCleaner
 
 class StartAutonomous_CNS:
     def __init__(self):

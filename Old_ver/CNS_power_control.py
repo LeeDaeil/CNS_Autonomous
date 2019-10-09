@@ -8,7 +8,7 @@ from keras.optimizers import RMSprop
 from keras.layers import Dense
 from keras import backend as K
 
-from CNS_gym import gym
+from Old_ver.CNS_gym import gym
 from Auto_cont.Auto_run_freeze import Aurorun
 from time import sleep
 
