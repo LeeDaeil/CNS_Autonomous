@@ -5,8 +5,10 @@ from numpy import shape
 
 
 class CNS:
-    def __init__(self, CNS_IP, CNS_Port, Remote_IP, Remote_Port):
+    def __init__(self, threrad_name, CNS_IP, CNS_Port, Remote_IP, Remote_Port):
         if True:
+            # thread name
+            self.th_name = threrad_name
             # Ip, Port
             self.Remote_ip, self.Remote_port = Remote_IP, Remote_Port
             self.CNS_ip, self.CNS_port = CNS_IP, CNS_Port
@@ -136,7 +138,7 @@ class CNS:
 
 
 if __name__ == '__main__':
-    module = CNS('192.168.0.7', 7201, '192.168.0.10', 7201)
+    module = CNS('192.168.0.4', 7301, '192.168.0.10', 7301)
     module.init_cns(1)
     print(module.mem['KFZRUN']['Val'], module.mem['KCNTOMS']['Val'])
     module._send_malfunction_signal(12, 100100, 10)
