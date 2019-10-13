@@ -9,6 +9,7 @@ import datetime
 import pandas as pd
 import numpy as np
 from time import sleep
+from random import randrange
 import matplotlib.pyplot as plt
 import os
 import shutil
@@ -29,8 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=3, output_pa=3, time_leg=10)
-        self.test = False
+        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=9, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -57,6 +57,7 @@ class MainModel:
 
     def build_A3C(self):
         # return: 선언된 worker들을 반환함.
+        # 테스트 선택도 여기서 수정할 것
         worker = []
         for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [0, 0, 1]):
             if max_iter != 0:
@@ -235,96 +236,45 @@ class A3Cagent(threading.Thread):
         self.update_parameter()
 
     def update_parameter(self):
+        '''
+        네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
+        '''
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
-        # self.Reactor_power = self.CNS.mem['QPROREL']['Val']
-        # self.TRIP_SIG = self.CNS.mem['KLAMPO9']['Val']
-        # self.charging_valve_state = self.CNS.mem['KLAMPO95']['Val']
-        # self.main_feed_valve_1_state = self.CNS.mem['KLAMPO147']['Val']
-        # self.main_feed_valve_2_state = self.CNS.mem['KLAMPO148']['Val']
-        # self.main_feed_valve_3_state = self.CNS.mem['KLAMPO149']['Val']
-        # self.vct_level = self.CNS.mem['ZVCT']['Val']
-        # self.pzr_level = self.CNS.mem['ZINST63']['Val']
-        #
-        # self.operation_mode = 1.5
-        # if True:
-        #     # 원자로 출력 값을 사용하여 최대 최소 바운더리의 값을 구함.
-        #     base_condition = self.Time_tick / (30000 / self.operation_mode)
-        #     up_base_condition = (self.Time_tick * 53) / (1470000 / self.operation_mode)
-        #     low_base_condition = (self.Time_tick * 3) / (98000/ self.operation_mode)  # (30000 / self.operation_mode)
-        #
-        #     self.stady_condition = base_condition + 0.02
-        #
-        #     if self.stady_condition >= 1.00:
-        #         self.stady_condition, self.up_condition, self.low_condition = 1.00, 1.10, 0.90
-        #     else:
-        #         self.up_condition = up_base_condition + 0.04
-        #         self.low_condition = low_base_condition # + 0.01
-        #
-        #     self.distance_up = self.up_condition - self.Reactor_power
-        #     self.distance_low = self.Reactor_power - self.low_condition
-        #
-        # self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
-        # self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']  # Turbine ac condition
-        # self.Turbine_real = self.CNS.mem['KBCDO19']['Val']
-        # self.load_set = self.CNS.mem['KBCDO20']['Val']  # Turbine load set point
-        # self.load_rate = self.CNS.mem['KBCDO21']['Val']  # Turbine load rate
-        # self.Mwe_power = self.CNS.mem['KBCDO22']['Val']
-        #
-        # self.Netbreak_condition = self.CNS.mem['KLAMPO224']['Val'] # 0 : Off, 1 : On
-        # self.trip_block = self.CNS.mem['KLAMPO22']['Val']  # Trip block condition 0 : Off, 1 : On
-        #
-        # if self.Netbreak_condition == 1:
-        #     self.db.train_DB['Net_triger'] = True
-        #     if len(self.db.train_DB['Net_triger_time']) == 0:
-        #         self.db.train_DB['Net_triger_time'].append(self.Time_tick)
-        #
-        # if self.db.train_DB['Net_triger']:
-        #     self.tur_stady_condition = (self.Time_tick - self.db.train_DB['Net_triger_time'][0]) * (2 / 25)
-        #     self.tur_low_condition = (self.Time_tick - self.db.train_DB['Net_triger_time'][0]) * (2 / 25) - 50
-        #     if self.tur_low_condition <= 0:
-        #         self.tur_low_condition = 0
-        #     self.tur_hi_condition = (self.Time_tick - self.db.train_DB['Net_triger_time'][0]) * (2 / 25) + 50
-        # else:
-        #     self.tur_stady_condition, self.tur_low_condition, self.tur_hi_condition = 0, 0, 0
-        #
-        # self.distance_tur_up = self.tur_hi_condition - self.Mwe_power
-        # self.distance_tur_low = self.Mwe_power - self.tur_low_condition
-        #
-        #
-        # self.steam_dump_condition = self.CNS.mem['KLAMPO150']['Val'] # 0: auto 1: man
-        # self.heat_drain_pump_condition = self.CNS.mem['KLAMPO244']['Val'] # 0: off, 1: on
-        # self.main_feed_pump_1 = self.CNS.mem['KLAMPO241']['Val'] # 0: off, 1: on
-        # self.main_feed_pump_2 = self.CNS.mem['KLAMPO242']['Val'] # 0: off, 1: on
-        # self.main_feed_pump_3 = self.CNS.mem['KLAMPO243']['Val'] # 0: off, 1: on
-        # self.cond_pump_1 = self.CNS.mem['KLAMPO181']['Val'] # 0: off, 1: on
-        # self.cond_pump_2 = self.CNS.mem['KLAMPO182']['Val'] # 0: off, 1: on
-        # self.cond_pump_3 = self.CNS.mem['KLAMPO183']['Val'] # 0: off, 1: on
+        if True:
+            # input
+            self.PZR_level = self.CNS.mem['ZINST63']['Val']/100                     # 54.06 -> 0.5406
+            self.PZR_set_level = self.CNS.mem['ZPRZSP']['Val']                      # 0.57
+            self.PZR_delta_level = self.CNS.mem['ZINST56']['Val']/100               # 3.09 -> 0.0309
+            self.avg_temp = (self.CNS.mem['UAVLEG1']['Val'] +
+                             self.CNS.mem['UAVLEG2']['Val'] +
+                             self.CNS.mem['UAVLEG3']['Val'])/3000                   # 300.5 -> 0.3005
+            self.Charging_flow = self.CNS.mem['WCHGNO']['Val']/100                  # 4.16 -> 0.0416
+
+            self.BFV_122_pos = self.CNS.mem['BFV122']['Val']/100                    # 3.09 -> 0.0309
+            self.Charging_pump_1 = self.CNS.mem['KLAMPO71']['Val']                  # 0 or 1
+            self.Charging_pump_2 = self.CNS.mem['KLAMPO70']['Val']                  # 0 or 1
+            self.Charging_pump_3 = self.CNS.mem['KLAMPO69']['Val']                  # 0 or 1
+
+        if True:
+            # output
+            # self.BFV_122_pos_cont = self.CNS.mem['ZINST56']['Val']
+            # self.BFV_122_pos_cont_man = self.CNS.mem['KSWO100']['Val']            # 1: Man, 0: Auto
+            # self.Charging_pump_1_cont = self.CNS.mem['KSWO71']['Val']             # 0: off or 1: on
+            # self.Charging_pump_2_cont = self.CNS.mem['KSWO70']['Val']             # 0: off or 1: on
+            # self.Charging_pump_3_cont = self.CNS.mem['KSWO69']['Val']             # 0: off or 1: on
+            pass
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Time_tick, self.Time_tick, self.Time_tick
+            self.PZR_level, self.PZR_set_level, self.PZR_delta_level, self.avg_temp, self.Charging_flow,
+            self.BFV_122_pos, self.Charging_pump_1, self.Charging_pump_2, self.Charging_pump_3,
         ]
 
         self.save_state = {
             # 그래프를 그리기 위해서 필요한 변수들
             'CNS_time': self.Time_tick,
-            #
-            # 'CNS_time': self.Time_tick, 'Reactor_power': self.Reactor_power * 100,
-            # 'Reactor_power_up': self.up_condition * 100, 'Reactor_power_low': self.low_condition * 100,
-            #
-            # 'Mwe': self.Mwe_power, 'Mwe_up': self.tur_hi_condition, 'Mwe_low':self.tur_low_condition,
-            # 'Turbine_set': self.Turbine_setpoint, 'Turbine_ac': self.Turbine_ac,
-            # 'Turbine_real': self.Turbine_real, 'Load_set': self.load_set,
-            # 'Load_rate': self.load_rate,
-            #
-            # 'Net_break': self.Netbreak_condition, 'Trip_block':self.trip_block,
-            # 'Stem_pump': self.steam_dump_condition, 'Heat_pump': self.heat_drain_pump_condition,
-            # 'MF1': self.main_feed_pump_1, 'MF2': self.main_feed_pump_2, 'MF3': self.main_feed_pump_3,
-            # 'CF1': self.cond_pump_1, 'CF2': self.cond_pump_2, 'CF3': self.cond_pump_3,
-            #
-            # 'PZR_level': self.pzr_level, 'VCT_level': self.vct_level,
         }
 
     def run_cns(self, i):
@@ -347,26 +297,46 @@ class A3Cagent(threading.Thread):
         self.para = []
         self.val = []
 
+        # Chargning Valve _ mal
+        self.send_action_append(['KSWO100'], [1])
+
         # 조작 신호
-        if action == 0: self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
-        elif action == 1: self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
-        elif action == 2: self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
+        current_BFV_122_pos = self.CNS.mem['BFV122']['Val']
+        if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.05])       # Valve Up
+        elif action == 1: pass                                                                  # Valve Stay
+        elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.05])     # Valve Down
+        elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
+        elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
+        elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
+        elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
+        elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
+        elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
-    def get_reward_done(self):
+    def get_reward_done(self, A):
         # 현재 상태에 대한 보상 및 게임 종료 계산
 
         # 보상 계산 -------
-        R = 0.1
+        # 최대 보상(0.02)에서 PZR 델타 레벨값(/100*10)을 뺴고, 펌프 제어하면 감점
+        # PZR 델타   : [0.039 -> 0.003948, max 0.01]
+        # 펌프 3대   : [max 0.005, 1대 건들면 감산]
+        Max_R = 0.015
+        if A in [3, 4, 5, 6, 7, 8]:
+            R = Max_R - self.PZR_delta_level / 10 - 0.005
+        else:
+            R = Max_R - self.PZR_delta_level / 10
 
         # 게임 종료 계산 --
-        if self.db.train_DB['Step'] >= 50:
+        # 매 액션 당 최대 0.02의 보상을 건짐
+        # 6 : 매 스탭 PZR 을 아주 나이스하게 맞추면서 600초 를 버틴 결과물 6이상 되면 성공
+        # R < 0 :
+        if self.db.train_DB['TotR'] >= 6 or self.PZR_delta_level > 0.04:
             done = True
         else:
             done = False
-
+        print(self.db.train_DB['TotR'], R, A)
         return done, R
 
     def train_network(self):
@@ -389,18 +359,27 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.CNS.init_cns(initial_nub=1)
-        self.CNS._send_malfunction_signal(12, 10001, 10)
-        sleep(2)
-        iter_cns = 2    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+
+        def start_or_initial_cns(mal_time):
+            self.db.initial_train_DB()
+            self.CNS.init_cns(initial_nub=1)
+            self.CNS._send_malfunction_signal(12, 10005, mal_time)
+            sleep(2)
+
+        iter_cns = 2                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
+        start_or_initial_cns(mal_time=mal_time)
 
         # 훈련 시작하는 부분
         while episode < 5000:
-            # 1. input_time_length 까지 데이터 수집 (10번)
-            for i in range(0, self.input_time_length):
+            # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
+            while True:
                 self.run_cns(iter_cns)
                 self.update_parameter()
                 self.db.add_now_state(Now_S=self.state)
+                if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
+                    # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
+                    break
                 self.db.train_DB['Step'] += iter_cns
 
             # 2. 반복 수행 시작
@@ -427,7 +406,7 @@ class A3Cagent(threading.Thread):
                     self.update_parameter()
                     self.db.add_now_state(Now_S=self.state) # self.state 가 업데이트 된 상태이다. New state
                     # 2.4 새로운 상태에 대한 상태 평가를 시작한다.
-                    done, R = self.get_reward_done()
+                    done, R = self.get_reward_done(A=Action_net)
                     # 2.5 평가를 저장한다.
                     self.db.add_train_DB(S=old_state, R=R, A=Action_net)
                     # 2.5 기타 변수를 업데이트 한다.
@@ -455,11 +434,8 @@ class A3Cagent(threading.Thread):
                     # if self.db.train_DB['Step'] > 2000:
                     #     self.db.draw_img(current_ep=episode)
 
-                    # DB initial
-                    self.db.initial_train_DB()
-                    self.CNS.init_cns(initial_nub=1)
-                    self.CNS._send_malfunction_signal(12, 10001, 10)
-                    sleep(2)
+                    mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
+                    start_or_initial_cns(mal_time=mal_time)
                     break
 
 
@@ -503,7 +479,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(3)
+        Temp_R_A = np.zeros(9)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
