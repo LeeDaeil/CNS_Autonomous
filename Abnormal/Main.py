@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Abnormal.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_34_LSTM_1_5'
+MAKE_FILE_PATH = './VER_3_CLSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -36,7 +36,7 @@ class MainModel:
         worker = self.build_A3C()
         for __ in worker:
             __.start()
-            sleep(2)
+            sleep(1)
         print('All agent start done')
 
         count = 1
@@ -59,7 +59,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [0, 0, 1]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 20, 20]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -139,17 +139,19 @@ class MainNet:
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
-                shared = Conv1D(filters=10, kernel_size=3, strides=1, padding='same')(state)
+                shared = Conv1D(filters=10, kernel_size=5, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
-                shared = LSTM(32)(shared)
-                shared = Dense(60)(shared)
+                shared = LSTM(64)(shared)
+                shared = Dense(120)(shared)
 
         # ----------------------------------------------------------------------------------------------------
         # Common output network
-        actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
+        # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
+        actor_hidden = Dense(124, activation='relu', kernel_initializer='glorot_uniform')(shared)
         action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
 
-        value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
+        # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
+        value_hidden = Dense(64, activation='relu', kernel_initializer='he_uniform')(shared)
         state_value = Dense(1, activation='linear', kernel_initializer='he_uniform')(value_hidden)
 
         actor = Model(inputs=state, outputs=action_prob)
@@ -180,7 +182,7 @@ class MainNet:
         actor_loss = loss + 0.01*entropy
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -193,7 +195,7 @@ class MainNet:
         loss = K.mean(K.square(discounted_reward - value))
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
@@ -242,6 +244,7 @@ class A3Cagent(threading.Thread):
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
+        self.TRIP = self.CNS.mem['KRXTRIP']['Val']
         if True:
             # input
             self.PZR_level = self.CNS.mem['ZINST63']['Val']/100                     # 54.06 -> 0.5406
@@ -331,12 +334,12 @@ class A3Cagent(threading.Thread):
         # 게임 종료 계산 --
         # 매 액션 당 최대 0.02의 보상을 건짐
         # 6 : 매 스탭 PZR 을 아주 나이스하게 맞추면서 600초 를 버틴 결과물 6이상 되면 성공
-        # R < 0 :
-        if self.db.train_DB['TotR'] >= 6 or self.PZR_delta_level > 0.04:
+        # self.TRIP : Reactor Trip 시 망함으로 종료
+        if self.db.train_DB['TotR'] >= 6 or self.TRIP == 1:
             done = True
         else:
             done = False
-        print(self.db.train_DB['TotR'], R, A)
+        # print(self.db.train_DB['TotR'], R, A)
         return done, R
 
     def train_network(self):
@@ -371,7 +374,7 @@ class A3Cagent(threading.Thread):
         start_or_initial_cns(mal_time=mal_time)
 
         # 훈련 시작하는 부분
-        while episode < 5000:
+        while episode < 50000:
             # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
             while True:
                 self.run_cns(iter_cns)
@@ -431,8 +434,8 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    # if self.db.train_DB['Step'] > 2000:
-                    #     self.db.draw_img(current_ep=episode)
+                    if self.db.train_DB['Step'] > 200:
+                        self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
                     start_or_initial_cns(mal_time=mal_time)
@@ -491,7 +494,6 @@ class DB:
         self.gp_db = self.gp_db.append(temp, ignore_index=True)
 
     def draw_img(self, current_ep):
-        pass
         #
         # for _ in self.axs:
         #     _.clear()
@@ -555,7 +557,7 @@ class DB:
         # #
         # self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
         #                  facecolor=None)
-        # self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
+        self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 
 
 if __name__ == '__main__':
