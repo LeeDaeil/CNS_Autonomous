@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Abnormal.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_3_CLSTM'
+MAKE_FILE_PATH = './VER_4_CLSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=9, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=4, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -276,8 +276,12 @@ class A3Cagent(threading.Thread):
         ]
 
         self.save_state = {
-            # 그래프를 그리기 위해서 필요한 변수들
+            # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
             'CNS_time': self.Time_tick,
+            'PZR_level': self.PZR_level,
+            'PZR_Set': self.PZR_delta_level,
+            'BFV_122': self.BFV_122_pos,
+            'Pump': self.Charging_pump_1 + self.Charging_pump_2 + self.Charging_pump_3,
         }
 
     def run_cns(self, i):
@@ -305,15 +309,29 @@ class A3Cagent(threading.Thread):
 
         # 조작 신호
         current_BFV_122_pos = self.CNS.mem['BFV122']['Val']
-        if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.05])       # Valve Up
+
+        # Ver1
+        # if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.05])       # Valve Up
+        # elif action == 1: pass                                                                  # Valve Stay
+        # elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.05])     # Valve Down
+        # elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
+        # elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
+        # elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
+        # elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
+        # elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
+        # elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
+
+        # Ver2
+        if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.1])       # Valve Up
         elif action == 1: pass                                                                  # Valve Stay
-        elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.05])     # Valve Down
-        elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
-        elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
-        elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
-        elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
-        elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
-        elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
+        elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.1])     # Valve Down
+        elif action == 3: self.send_action_append(['KSWO70', 'KSWO69'], [1, 1])                   # Ch_1 On
+        # elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
+        # elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
+        # elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
+        # elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
+        # elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
+        # elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -482,7 +500,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(9)
+        Temp_R_A = np.zeros(4)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
