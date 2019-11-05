@@ -209,7 +209,7 @@ class A3Cagent(threading.Thread):
     def __init__(self, Remote_ip, Remote_port, CNS_ip, CNS_port, main_net, Sess, Summary_ops):
         threading.Thread.__init__(self)
         # 운전 관련 정보 분당 x%
-        self.operation_mode = 1.5
+        self.operation_mode = 0.5
         # CNS와 통신과 데이터 교환이 가능한 모듈 호출
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
 
@@ -452,35 +452,38 @@ class A3Cagent(threading.Thread):
         else:
             R = self.Reactor_power - self.low_condition
         Save_R1 = R
-        
+        # action == 0: Stay     action == 1: Out        action == 2: In
+        if A == 0:
+            R += 0.01
+        else:
+            pass
+        Save_R2 = R
+        # self.Tref_Tavg 의 값이 너무 커지면 보상에서 감산 self.Tref_Tavg
+        if abs(self.Tref_Tavg) < 1.5:
+            R += abs(self.Tref_Tavg) / 100    # 최대 20 -> 0.2
+        else:
+            pass
+        Save_R3 = R
         # 게임 종료 계산 --
-        # 게임 종료를 먼저 정하고 그다음 보상을 추가 계산
+        # 게임 종료는 운전 바운더리를 벗어난 경우로써 Save_R1 값이 0보다 작은 경우다.
         # 출력 증가율 정하는 부분 -----------------------------
         if self.operation_mode == 1.0:
-            if R < 0 or self.db.train_DB['Step'] >= 4800:  # or self.Reactor_power >= 0.9470: ## oper 1%
+            if Save_R1 < 0 or self.db.train_DB['Step'] >= 4800:  # or self.Reactor_power >= 0.9470: ## oper 1%
                 done = True
             else:
                 done = False
         elif self.operation_mode == 1.5:
-            if R < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
+            if Save_R1 < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
+                done = True
+            else:
+                done = False
+        elif self.operation_mode == 0.5:
+            if Save_R1 < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
                 done = True
             else:
                 done = False
         else:
             print('지원하지 않는 운전 출력')
-
-        # action == 0: Stay     action == 1: Out        action == 2: In
-        if A == 0:
-            R += 0.005
-        else:
-            R -= 0.005
-        Save_R2 = R
-        # self.Tref_Tavg 의 값이 너무 커지면 보상에서 감산 self.Tref_Tavg
-        if abs(self.Tref_Tavg) > 1.5:
-            R -= abs(self.Tref_Tavg) / 100  # 최대 20 -> 0.2
-        else:
-            R += abs(self.Tref_Tavg) / 100  # 최대 20 -> 0.2
-        Save_R3 = R
 
         if self.db.train_DB['Step'] >= 700 and self.Mwe_power < 1:
             done = True
