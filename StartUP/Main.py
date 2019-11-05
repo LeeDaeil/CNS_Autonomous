@@ -16,9 +16,9 @@ import shutil
 import logging
 import logging.handlers
 #------------------------------------------------------------------
-from Abnormal.CNS_UDP import CNS
+from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_4_LSTM'
+MAKE_FILE_PATH = './VER_1_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=13, output_pa=3, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -59,7 +59,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 20, 20]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 0, 20]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -208,6 +208,8 @@ class MainNet:
 class A3Cagent(threading.Thread):
     def __init__(self, Remote_ip, Remote_port, CNS_ip, CNS_port, main_net, Sess, Summary_ops):
         threading.Thread.__init__(self)
+        # 운전 관련 정보 분당 x%
+        self.operation_mode = 1.5
         # CNS와 통신과 데이터 교환이 가능한 모듈 호출
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
 
@@ -244,44 +246,89 @@ class A3Cagent(threading.Thread):
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
+        self.Reactor_power = self.CNS.mem['QPROREL']['Val']
         self.TRIP = self.CNS.mem['KRXTRIP']['Val']
-        if True:
-            # input
-            self.PZR_level = self.CNS.mem['ZINST63']['Val']/100                     # 54.06 -> 0.5406
-            self.PZR_set_level = self.CNS.mem['ZPRZSP']['Val']                      # 0.57
-            self.PZR_delta_level = self.CNS.mem['ZINST56']['Val']/100               # 3.09 -> 0.0309
-            self.avg_temp = (self.CNS.mem['UAVLEG1']['Val'] +
-                             self.CNS.mem['UAVLEG2']['Val'] +
-                             self.CNS.mem['UAVLEG3']['Val'])/3000                   # 300.5 -> 0.3005
-            self.Charging_flow = self.CNS.mem['WCHGNO']['Val']/100                  # 4.16 -> 0.0416
+        # 온도 고려 2019-11-04
+        self.Tref_Tavg = self.CNS.mem['ZINST15']['Val']                     # Tref-Tavg
+        self.Tavg = self.CNS.mem['UAVLEGM']['Val']                          # 308.21
+        self.Tref = self.CNS.mem['UAVLEGS']['Val']                          # 308.22
+        # 제어봉 Pos
+        self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
+        #
+        self.charging_valve_state = self.CNS.mem['KLAMPO95']['Val']
+        self.main_feed_valve_1_state = self.CNS.mem['KLAMPO147']['Val']
+        self.main_feed_valve_2_state = self.CNS.mem['KLAMPO148']['Val']
+        self.main_feed_valve_3_state = self.CNS.mem['KLAMPO149']['Val']
+        self.vct_level = self.CNS.mem['ZVCT']['Val']
+        self.pzr_level = self.CNS.mem['ZINST63']['Val']
 
-            self.BFV_122_pos = self.CNS.mem['BFV122']['Val']/100                    # 3.09 -> 0.0309
-            self.Charging_pump_1 = self.CNS.mem['KLAMPO71']['Val']                  # 0 or 1
-            self.Charging_pump_2 = self.CNS.mem['KLAMPO70']['Val']                  # 0 or 1
-            self.Charging_pump_3 = self.CNS.mem['KLAMPO69']['Val']                  # 0 or 1
+        self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
+        self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']  # Turbine ac condition
+        self.Turbine_real = self.CNS.mem['KBCDO19']['Val']
+        self.load_set = self.CNS.mem['KBCDO20']['Val']  # Turbine load set point
+        self.load_rate = self.CNS.mem['KBCDO21']['Val']  # Turbine load rate
+        self.Mwe_power = self.CNS.mem['KBCDO22']['Val']
+
+        self.Netbreak_condition = self.CNS.mem['KLAMPO224']['Val'] # 0 : Off, 1 : On
+        self.trip_block = self.CNS.mem['KLAMPO22']['Val']  # Trip block condition 0 : Off, 1 : On
 
         if True:
-            # output
-            # self.BFV_122_pos_cont = self.CNS.mem['ZINST56']['Val']
-            # self.BFV_122_pos_cont_man = self.CNS.mem['KSWO100']['Val']            # 1: Man, 0: Auto
-            # self.Charging_pump_1_cont = self.CNS.mem['KSWO71']['Val']             # 0: off or 1: on
-            # self.Charging_pump_2_cont = self.CNS.mem['KSWO70']['Val']             # 0: off or 1: on
-            # self.Charging_pump_3_cont = self.CNS.mem['KSWO69']['Val']             # 0: off or 1: on
-            pass
+            # 원자로 출력 값을 사용하여 최대 최소 바운더리의 값을 구함.
+            base_condition = self.Time_tick / (30000 / self.operation_mode)
+            up_base_condition = (self.Time_tick * 53) / (1470000 / self.operation_mode)
+            low_base_condition = (self.Time_tick * 3) / (98000/ self.operation_mode)  # (30000 / self.operation_mode)
+
+            self.stady_condition = base_condition + 0.02
+
+            if self.stady_condition >= 1.00:
+                self.stady_condition, self.up_condition, self.low_condition = 1.00, 1.10, 0.90
+            else:
+                self.up_condition = up_base_condition + 0.04
+                self.low_condition = low_base_condition # + 0.01
+
+            self.distance_up = self.up_condition - self.Reactor_power
+            self.distance_low = self.Reactor_power - self.low_condition
+
+
+        if self.Netbreak_condition == 1:
+            self.db.train_DB['Net_triger'] = True
+            if len(self.db.train_DB['Net_triger_time']) == 0:
+                self.db.train_DB['Net_triger_time'].append(self.Time_tick)
+
+        self.steam_dump_condition = self.CNS.mem['KLAMPO150']['Val'] # 0: auto 1: man
+        self.heat_drain_pump_condition = self.CNS.mem['KLAMPO244']['Val'] # 0: off, 1: on
+        self.main_feed_pump_1 = self.CNS.mem['KLAMPO241']['Val'] # 0: off, 1: on
+        self.main_feed_pump_2 = self.CNS.mem['KLAMPO242']['Val'] # 0: off, 1: on
+        self.main_feed_pump_3 = self.CNS.mem['KLAMPO243']['Val'] # 0: off, 1: on
+        self.cond_pump_1 = self.CNS.mem['KLAMPO181']['Val'] # 0: off, 1: on
+        self.cond_pump_2 = self.CNS.mem['KLAMPO182']['Val'] # 0: off, 1: on
+        self.cond_pump_3 = self.CNS.mem['KLAMPO183']['Val'] # 0: off, 1: on
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_level, self.PZR_set_level, self.PZR_delta_level, self.avg_temp, self.Charging_flow,
-            self.BFV_122_pos, self.Charging_pump_1, self.Charging_pump_2, self.Charging_pump_3,
+            self.Reactor_power, self.distance_up, self.distance_low, self.stady_condition, self.Mwe_power/1000,
+            self.load_set/100, self.Tref/1000, self.Tavg/1000, self.Tref_Tavg/100,
+            self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
         ]
 
         self.save_state = {
             # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
-            'CNS_time': self.Time_tick,
-            'PZR_level': self.PZR_level,
-            'PZR_Set': self.PZR_delta_level,
-            'BFV_122': self.BFV_122_pos,
-            'Pump': self.Charging_pump_1 + self.Charging_pump_2 + self.Charging_pump_3,
+            'CNS_time': self.Time_tick, 'Reactor_power': self.Reactor_power * 100,
+            'Reactor_power_up': self.up_condition * 100, 'Reactor_power_low': self.low_condition * 100,
+
+            'Mwe': self.Mwe_power,
+            'Turbine_set': self.Turbine_setpoint, 'Turbine_ac': self.Turbine_ac,
+            'Turbine_real': self.Turbine_real, 'Load_set': self.load_set,
+            'Load_rate': self.load_rate,
+
+            'Net_break': self.Netbreak_condition, 'Trip_block':self.trip_block,
+            'Stem_pump': self.steam_dump_condition, 'Heat_pump': self.heat_drain_pump_condition,
+            'MF1': self.main_feed_pump_1, 'MF2': self.main_feed_pump_2, 'MF3': self.main_feed_pump_3,
+            'CF1': self.cond_pump_1, 'CF2': self.cond_pump_2, 'CF3': self.cond_pump_3,
+
+            'PZR_level': self.pzr_level, 'VCT_level': self.vct_level,
+            'Temp_avg': self.Tavg, 'Temp_ref': self.Tref, 'Temp_delta_ref_avg': self.Tref_Tavg,
+            'Rod_pos': self.rod_pos
         }
 
     def run_cns(self, i):
@@ -307,33 +354,91 @@ class A3Cagent(threading.Thread):
         # Chargning Valve _ mal
         self.send_action_append(['KSWO100'], [1])
 
-        # 조작 신호
-        current_BFV_122_pos = self.CNS.mem['BFV122']['Val']
+        # 주급수 및 CVCS 자동
+        if self.charging_valve_state == 1:
+            self.send_action_append(['KSWO100'], [0])
+        if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
+            self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
+        self.send_action_append(['KSWO78'], [1])
 
-        # Ver1
-        # if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.05])       # Valve Up
-        # elif action == 1: pass                                                                  # Valve Stay
-        # elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.05])     # Valve Down
-        # elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
-        # elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
-        # elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
-        # elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
-        # elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
-        # elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
+        # 절차서 구성 순서로 진행
+        # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
+        if self.Reactor_power >= 0.04 and self.Turbine_setpoint != 1800:
+            if self.Turbine_setpoint < 1750: # 1780 -> 1872
+                self.send_action_append(['KSWO213'], [1])
+            elif self.Turbine_setpoint >= 1750:
+                self.send_action_append(['KSWO213'], [0])
+        # 1) 출력 4% 이상에서 터빈 acc 를 200 이하로 맞춘다.
+        if self.Reactor_power >= 0.04 and self.Turbine_ac != 210:
+            if self.Turbine_ac < 200:
+                self.send_action_append(['KSWO215'], [1])
+            elif self.Turbine_ac >= 200:
+                self.send_action_append(['KSWO215'], [0])
+        # 2) 출력 10% 이상에서는 Trip block 우회한다.
+        if self.Reactor_power >= 0.10 and self.trip_block != 1:
+            self.send_action_append(['KSWO22', 'KSWO21'], [1, 1])
+        # 2) 출력 10% 이상에서는 rate를 50까지 맞춘다.
+        if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
+            if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+            if self.load_rate < 50: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
-        # Ver2
-        if action == 0: self.send_action_append(['BFV122'], [current_BFV_122_pos + 0.1])       # Valve Up
-        elif action == 1: pass                                                                  # Valve Stay
-        elif action == 2: self.send_action_append(['BFV122'], [current_BFV_122_pos - 0.1])     # Valve Down
-        # elif action == 3: self.send_action_append(['KSWO70', 'KSWO69'], [1, 1])                   # Ch_1 On
-        # elif action == 3: self.send_action_append(['KSWO71'], [1])                              # Ch_1 On
-        # elif action == 4: self.send_action_append(['KSWO71'], [0])                              # Ch_1 Off
-        # elif action == 5: self.send_action_append(['KSWO70'], [1])                              # Ch_2 On
-        # elif action == 6: self.send_action_append(['KSWO70'], [0])                              # Ch_2 Off
-        # elif action == 7: self.send_action_append(['KSWO69'], [1])                              # Ch_3 On
-        # elif action == 8: self.send_action_append(['KSWO69'], [0])                              # Ch_3 Off
+        if 0.10 <= self.Reactor_power < 0.20:
+            if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.200 <= self.Reactor_power < 0.300:
+            if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.300 <= self.Reactor_power < 0.400:
+            if self.load_set < 300: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.400 <= self.Reactor_power < 0.500:
+            if self.load_set < 400: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.500 <= self.Reactor_power < 0.600:
+            if self.load_set < 500: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.600 <= self.Reactor_power < 0.700:
+            if self.load_set < 600: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.700 <= self.Reactor_power < 0.800:
+            if self.load_set < 700: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.800 <= self.Reactor_power < 0.850:
+            if self.load_set < 800: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        if 0.850 <= self.Reactor_power < 1.100:
+            if self.load_set < 930: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
-        self.send_action_append(['KSWO70', 'KSWO69'], [1, 1])
+        # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
+        if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
+            self.send_action_append(['KSWO244'], [1])
+        # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, steam dump auto로 전향
+        if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.steam_dump_condition == 1:
+            self.send_action_append(['KSWO176'], [0])
+        # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, heat drain pump on
+        if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
+            self.send_action_append(['KSWO205'], [1])
+        # 5) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
+        if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
+            self.send_action_append(['KSWO205'], [1])
+        # 6) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
+        if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+            self.send_action_append(['KSWO193'], [1])
+        # 7) 출력 50% 이상 및 전기 출력이 475Mwe
+        if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+            self.send_action_append(['KSWO206'], [1])
+        # 8) 출력 80% 이상 및 전기 출력이 765Mwe
+        if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
+            self.send_action_append(['KSWO192'], [1])
+
+        # 9) 제어봉 조작 신호를 보내기
+        if action == 0: self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
+        elif action == 1: self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
+        elif action == 2: self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
+
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
@@ -341,24 +446,41 @@ class A3Cagent(threading.Thread):
         # 현재 상태에 대한 보상 및 게임 종료 계산
 
         # 보상 계산 -------
-        # 최대 보상(0.02)에서 PZR 델타 레벨값(/100*10)을 뺴고, 펌프 제어하면 감점
-        # PZR 델타   : [0.039 -> 0.003948, max 0.01]
-        # 펌프 3대   : [max 0.005, 1대 건들면 감산]
-        Max_R = 0.015
-        if A in [3, 4, 5, 6, 7, 8]:
-            R = Max_R - self.PZR_delta_level / 10 - 0.005
+        # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
+        if self.Reactor_power > self.stady_condition:
+            R = self.up_condition - self.Reactor_power
         else:
-            R = Max_R - self.PZR_delta_level / 10
+            R = self.Reactor_power - self.low_condition
+        # action == 0: Stay     action == 1: Out        action == 2: In
+        if A == 0:
+            R += 0.005
+        else:
+            R -= 0.005
+        # self.Tref_Tavg 의 값이 너무 커지면 보상에서 감산 self.Tref_Tavg
+        if abs(self.Tref_Tavg) > 1:
+            R -= abs(self.Tref_Tavg)/100    # 최대 20 -> 0.2
+        else:
+            R += abs(self.Tref_Tavg) / 100  # 최대 20 -> 0.2
 
         # 게임 종료 계산 --
-        # 매 액션 당 최대 0.02의 보상을 건짐
-        # 6 : 매 스탭 PZR 을 아주 나이스하게 맞추면서 600초 를 버틴 결과물 6이상 되면 성공
-        # self.TRIP : Reactor Trip 시 망함으로 종료
-        if self.db.train_DB['TotR'] >= 6 or self.TRIP == 1:
-            done = True
+        #
+        # 출력 증가율 정하는 부분 -----------------------------
+        if self.operation_mode == 1.0:
+            if R < 0 or self.db.train_DB['Step'] >= 4800:  # or self.Reactor_power >= 0.9470: ## oper 1%
+                done = True
+            else:
+                done = False
+        elif self.operation_mode == 1.5:
+            if R < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
+                done = True
+            else:
+                done = False
         else:
-            done = False
-        # print(self.db.train_DB['TotR'], R, A)
+            print('지원하지 않는 운전 출력')
+
+        if self.db.train_DB['Step'] >= 700 and self.Mwe_power < 1:
+            done = True
+
         return done, R
 
     def train_network(self):
@@ -384,8 +506,8 @@ class A3Cagent(threading.Thread):
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
-            self.CNS.init_cns(initial_nub=1)
-            self.CNS._send_malfunction_signal(12, 10001, mal_time)
+            self.CNS.init_cns(initial_nub=17)
+            # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             sleep(2)
 
         iter_cns = 2                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
@@ -399,8 +521,11 @@ class A3Cagent(threading.Thread):
                 self.run_cns(iter_cns)
                 self.update_parameter()
                 self.db.add_now_state(Now_S=self.state)
-                if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
-                    # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
+                # if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
+                #     # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
+                #     break
+                if len(self.db.train_DB['Now_S']) > self.input_time_length:
+                    # 네트워크에 사용할 입력 데이터 다 쌓이면 제어하도록 설계
                     break
                 self.db.train_DB['Step'] += iter_cns
 
@@ -453,7 +578,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 200:
+                    if self.db.train_DB['Step'] > 500:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -473,7 +598,7 @@ class DB:
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(14, 10))
-        self.gs = self.fig.add_gridspec(14, 3)
+        self.gs = self.fig.add_gridspec(20, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:7, :]),  # 3
@@ -481,6 +606,8 @@ class DB:
                     self.fig.add_subplot(self.gs[8:10, :]),  # 5
                     self.fig.add_subplot(self.gs[10:12, :]),  # 6
                     self.fig.add_subplot(self.gs[12:14, :]), # 7
+                    self.fig.add_subplot(self.gs[14:17, :]),  # 8
+                    self.fig.add_subplot(self.gs[17:20, :]),  # 9
                     ]
 
     def initial_train_DB(self):
@@ -513,77 +640,80 @@ class DB:
         self.gp_db = self.gp_db.append(temp, ignore_index=True)
 
     def draw_img(self, current_ep):
+        for _ in self.axs:
+            _.clear()
         #
-        # for _ in self.axs:
-        #     _.clear()
-        # #
-        # self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power'], 'g', label='Power')
-        # self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_up'], 'b', label='Power_hi_bound')
-        # self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_low'], 'r', label='Power_low_bound')
-        # self.axs[0].legend(loc=2, fontsize=5)
-        # self.axs[0].set_ylabel('Reactor Power [%]')
-        # self.axs[0].grid()
-        # #
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe'], 'g', label='Mwe')
-        # # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_up'], 'b', label='Mwe_hi_bound')
-        # # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_low'], 'r', label='Mwe_low_bound')
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_set'], 'm', label='Set_point')
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_rate'], 'y', label='Load_rate')
-        # self.axs[1].legend(loc=2, fontsize=5)
-        # self.axs[1].set_ylabel('Electrical Power [MWe]')
-        # self.axs[1].grid()
-        # #
-        # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_set'], 'r')
-        # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_real'], 'b')
-        # self.axs[2].set_yticks((900, 1800))
-        # self.axs[2].set_yticklabels(('900', '1800'))
-        # self.axs[2].set_ylabel('Turbine RPM')
-        # self.axs[2].grid()
-        # #
-        # self.axs[3].plot(self.gp_db['time'], self.gp_db['Act'], 'black')
-        # self.axs[3].set_yticks((-1, 0, 1))
-        # self.axs[3].set_yticklabels(('In', 'Stay', 'Out'))
-        # self.axs[3].set_ylabel('Rod Control')
-        # self.axs[3].grid()
-        # #
-        # self.axs[4].plot(self.gp_db['time'], self.gp_db['VCT_level'], 'black')
-        # # self.axs[4].set_yticks((-1, 0, 1))
-        # # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
-        # self.axs[4].set_ylabel('VCT_level')
-        # self.axs[4].grid()
-        # #
-        # self.axs[5].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'black')
-        # # self.axs[4].set_yticks((-1, 0, 1))
-        # # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
-        # self.axs[5].set_ylabel('PZR_level')
-        # self.axs[5].grid()
-        # #
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Stem_pump'], label='Stem dump valve auto')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Heat_pump'], label='Heat pump')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF1'], label='Main Feed Water Pump 1')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF2'], label='Main Feed Water Pump 2')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF3'], label='Main Feed Water Pump 3')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF1'], label='Condensor Pump 1')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF2'], label='Condensor Pump 2')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF3'], label='Condensor Pump 3')
-        # self.axs[6].set_yticks((0, 1))
-        # self.axs[6].set_yticklabels(('Off', 'On'))
-        # self.axs[6].set_xlabel('Time [s]')
-        # self.axs[6].legend(loc=7, fontsize=5)
-        # self.axs[6].grid()
-        # #
-        # self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
-        #                  facecolor=None)
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power'], 'g', label='Power')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_up'], 'b', label='Power_hi_bound')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_low'], 'r', label='Power_low_bound')
+        self.axs[0].legend(loc=2, fontsize=5)
+        self.axs[0].set_ylabel('Reactor Power [%]')
+        self.axs[0].grid()
+        #
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe'], 'g', label='Mwe')
+        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_up'], 'b', label='Mwe_hi_bound')
+        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_low'], 'r', label='Mwe_low_bound')
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_set'], 'm', label='Set_point')
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_rate'], 'y', label='Load_rate')
+        self.axs[1].legend(loc=2, fontsize=5)
+        self.axs[1].set_ylabel('Electrical Power [MWe]')
+        self.axs[1].grid()
+        #
+        self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_set'], 'r')
+        self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_real'], 'b')
+        self.axs[2].set_yticks((900, 1800))
+        self.axs[2].set_yticklabels(('900', '1800'))
+        self.axs[2].set_ylabel('Turbine RPM')
+        self.axs[2].grid()
+        #
+        self.axs[3].plot(self.gp_db['time'], self.gp_db['Act'], 'black')
+        self.axs[3].set_yticks((-1, 0, 1))
+        self.axs[3].set_yticklabels(('In', 'Stay', 'Out'))
+        self.axs[3].set_ylabel('Rod Control')
+        self.axs[3].grid()
+        #
+        self.axs[4].plot(self.gp_db['time'], self.gp_db['VCT_level'], 'black')
+        # self.axs[4].set_yticks((-1, 0, 1))
+        # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
+        self.axs[4].set_ylabel('VCT_level')
+        self.axs[4].grid()
+        #
+        self.axs[5].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'black')
+        # self.axs[4].set_yticks((-1, 0, 1))
+        # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
+        self.axs[5].set_ylabel('PZR_level')
+        self.axs[5].grid()
+        #
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['Stem_pump'], label='Stem dump valve auto')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['Heat_pump'], label='Heat pump')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['MF1'], label='Main Feed Water Pump 1')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['MF2'], label='Main Feed Water Pump 2')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['MF3'], label='Main Feed Water Pump 3')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['CF1'], label='Condensor Pump 1')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['CF2'], label='Condensor Pump 2')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['CF3'], label='Condensor Pump 3')
+        self.axs[6].set_yticks((0, 1))
+        self.axs[6].set_yticklabels(('Off', 'On'))
+        self.axs[6].legend(loc=7, fontsize=5)
+        self.axs[6].grid()
+        #
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_avg'], label='Temp_avg')
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_ref'], label='Temp_ref')
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_delta_ref_avg'], label='Temp_delta')
+        self.axs[7].legend(loc=7, fontsize=5)
+        self.axs[7].grid()
+        #
+        self.axs[8].plot(self.gp_db['time'], self.gp_db['Rod_pos'])
+        self.axs[8].set_xlabel('Time [s]')
+        self.axs[8].grid()
+        #
+        self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
+                         facecolor=None)
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 
 
 if __name__ == '__main__':
     test = MainModel()
     test.run()
-
-    #MainNet(net_type='LSTM', input_pa=6, output_pa=3, time_leg=10)
-    #MainNet(net_type='DNN', input_pa=6, output_pa=3, time_leg=10)
-    #MainNet(net_type='CNN', input_pa=6, output_pa=3, time_leg=10)
-    #MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=10)
