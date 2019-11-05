@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_1_LSTM'
+MAKE_FILE_PATH = './VER_2_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -451,17 +451,19 @@ class A3Cagent(threading.Thread):
             R = self.up_condition - self.Reactor_power
         else:
             R = self.Reactor_power - self.low_condition
+        Save_R1 = R
         # action == 0: Stay     action == 1: Out        action == 2: In
         if A == 0:
             R += 0.005
         else:
             R -= 0.005
+        Save_R2 = R
         # self.Tref_Tavg 의 값이 너무 커지면 보상에서 감산 self.Tref_Tavg
-        if abs(self.Tref_Tavg) > 1:
-            R -= abs(self.Tref_Tavg)/100    # 최대 20 -> 0.2
+        if abs(self.Tref_Tavg) > 1.5:
+            R -= abs(self.Tref_Tavg) / 100    # 최대 20 -> 0.2
         else:
             R += abs(self.Tref_Tavg) / 100  # 최대 20 -> 0.2
-
+        Save_R3 = R
         # 게임 종료 계산 --
         #
         # 출력 증가율 정하는 부분 -----------------------------
@@ -480,7 +482,8 @@ class A3Cagent(threading.Thread):
 
         if self.db.train_DB['Step'] >= 700 and self.Mwe_power < 1:
             done = True
-
+        # 각에피소드 마다 Log
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
         return done, R
 
     def train_network(self):
@@ -517,6 +520,7 @@ class A3Cagent(threading.Thread):
         # 훈련 시작하는 부분
         while episode < 50000:
             # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
+            self.one_agents_episode = episode
             while True:
                 self.run_cns(iter_cns)
                 self.update_parameter()
