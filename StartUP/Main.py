@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_2_LSTM'
+MAKE_FILE_PATH = './VER_3_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -59,7 +59,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 0, 20]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 20, 20]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -478,14 +478,14 @@ class A3Cagent(threading.Thread):
             else:
                 done = False
         elif self.operation_mode == 0.5:
-            if Save_R1 < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
+            if Save_R1 < 0 or self.db.train_DB['Step'] >= 7000:   # or self.Reactor_power >= 0.9470:
                 done = True
             else:
                 done = False
         else:
             print('지원하지 않는 운전 출력')
 
-        if self.db.train_DB['Step'] >= 700 and self.Mwe_power < 1:
+        if self.db.train_DB['Step'] >= 1400 and self.Mwe_power < 1:
             done = True
         # 각에피소드 마다 Log
         self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
@@ -587,7 +587,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 500:
+                    if self.db.train_DB['Step'] > 1000:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -616,7 +616,7 @@ class DB:
                     self.fig.add_subplot(self.gs[10:12, :]),  # 6
                     self.fig.add_subplot(self.gs[12:14, :]), # 7
                     self.fig.add_subplot(self.gs[14:17, :]),  # 8
-                    self.fig.add_subplot(self.gs[17:20, :]),  # 9
+                    # self.fig.add_subplot(self.gs[17:20, :]),  # 9
                     ]
 
     def initial_train_DB(self):
@@ -714,9 +714,9 @@ class DB:
         self.axs[7].legend(loc=7, fontsize=5)
         self.axs[7].grid()
         #
-        self.axs[8].plot(self.gp_db['time'], self.gp_db['Rod_pos'])
-        self.axs[8].set_xlabel('Time [s]')
-        self.axs[8].grid()
+        # self.axs[8].plot(self.gp_db['time'], self.gp_db['Rod_pos'])
+        # self.axs[8].set_xlabel('Time [s]')
+        # self.axs[8].grid()
         #
         self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
                          facecolor=None)
