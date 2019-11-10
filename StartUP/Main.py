@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_3_LSTM'
+MAKE_FILE_PATH = './VER_4_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -485,7 +485,7 @@ class A3Cagent(threading.Thread):
         else:
             print('지원하지 않는 운전 출력')
 
-        if self.db.train_DB['Step'] >= 1400 and self.Mwe_power < 1:
+        if self.db.train_DB['Step'] >= 3000 and self.Mwe_power < 1:
             done = True
         # 각에피소드 마다 Log
         self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
@@ -606,16 +606,17 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(14, 10))
-        self.gs = self.fig.add_gridspec(20, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(18, 10))
+        self.gs = self.fig.add_gridspec(22, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
-                    self.fig.add_subplot(self.gs[6:7, :]),  # 3
-                    self.fig.add_subplot(self.gs[7:8, :]),  # 4
-                    self.fig.add_subplot(self.gs[8:10, :]),  # 5
-                    self.fig.add_subplot(self.gs[10:12, :]),  # 6
-                    self.fig.add_subplot(self.gs[12:14, :]), # 7
-                    self.fig.add_subplot(self.gs[14:17, :]),  # 8
+                    self.fig.add_subplot(self.gs[6:9, :]),  # 3
+                    self.fig.add_subplot(self.gs[9:12, :]),  # 4
+                    self.fig.add_subplot(self.gs[12:14, :]),  # 5
+                    self.fig.add_subplot(self.gs[14:16, :]),  # 6
+                    self.fig.add_subplot(self.gs[16:18, :]), # 7
+                    self.fig.add_subplot(self.gs[18:20, :]),  # 8
+                    self.fig.add_subplot(self.gs[20:22, :]),  # 8
                     # self.fig.add_subplot(self.gs[17:20, :]),  # 9
                     ]
 
@@ -676,8 +677,8 @@ class DB:
         self.axs[2].grid()
         #
         self.axs[3].plot(self.gp_db['time'], self.gp_db['Act'], 'black')
-        self.axs[3].set_yticks((-1, 0, 1))
-        self.axs[3].set_yticklabels(('In', 'Stay', 'Out'))
+        self.axs[3].set_yticks((0, 1, 2))
+        self.axs[3].set_yticklabels(('Stay', 'Out', 'In'))
         self.axs[3].set_ylabel('Rod Control')
         self.axs[3].grid()
         #
@@ -710,9 +711,12 @@ class DB:
         #
         self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_avg'], label='Temp_avg')
         self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_ref'], label='Temp_ref')
-        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_delta_ref_avg'], label='Temp_delta')
         self.axs[7].legend(loc=7, fontsize=5)
         self.axs[7].grid()
+        #
+        self.axs[8].plot(self.gp_db['time'], self.gp_db['Temp_delta_ref_avg'], label='Temp_delta')
+        self.axs[8].legend(loc=7, fontsize=5)
+        self.axs[8].grid()
         #
         # self.axs[8].plot(self.gp_db['time'], self.gp_db['Rod_pos'])
         # self.axs[8].set_xlabel('Time [s]')
