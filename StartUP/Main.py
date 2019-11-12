@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_6_LSTM'
+MAKE_FILE_PATH = './VER_7_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -212,6 +212,8 @@ class A3Cagent(threading.Thread):
         self.operation_mode = 0.5
         # CNS와 통신과 데이터 교환이 가능한 모듈 호출
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
+        # 이상 징후 발견 용.
+        self.monitoring_time_val = 0
 
         # 네트워크 정보
         if True:
@@ -450,39 +452,46 @@ class A3Cagent(threading.Thread):
 
         # 보상 계산 -------
         # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
-
-        # action == 0: Stay     action == 1: Out        action == 2: In
-        R = 0
-
-        # if A == 0:
-        #     R += 0.01
-        # else:
-        #     pass
-        # Save_R1 = R
-
         if self.Tavg > self.get_current_t_ref:
-            R = self.up_dead_band - self.Tavg
+            R = (self.up_operation_band - self.Tavg) / 100
         else:
-            R = self.Tavg - self.down_dead_band
-
-        R = R/10
+            R = (self.Tavg - self.down_operation_band) / 100
+        # Save_R1은 게임 종료의 Trigger
         Save_R1 = R
 
-        # if R < 0:
-        #     R = 0
+        # Dead_band 안에 있으면 추가점
+        if self.up_dead_band <= self.Tavg <= self.down_dead_band:
+            if self.Tavg > self.get_current_t_ref:
+                R += (self.up_dead_band - self.Tavg) / 500
+            else:
+                R += (self.Tavg - self.down_dead_band) / 500
+        else:
+            pass
+        Save_R2 = R
 
-        # 게임 종료 계산 --
+        # action == 0: Stay     action == 1: Out        action == 2: In
+        if A == 0:
+            R += 0.01
+        else:
+            pass
+        Save_R3 = R
 
-        if self.Tavg > self.up_operation_band or self.Tavg < self.down_operation_band or self.db.train_DB['Step'] >= 8000:
+        if Save_R1 < 0 or self.db.train_DB['Step'] >= 8000:
             done = True
         else:
             done = False
 
-        if self.db.train_DB['Step'] >= 3000 and self.Mwe_power < 1:
+        # 이상 징후 발견용. 2019-11-12
+        if self.monitoring_time_val == 0:
+            self.monitoring_time_val = self.Time_tick
+        elif self.monitoring_time_val == self.Time_tick:
+            R = 0
             done = True
+        else:
+            self.monitoring_time_val = self.Time_tick
 
         # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}')  #-{Save_R2:.5f}-{Save_R3:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
         return done, R
 
     def train_network(self):
