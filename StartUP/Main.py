@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_4_LSTM'
+MAKE_FILE_PATH = './VER_6_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -261,40 +261,17 @@ class A3Cagent(threading.Thread):
         self.main_feed_valve_3_state = self.CNS.mem['KLAMPO149']['Val']
         self.vct_level = self.CNS.mem['ZVCT']['Val']
         self.pzr_level = self.CNS.mem['ZINST63']['Val']
-
+        #
         self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
         self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']  # Turbine ac condition
         self.Turbine_real = self.CNS.mem['KBCDO19']['Val']
         self.load_set = self.CNS.mem['KBCDO20']['Val']  # Turbine load set point
         self.load_rate = self.CNS.mem['KBCDO21']['Val']  # Turbine load rate
         self.Mwe_power = self.CNS.mem['KBCDO22']['Val']
-
+        #
         self.Netbreak_condition = self.CNS.mem['KLAMPO224']['Val'] # 0 : Off, 1 : On
         self.trip_block = self.CNS.mem['KLAMPO22']['Val']  # Trip block condition 0 : Off, 1 : On
-
-        if True:
-            # 원자로 출력 값을 사용하여 최대 최소 바운더리의 값을 구함.
-            base_condition = self.Time_tick / (30000 / self.operation_mode)
-            up_base_condition = (self.Time_tick * 53) / (1470000 / self.operation_mode)
-            low_base_condition = (self.Time_tick * 3) / (98000/ self.operation_mode)  # (30000 / self.operation_mode)
-
-            self.stady_condition = base_condition + 0.02
-
-            if self.stady_condition >= 1.00:
-                self.stady_condition, self.up_condition, self.low_condition = 1.00, 1.10, 0.90
-            else:
-                self.up_condition = up_base_condition + 0.04
-                self.low_condition = low_base_condition # + 0.01
-
-            self.distance_up = self.up_condition - self.Reactor_power
-            self.distance_low = self.Reactor_power - self.low_condition
-
-
-        if self.Netbreak_condition == 1:
-            self.db.train_DB['Net_triger'] = True
-            if len(self.db.train_DB['Net_triger_time']) == 0:
-                self.db.train_DB['Net_triger_time'].append(self.Time_tick)
-
+        #
         self.steam_dump_condition = self.CNS.mem['KLAMPO150']['Val'] # 0: auto 1: man
         self.heat_drain_pump_condition = self.CNS.mem['KLAMPO244']['Val'] # 0: off, 1: on
         self.main_feed_pump_1 = self.CNS.mem['KLAMPO241']['Val'] # 0: off, 1: on
@@ -304,17 +281,43 @@ class A3Cagent(threading.Thread):
         self.cond_pump_2 = self.CNS.mem['KLAMPO182']['Val'] # 0: off, 1: on
         self.cond_pump_3 = self.CNS.mem['KLAMPO183']['Val'] # 0: off, 1: on
 
+        self.ax_off = self.CNS.mem['CAXOFF']['Val']
+
+        if True:
+            # 평균온도에 기반한 출력 증가 알고리즘
+            # (290.2~308.2: 18도 증가) -> ( 2%~100%: 98% 증가 )
+            # 18 -> 98 따라서 1%증가시 요구되는 온도 증가량 18/98
+            # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
+            # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
+            start_2per_temp = 291.97
+            self.get_current_t_ref = start_2per_temp + (0.0006) * self.Time_tick
+            self.up_dead_band = self.get_current_t_ref + 1
+            self.down_dead_band = self.get_current_t_ref - 1
+            self.up_operation_band = self.get_current_t_ref + 2
+            self.down_operation_band = self.get_current_t_ref - 2
+
+
+        if self.Netbreak_condition == 1:
+            self.db.train_DB['Net_triger'] = True
+            if len(self.db.train_DB['Net_triger_time']) == 0:
+                self.db.train_DB['Net_triger_time'].append(self.Time_tick)
+
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Reactor_power, self.distance_up, self.distance_low, self.stady_condition, self.Mwe_power/1000,
-            self.load_set/100, self.Tref/1000, self.Tavg/1000, self.Tref_Tavg/100,
+            self.Reactor_power, self.up_dead_band/1000, self.down_dead_band/1000, self.get_current_t_ref/1000, self.Mwe_power/1000,
+            self.up_operation_band/1000, self.down_operation_band/1000,
+            self.load_set/100, self.Tavg/1000,
             self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
         ]
 
         self.save_state = {
             # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
-            'CNS_time': self.Time_tick, 'Reactor_power': self.Reactor_power * 100,
-            'Reactor_power_up': self.up_condition * 100, 'Reactor_power_low': self.low_condition * 100,
+            'CNS_time': self.Time_tick,
+            'get_current_t_ref': self.get_current_t_ref, 'Temp_avg': self.Tavg,
+            'up_dead': self.up_dead_band, 'down_dead': self.down_dead_band,
+            'up_op': self.up_operation_band, 'down_op': self.down_operation_band,
+
+            'ax_off': self.ax_off,
 
             'Mwe': self.Mwe_power,
             'Turbine_set': self.Turbine_setpoint, 'Turbine_ac': self.Turbine_ac,
@@ -327,8 +330,8 @@ class A3Cagent(threading.Thread):
             'CF1': self.cond_pump_1, 'CF2': self.cond_pump_2, 'CF3': self.cond_pump_3,
 
             'PZR_level': self.pzr_level, 'VCT_level': self.vct_level,
-            'Temp_avg': self.Tavg, 'Temp_ref': self.Tref, 'Temp_delta_ref_avg': self.Tref_Tavg,
-            'Rod_pos': self.rod_pos
+            'Rod_pos': self.rod_pos,
+            'Reactor_power': self.Reactor_power,
         }
 
     def run_cns(self, i):
@@ -364,9 +367,9 @@ class A3Cagent(threading.Thread):
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
         if self.Reactor_power >= 0.04 and self.Turbine_setpoint != 1800:
-            if self.Turbine_setpoint < 1750: # 1780 -> 1872
+            if self.Turbine_setpoint < 1790: # 1780 -> 1872
                 self.send_action_append(['KSWO213'], [1])
-            elif self.Turbine_setpoint >= 1750:
+            elif self.Turbine_setpoint >= 1790:
                 self.send_action_append(['KSWO213'], [0])
         # 1) 출력 4% 이상에서 터빈 acc 를 200 이하로 맞춘다.
         if self.Reactor_power >= 0.04 and self.Turbine_ac != 210:
@@ -447,48 +450,39 @@ class A3Cagent(threading.Thread):
 
         # 보상 계산 -------
         # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
-        if self.Reactor_power > self.stady_condition:
-            R = self.up_condition - self.Reactor_power
-        else:
-            R = self.Reactor_power - self.low_condition
-        Save_R1 = R
+
         # action == 0: Stay     action == 1: Out        action == 2: In
-        if A == 0:
-            R += 0.01
+        R = 0
+
+        # if A == 0:
+        #     R += 0.01
+        # else:
+        #     pass
+        # Save_R1 = R
+
+        if self.Tavg > self.get_current_t_ref:
+            R = self.up_dead_band - self.Tavg
         else:
-            pass
-        Save_R2 = R
-        # self.Tref_Tavg 의 값이 너무 커지면 보상에서 감산 self.Tref_Tavg
-        if abs(self.Tref_Tavg) < 1.5:
-            R += abs(self.Tref_Tavg) / 100    # 최대 20 -> 0.2
-        else:
-            pass
-        Save_R3 = R
+            R = self.Tavg - self.down_dead_band
+
+        R = R/10
+        Save_R1 = R
+
+        # if R < 0:
+        #     R = 0
+
         # 게임 종료 계산 --
-        # 게임 종료는 운전 바운더리를 벗어난 경우로써 Save_R1 값이 0보다 작은 경우다.
-        # 출력 증가율 정하는 부분 -----------------------------
-        if self.operation_mode == 1.0:
-            if Save_R1 < 0 or self.db.train_DB['Step'] >= 4800:  # or self.Reactor_power >= 0.9470: ## oper 1%
-                done = True
-            else:
-                done = False
-        elif self.operation_mode == 1.5:
-            if Save_R1 < 0 or self.db.train_DB['Step'] >= 3600:   # or self.Reactor_power >= 0.9470:
-                done = True
-            else:
-                done = False
-        elif self.operation_mode == 0.5:
-            if Save_R1 < 0 or self.db.train_DB['Step'] >= 7000:   # or self.Reactor_power >= 0.9470:
-                done = True
-            else:
-                done = False
+
+        if self.Tavg > self.up_operation_band or self.Tavg < self.down_operation_band or self.db.train_DB['Step'] >= 8000:
+            done = True
         else:
-            print('지원하지 않는 운전 출력')
+            done = False
 
         if self.db.train_DB['Step'] >= 3000 and self.Mwe_power < 1:
             done = True
+
         # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}')  #-{Save_R2:.5f}-{Save_R3:.5f}')
         return done, R
 
     def train_network(self):
@@ -587,7 +581,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 1000:
+                    if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -606,8 +600,8 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(18, 10))
-        self.gs = self.fig.add_gridspec(22, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(22, 10))
+        self.gs = self.fig.add_gridspec(25, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
@@ -615,8 +609,8 @@ class DB:
                     self.fig.add_subplot(self.gs[12:14, :]),  # 5
                     self.fig.add_subplot(self.gs[14:16, :]),  # 6
                     self.fig.add_subplot(self.gs[16:18, :]), # 7
-                    self.fig.add_subplot(self.gs[18:20, :]),  # 8
-                    self.fig.add_subplot(self.gs[20:22, :]),  # 8
+                    self.fig.add_subplot(self.gs[18:22, :]),  # 8
+                    self.fig.add_subplot(self.gs[22:25, :]),  # 9
                     # self.fig.add_subplot(self.gs[17:20, :]),  # 9
                     ]
 
@@ -653,9 +647,12 @@ class DB:
         for _ in self.axs:
             _.clear()
         #
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power'], 'g', label='Power')
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_up'], 'b', label='Power_hi_bound')
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['Reactor_power_low'], 'r', label='Power_low_bound')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['Temp_avg'], 'g', label='Temp_avg')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['get_current_t_ref'], 'g', label='get_current_t_ref')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['down_dead'], 'b', label='down_dead')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['down_op'], 'b', label='down_op')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['up_dead'], 'r', label='up_dead')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['up_op'], 'r', label='up_op')
         self.axs[0].legend(loc=2, fontsize=5)
         self.axs[0].set_ylabel('Reactor Power [%]')
         self.axs[0].grid()
@@ -709,18 +706,13 @@ class DB:
         self.axs[6].legend(loc=7, fontsize=5)
         self.axs[6].grid()
         #
-        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_avg'], label='Temp_avg')
-        self.axs[7].plot(self.gp_db['time'], self.gp_db['Temp_ref'], label='Temp_ref')
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['ax_off'], label='Temp_avg')
         self.axs[7].legend(loc=7, fontsize=5)
         self.axs[7].grid()
         #
-        self.axs[8].plot(self.gp_db['time'], self.gp_db['Temp_delta_ref_avg'], label='Temp_delta')
-        self.axs[8].legend(loc=7, fontsize=5)
+        self.axs[8].plot(self.gp_db['time'], self.gp_db['Reactor_power'], label='Reactor')
+        self.axs[8].set_xlabel('Time [s]')
         self.axs[8].grid()
-        #
-        # self.axs[8].plot(self.gp_db['time'], self.gp_db['Rod_pos'])
-        # self.axs[8].set_xlabel('Time [s]')
-        # self.axs[8].grid()
         #
         self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
                          facecolor=None)
