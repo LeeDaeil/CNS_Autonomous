@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_7_LSTM'
+MAKE_FILE_PATH = './VER_9_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -386,7 +386,7 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate < 50: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate < 10: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         if 0.10 <= self.Reactor_power < 0.20:
@@ -471,7 +471,7 @@ class A3Cagent(threading.Thread):
 
         # action == 0: Stay     action == 1: Out        action == 2: In
         if A == 0:
-            R += 0.01
+            R += 0.005
         else:
             pass
         Save_R3 = R
@@ -480,15 +480,6 @@ class A3Cagent(threading.Thread):
             done = True
         else:
             done = False
-
-        # 이상 징후 발견용. 2019-11-12
-        if self.monitoring_time_val == 0:
-            self.monitoring_time_val = self.Time_tick
-        elif self.monitoring_time_val == self.Time_tick:
-            R = 0
-            done = True
-        else:
-            self.monitoring_time_val = self.Time_tick
 
         # 각에피소드 마다 Log
         self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
