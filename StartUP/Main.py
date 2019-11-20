@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_9_LSTM'
+MAKE_FILE_PATH = './VER_10_LSTM'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -292,7 +292,7 @@ class A3Cagent(threading.Thread):
             # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
             start_2per_temp = 291.97
-            self.get_current_t_ref = start_2per_temp + (0.0006) * self.Time_tick
+            self.get_current_t_ref = start_2per_temp + (0.0005) * self.Time_tick
             self.up_dead_band = self.get_current_t_ref + 1
             self.down_dead_band = self.get_current_t_ref - 1
             self.up_operation_band = self.get_current_t_ref + 2
@@ -462,16 +462,16 @@ class A3Cagent(threading.Thread):
         # Dead_band 안에 있으면 추가점
         if self.up_dead_band <= self.Tavg <= self.down_dead_band:
             if self.Tavg > self.get_current_t_ref:
-                R += (self.up_dead_band - self.Tavg) / 500
+                R += (self.up_dead_band - self.Tavg) / 200
             else:
-                R += (self.Tavg - self.down_dead_band) / 500
+                R += (self.Tavg - self.down_dead_band) / 200
         else:
             pass
         Save_R2 = R
 
         # action == 0: Stay     action == 1: Out        action == 2: In
         if A == 0:
-            R += 0.005
+            R += 0.001
         else:
             pass
         Save_R3 = R
