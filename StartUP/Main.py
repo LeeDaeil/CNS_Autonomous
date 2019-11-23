@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_10_LSTM'
+MAKE_FILE_PATH = './VER_1'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -215,6 +215,9 @@ class A3Cagent(threading.Thread):
         # 이상 징후 발견 용.
         self.monitoring_time_val = 0
 
+        # 중간 멈추기
+        self.save_operation_point = {}
+
         # 네트워크 정보
         if True:
             # copy main network
@@ -293,11 +296,24 @@ class A3Cagent(threading.Thread):
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
             start_2per_temp = 291.97
             self.get_current_t_ref = start_2per_temp + (0.0005) * self.Time_tick
+
+            if self.save_operation_point == {}:
+                if self.Reactor_power > 0.3:
+                    # 저장 이 필요한 부분!
+                    self.save_operation_point['get_current_t_ref'] = self.get_current_t_ref
+                    self.save_operation_point['time_tick'] = self.Time_tick
+                else:
+                    pass # 초기 상태 -> 저장이 필요한 부분 전까지
+            else:
+                if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
+                    self.get_current_t_ref = start_2per_temp + (0.0005) * (self.Time_tick - 1500)
+                else:
+                    self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
+
             self.up_dead_band = self.get_current_t_ref + 1
             self.down_dead_band = self.get_current_t_ref - 1
             self.up_operation_band = self.get_current_t_ref + 2
             self.down_operation_band = self.get_current_t_ref - 2
-
 
         if self.Netbreak_condition == 1:
             self.db.train_DB['Net_triger'] = True
@@ -506,11 +522,16 @@ class A3Cagent(threading.Thread):
     def run(self):
         global episode
 
+        self.cns_speed = 2
+
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
+            self.save_operation_point = {}
             self.CNS.init_cns(initial_nub=17)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             sleep(2)
+            self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
+            sleep(1)
 
         iter_cns = 2                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
@@ -548,7 +569,7 @@ class A3Cagent(threading.Thread):
 
                     # 2.2 제어 정보와, 상태에 대한 정보를 저장한다.
                     self.save_state['Act'] = Action_net
-                    self.save_state['time'] = self.db.train_DB['Step']
+                    self.save_state['time'] = self.db.train_DB['Step']*self.cns_speed
                     self.db.save_state(self.save_state)
 
                     # 2.3 제어에 대하여 CNS 동작 시키고 현재 상태 업데이트한다.
