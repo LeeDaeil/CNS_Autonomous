@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=2, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=12, output_pa=9, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -59,7 +59,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.89', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [1, 0, 0]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.89', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [20, 0, 0]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.6', Remote_port=com_port + i,
@@ -249,17 +249,82 @@ class A3Cagent(threading.Thread):
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
+        self.PZR_pressure = self.CNS.mem['ZINST58']['Val']          # 25.47
+        self.PZR_level = self.CNS.mem['ZINST63']['Val']             # 100.00
+        self.PZR_temp = self.CNS.mem['UPRZ']['Val']                 # 68.74
+        self.PZR_Back_heater = self.CNS.mem['KLAMPO118']['Val']     # 0(off) - 1(on)
+        self.PZR_Back_on_off_act = self.CNS.mem['KSWO125']['Val']   # 0(off) - 1(on)
+        self.PZR_Pro_heater = self.CNS.mem['QPRZH']['Val']          # 0-1 pos
+        self.PZR_Pro_close_act = self.CNS.mem['KSWO121']['Val']     # Close (0 off - 1 on)
+        self.PZR_Pro_open_act = self.CNS.mem['KSWO122']['Val']      # Open (0 off - 1 on)
+        self.FV145_man = self.CNS.mem['KLAMPO89']['Val']            # 0(Auto) - 1(Man)
+        self.FV145_pos = self.CNS.mem['ZINST36']['Val']             # 13.95
+        self.FV145_close_act = self.CNS.mem['KSWO90']['Val']        # Close (0 off - 1 on)
+        self.FV145_open_act = self.CNS.mem['KSWO91']['Val']         # Open (0 off - 1 on)
+        self.BFV122_man = self.CNS.mem['KLAMPO95']['Val']           # 0(Auto) - 1(Man)
+        self.BFV122_pos = self.CNS.mem['BFV122']['Val']             # 0.70
+        self.BFV122_close_act = self.CNS.mem['KSWO101']['Val']      # Close (0 off - 1 on)
+        self.BFV122_open_act = self.CNS.mem['KSWO102']['Val']       # Open (0 off - 1 on)
+        self.Charging_flow = self.CNS.mem['WCHGNO']['Val']          # 7.5
+        self.Letdown_HX_flow = self.CNS.mem['WNETLD']['Val']        # 8.43
+        self.Letdown_HX_temp = self.CNS.mem['UNRHXUT']['Val']       # 34.07
+        self.Core_out_temp = self.CNS.mem['UUPPPL']['Val']          # 54.92
+
+        # 가압기 안전 영역 설정 및 보상 계산
+        self.top_safe_pressure_boundary = 30
+        self.bottom_safe_pressure_bondary = 10
+        self.middle_safe_pressure = (self.top_safe_pressure_boundary - self.bottom_safe_pressure_bondary)/2
+
+        self.Cal_top_bt_current_pressure = self.top_safe_pressure_boundary - self.PZR_pressure
+        self.Cal_mid_bt_current_pressure = self.PZR_pressure - self.middle_safe_pressure        # -1~1
+        self.Cal_bottom_bt_current_pressure = self.PZR_pressure - self.bottom_safe_pressure_bondary
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            1, 1
+            self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
+            self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
+            self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
+            self.Cal_mid_bt_current_pressure/100, self.Cal_top_bt_current_pressure/100,
         ]
 
         self.save_state = {
             # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
             'CNS_time': self.Time_tick,
-            'TEST': self.CNS.mem['ZINST58']['Val']
+            'PZR_pressure': self.PZR_pressure, 'PZR_level': self.PZR_level, 'PZR_temp': self.PZR_temp,
+            'FV145_pos': self.FV145_pos, 'FV145_close_act': self.FV145_close_act, 'FV145_open_act': self.FV145_open_act,
+            'BFV122_pos': self.BFV122_pos, 'BFV122_close_act': self.BFV122_close_act, 'BFV122_open_act': self.BFV122_open_act,
+            'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
+            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary,
+            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary,
         }
+
+    def get_reward_done(self, A):
+        # 현재 상태에 대한 보상 및 게임 종료 계산
+
+        # 게임 종료 계산
+        done = False
+        if self.Cal_top_bt_current_pressure < 0:
+            done = True
+        if self.Cal_bottom_bt_current_pressure < 0:
+            done = True
+        if self.PZR_level < 95:
+            done = True
+
+        # 보상 계산
+        R, R1, R2 = 0, 0, 0
+        if self.PZR_pressure > self.middle_safe_pressure:
+            R += self.Cal_top_bt_current_pressure/100
+        else:
+            R += self.Cal_bottom_bt_current_pressure/100
+        R1 += R
+
+        if A == 0:
+            R += 0.05
+        R2 += R
+
+        # 각에피소드 마다 Log
+        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R2:.5f}-{R:.5f}-{R:.5f}')
+        return done, R
 
     def run_cns(self, i):
         for _ in range(0, i):
@@ -281,27 +346,40 @@ class A3Cagent(threading.Thread):
         self.para = []
         self.val = []
 
-        # Chargning Valve _ mal
-        self.send_action_append(['KSWO100'], [1])
+        # All Heater On
+        if self.PZR_Back_heater == 0:
+            self.send_action_append(['KSWO125'], [1])   # Back Heater on
+        else:
+            self.send_action_append(['KSWO125'], [0])  # Back Heater on
+        if self.PZR_Pro_heater != 1:
+            self.send_action_append(['KSWO121'], [1])  # Pro up
+        else:
+            self.send_action_append(['KSWO121'], [0])  # Pro up
+
+        #
 
         # Action Part
-        if action == 0: self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
-        elif action == 1: self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
-        elif action == 2: self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
+        if action == 0:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
+        elif action == 1:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
+        elif action == 2:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
+        elif action == 3:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
+        elif action == 4:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
+        elif action == 5:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
+        elif action == 6:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
+        elif action == 7:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
+        elif action == 8:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
-
-    def get_reward_done(self, A):
-        # 현재 상태에 대한 보상 및 게임 종료 계산
-        if self.Time_tick > 100:
-            done = True
-        else:
-            done = False
-        R = 0.1
-        # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{R:.5f}-{R:.5f}-{R:.5f}')
-        return done, R
 
     def train_network(self):
         def discount_reward(rewards):
@@ -427,14 +505,14 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(10, 10))
-        self.gs = self.fig.add_gridspec(6, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(13, 13))
+        self.gs = self.fig.add_gridspec(18, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
-                    # self.fig.add_subplot(self.gs[6:9, :]),  # 3
-                    # self.fig.add_subplot(self.gs[9:12, :]),  # 4
-                    # self.fig.add_subplot(self.gs[12:14, :]),  # 5
-                    # self.fig.add_subplot(self.gs[14:16, :]),  # 6
+                    self.fig.add_subplot(self.gs[6:9, :]),  # 3
+                    self.fig.add_subplot(self.gs[9:12, :]),  # 4
+                    self.fig.add_subplot(self.gs[12:15, :]),  # 5
+                    self.fig.add_subplot(self.gs[15:18, :]),  # 6
                     # self.fig.add_subplot(self.gs[16:18, :]), # 7
                     # self.fig.add_subplot(self.gs[18:22, :]),  # 8
                     # self.fig.add_subplot(self.gs[22:25, :]),  # 9
@@ -474,41 +552,43 @@ class DB:
         for _ in self.axs:
             _.clear()
         #
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['TEST'], 'g', label='Temp_avg')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['PZR_pressure'], 'g', label='PZR_pressure')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['top_safe_pressure_boundary'], 'b', label='PZR_top_pressure')
+        self.axs[0].plot(self.gp_db['time'], self.gp_db['bottom_safe_pressure_bondary'], 'b', label='PZR_bottom_pressure')
         self.axs[0].legend(loc=2, fontsize=5)
-        self.axs[0].set_ylabel('Reactor Power [%]')
+        self.axs[0].set_ylabel('PZR pressure [%]')
         self.axs[0].grid()
         #
-        self.axs[1].plot(self.gp_db['time'], self.gp_db['CNS_time'], 'g', label='Mwe')
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].set_ylabel('Electrical Power [MWe]')
+        self.axs[1].set_ylabel('BFV122 POS [%]')
         self.axs[1].grid()
-        # #
-        # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_set'], 'r')
-        # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_real'], 'b')
+        #
+        self.axs[2].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
+        self.axs[2].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
         # self.axs[2].set_yticks((900, 1800))
         # self.axs[2].set_yticklabels(('900', '1800'))
-        # self.axs[2].set_ylabel('Turbine RPM')
-        # self.axs[2].grid()
-        # #
-        # self.axs[3].plot(self.gp_db['time'], self.gp_db['Act'], 'black')
-        # self.axs[3].set_yticks((0, 1, 2))
-        # self.axs[3].set_yticklabels(('Stay', 'Out', 'In'))
-        # self.axs[3].set_ylabel('Rod Control')
-        # self.axs[3].grid()
-        # #
-        # self.axs[4].plot(self.gp_db['time'], self.gp_db['VCT_level'], 'black')
-        # # self.axs[4].set_yticks((-1, 0, 1))
-        # # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
-        # self.axs[4].set_ylabel('VCT_level')
-        # self.axs[4].grid()
-        # #
-        # self.axs[5].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'black')
-        # # self.axs[4].set_yticks((-1, 0, 1))
-        # # self.axs[4].set_yticklabels(('In', 'Stay', 'Out'))
-        # self.axs[5].set_ylabel('PZR_level')
-        # self.axs[5].grid()
-        # #
+        self.axs[2].set_ylabel('BFV122 Sig')
+        self.axs[2].legend(loc=2, fontsize=5)
+        self.axs[2].grid()
+        #
+        self.axs[3].plot(self.gp_db['time'], self.gp_db['FV145_pos'], 'r', label='FV145_POS')
+        self.axs[3].set_ylabel('FV145 POS [%]')
+        self.axs[3].legend(loc=2, fontsize=5)
+        self.axs[3].grid()
+        #
+        self.axs[4].plot(self.gp_db['time'], self.gp_db['FV145_close_act'], 'g', label='Close')
+        self.axs[4].plot(self.gp_db['time'], self.gp_db['FV145_open_act'], 'r', label='Open')
+        self.axs[4].set_ylabel('FV145 Sig')
+        self.axs[4].legend(loc=2, fontsize=5)
+        self.axs[4].grid()
+        #
+        self.axs[5].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
+        self.axs[5].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
+        self.axs[5].set_ylabel('FV145 Sig')
+        self.axs[5].legend(loc=2, fontsize=5)
+        self.axs[5].grid()
+        #
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Stem_pump'], label='Stem dump valve auto')
