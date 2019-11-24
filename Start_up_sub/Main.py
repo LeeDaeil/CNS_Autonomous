@@ -505,14 +505,16 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(13, 13))
-        self.gs = self.fig.add_gridspec(18, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(19, 13))
+        self.gs = self.fig.add_gridspec(24, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
                     self.fig.add_subplot(self.gs[9:12, :]),  # 4
                     self.fig.add_subplot(self.gs[12:15, :]),  # 5
                     self.fig.add_subplot(self.gs[15:18, :]),  # 6
+                    self.fig.add_subplot(self.gs[18:21, :]),  # 7
+                    self.fig.add_subplot(self.gs[21:24, :]),  # 8
                     # self.fig.add_subplot(self.gs[16:18, :]), # 7
                     # self.fig.add_subplot(self.gs[18:22, :]),  # 8
                     # self.fig.add_subplot(self.gs[22:25, :]),  # 9
@@ -537,7 +539,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(3)
+        Temp_R_A = np.zeros(9)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
@@ -559,35 +561,45 @@ class DB:
         self.axs[0].set_ylabel('PZR pressure [%]')
         self.axs[0].grid()
         #
-        self.axs[1].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'g', label='PZR_level')
         self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].set_ylabel('BFV122 POS [%]')
+        self.axs[1].set_ylabel('PZR level')
         self.axs[1].grid()
         #
-        self.axs[2].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
-        self.axs[2].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
-        # self.axs[2].set_yticks((900, 1800))
-        # self.axs[2].set_yticklabels(('900', '1800'))
-        self.axs[2].set_ylabel('BFV122 Sig')
+        self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
         self.axs[2].legend(loc=2, fontsize=5)
+        self.axs[2].set_ylabel('PZR temp')
         self.axs[2].grid()
         #
-        self.axs[3].plot(self.gp_db['time'], self.gp_db['FV145_pos'], 'r', label='FV145_POS')
-        self.axs[3].set_ylabel('FV145 POS [%]')
+        self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         self.axs[3].legend(loc=2, fontsize=5)
+        self.axs[3].set_ylabel('BFV122 POS [%]')
         self.axs[3].grid()
         #
-        self.axs[4].plot(self.gp_db['time'], self.gp_db['FV145_close_act'], 'g', label='Close')
-        self.axs[4].plot(self.gp_db['time'], self.gp_db['FV145_open_act'], 'r', label='Open')
-        self.axs[4].set_ylabel('FV145 Sig')
+        self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
+        self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
+        # self.axs[2].set_yticks((900, 1800))
+        # self.axs[2].set_yticklabels(('900', '1800'))
+        self.axs[4].set_ylabel('BFV122 Sig')
         self.axs[4].legend(loc=2, fontsize=5)
         self.axs[4].grid()
         #
-        self.axs[5].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
-        self.axs[5].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
-        self.axs[5].set_ylabel('FV145 Sig')
+        self.axs[5].plot(self.gp_db['time'], self.gp_db['FV145_pos'], 'r', label='FV145_POS')
+        self.axs[5].set_ylabel('FV145 POS [%]')
         self.axs[5].legend(loc=2, fontsize=5)
         self.axs[5].grid()
+        #
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['FV145_close_act'], 'g', label='Close')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['FV145_open_act'], 'r', label='Open')
+        self.axs[6].set_ylabel('FV145 Sig')
+        self.axs[6].legend(loc=2, fontsize=5)
+        self.axs[6].grid()
+        #
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
+        self.axs[7].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
+        self.axs[7].set_ylabel('Flow Sig')
+        self.axs[7].legend(loc=2, fontsize=5)
+        self.axs[7].grid()
         #
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
