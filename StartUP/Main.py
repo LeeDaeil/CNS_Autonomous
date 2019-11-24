@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_1'
+MAKE_FILE_PATH = './VER_2'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -295,7 +295,7 @@ class A3Cagent(threading.Thread):
             # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
             start_2per_temp = 291.97
-            self.get_current_t_ref = start_2per_temp + (0.0005) * self.Time_tick
+            self.get_current_t_ref = start_2per_temp + (0.001) * self.Time_tick
 
             if self.save_operation_point == {}:
                 if self.Reactor_power > 0.3:
@@ -306,7 +306,7 @@ class A3Cagent(threading.Thread):
                     pass # 초기 상태 -> 저장이 필요한 부분 전까지
             else:
                 if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
-                    self.get_current_t_ref = start_2per_temp + (0.0005) * (self.Time_tick - 1500)
+                    self.get_current_t_ref = start_2per_temp + (0.001) * (self.Time_tick - 1500)
                 else:
                     self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
 
