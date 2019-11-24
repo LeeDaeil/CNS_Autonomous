@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_1'
+MAKE_FILE_PATH = './VER_2'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -212,8 +212,6 @@ class A3Cagent(threading.Thread):
         self.operation_mode = 0.5
         # CNS와 통신과 데이터 교환이 가능한 모듈 호출
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
-        # 이상 징후 발견 용.
-        self.monitoring_time_val = 0
 
         # 중간 멈추기
         self.save_operation_point = {}
@@ -260,7 +258,7 @@ class A3Cagent(threading.Thread):
         self.save_state = {
             # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
             'CNS_time': self.Time_tick,
-            'TEST': self.CNS.mem['ZINST77']['Val']
+            'TEST': self.CNS.mem['ZINST58']['Val']
         }
 
     def run_cns(self, i):
@@ -296,7 +294,7 @@ class A3Cagent(threading.Thread):
 
     def get_reward_done(self, A):
         # 현재 상태에 대한 보상 및 게임 종료 계산
-        if self.Time_tick > 20:
+        if self.Time_tick > 100:
             done = True
         else:
             done = False
@@ -353,6 +351,12 @@ class A3Cagent(threading.Thread):
                 if len(self.db.train_DB['Now_S']) > self.input_time_length:
                     # 네트워크에 사용할 입력 데이터 다 쌓이면 제어하도록 설계
                     break
+
+                # 2.2 제어 정보와, 상태에 대한 정보를 저장한다. - 제어 이전의 데이터 세이브
+                self.save_state['Act'] = 0
+                self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
+                self.db.save_state(self.save_state)
+
                 self.db.train_DB['Step'] += iter_cns
 
             # 2. 반복 수행 시작
@@ -423,10 +427,10 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(22, 10))
-        self.gs = self.fig.add_gridspec(3, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(10, 10))
+        self.gs = self.fig.add_gridspec(6, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
-                    # self.fig.add_subplot(self.gs[3:6, :]),  # 2
+                    self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     # self.fig.add_subplot(self.gs[6:9, :]),  # 3
                     # self.fig.add_subplot(self.gs[9:12, :]),  # 4
                     # self.fig.add_subplot(self.gs[12:14, :]),  # 5
@@ -475,14 +479,10 @@ class DB:
         self.axs[0].set_ylabel('Reactor Power [%]')
         self.axs[0].grid()
         #
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe'], 'g', label='Mwe')
-        # # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_up'], 'b', label='Mwe_hi_bound')
-        # # self.axs[1].plot(self.gp_db['time'], self.gp_db['Mwe_low'], 'r', label='Mwe_low_bound')
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_set'], 'm', label='Set_point')
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['Load_rate'], 'y', label='Load_rate')
-        # self.axs[1].legend(loc=2, fontsize=5)
-        # self.axs[1].set_ylabel('Electrical Power [MWe]')
-        # self.axs[1].grid()
+        self.axs[1].plot(self.gp_db['time'], self.gp_db['CNS_time'], 'g', label='Mwe')
+        self.axs[1].legend(loc=2, fontsize=5)
+        self.axs[1].set_ylabel('Electrical Power [MWe]')
+        self.axs[1].grid()
         # #
         # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_set'], 'r')
         # self.axs[2].plot(self.gp_db['time'], self.gp_db['Turbine_real'], 'b')
