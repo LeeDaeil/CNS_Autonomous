@@ -325,9 +325,9 @@ class A3Cagent(threading.Thread):
         # 보상 계산
         R, R1, R2 = 0, 0, 0
         if self.PZR_pressure > self.middle_safe_pressure:
-            R += (self.top_safe_pressure_boundary - self.PZR_pressure)/1000
+            R += (self.top_safe_pressure_boundary - self.PZR_pressure)/10
         else:
-            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary)/1000
+            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary)/10
         R1 += R
 
         # if A == 0:
