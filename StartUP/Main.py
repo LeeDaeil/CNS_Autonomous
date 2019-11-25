@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_2'
+MAKE_FILE_PATH = './VER_3'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -352,6 +352,44 @@ class A3Cagent(threading.Thread):
             'Reactor_power': self.Reactor_power,
         }
 
+    def get_reward_done(self, A):
+        # 현재 상태에 대한 보상 및 게임 종료 계산
+
+        # 보상 계산 -------
+        # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
+        if self.Tavg > self.get_current_t_ref:
+            R = (self.up_operation_band - self.Tavg) / 100
+        else:
+            R = (self.Tavg - self.down_operation_band) / 100
+        # Save_R1은 게임 종료의 Trigger
+        Save_R1 = R
+
+        # Dead_band 안에 있으면 추가점
+        if self.up_dead_band <= self.Tavg <= self.down_dead_band:
+            if self.Tavg > self.get_current_t_ref:
+                R += (self.up_dead_band - self.Tavg) / 200
+            else:
+                R += (self.Tavg - self.down_dead_band) / 200
+        else:
+            pass
+        Save_R2 = R
+
+        # action == 0: Stay     action == 1: Out        action == 2: In
+        # if A == 0:
+        #     R += 0.001
+        # else:
+        #     pass
+        Save_R3 = R
+
+        if Save_R1 < 0 or self.db.train_DB['Step'] >= 8000:
+            done = True
+        else:
+            done = False
+
+        # 각에피소드 마다 Log
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
+        return done, R
+
     def run_cns(self, i):
         for _ in range(0, i):
             self.CNS.run_freeze_CNS()
@@ -463,46 +501,7 @@ class A3Cagent(threading.Thread):
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
-    def get_reward_done(self, A):
-        # 현재 상태에 대한 보상 및 게임 종료 계산
-
-        # 보상 계산 -------
-        # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
-        if self.Tavg > self.get_current_t_ref:
-            R = (self.up_operation_band - self.Tavg) / 100
-        else:
-            R = (self.Tavg - self.down_operation_band) / 100
-        # Save_R1은 게임 종료의 Trigger
-        Save_R1 = R
-
-        # Dead_band 안에 있으면 추가점
-        if self.up_dead_band <= self.Tavg <= self.down_dead_band:
-            if self.Tavg > self.get_current_t_ref:
-                R += (self.up_dead_band - self.Tavg) / 200
-            else:
-                R += (self.Tavg - self.down_dead_band) / 200
-        else:
-            pass
-        Save_R2 = R
-
-        # action == 0: Stay     action == 1: Out        action == 2: In
-        if A == 0:
-            R += 0.001
-        else:
-            pass
-        Save_R3 = R
-
-        if Save_R1 < 0 or self.db.train_DB['Step'] >= 8000:
-            done = True
-        else:
-            done = False
-
-        # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
-        return done, R
-
     def train_network(self):
-
         def discount_reward(rewards):
             discounted_reward = np.zeros_like(rewards)
             running_add = 0
@@ -522,7 +521,7 @@ class A3Cagent(threading.Thread):
     def run(self):
         global episode
 
-        self.cns_speed = 2
+        self.cns_speed = 5
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
@@ -533,7 +532,7 @@ class A3Cagent(threading.Thread):
             self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             sleep(1)
 
-        iter_cns = 2                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
@@ -551,6 +550,12 @@ class A3Cagent(threading.Thread):
                 if len(self.db.train_DB['Now_S']) > self.input_time_length:
                     # 네트워크에 사용할 입력 데이터 다 쌓이면 제어하도록 설계
                     break
+
+                # 2.2 제어 정보와, 상태에 대한 정보를 저장한다. - 제어 이전의 데이터 세이브
+                self.save_state['Act'] = 0
+                self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
+                self.db.save_state(self.save_state)
+
                 self.db.train_DB['Step'] += iter_cns
 
             # 2. 반복 수행 시작
