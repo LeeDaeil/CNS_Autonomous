@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_5'
+MAKE_FILE_PATH = './VER_6'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=12, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=7, output_pa=3, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -289,9 +289,12 @@ class A3Cagent(threading.Thread):
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
-            self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
-            self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
+            self.PZR_pressure/100, self.BFV122_pos,
+            # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
+            self.Charging_flow/100, self.Letdown_HX_flow/100,
+            # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
+            self.Cal_bottom_bt_current_pressure/100,
+            # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
             self.Cal_mid_bt_current_pressure/100, self.Cal_top_bt_current_pressure/100,
         ]
 
