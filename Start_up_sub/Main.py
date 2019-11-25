@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_3'
+MAKE_FILE_PATH = './VER_5'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=12, output_pa=9, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=12, output_pa=3, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -273,11 +273,19 @@ class A3Cagent(threading.Thread):
         # 가압기 안전 영역 설정 및 보상 계산
         self.top_safe_pressure_boundary = 30
         self.bottom_safe_pressure_bondary = 10
-        self.middle_safe_pressure = (self.top_safe_pressure_boundary - self.bottom_safe_pressure_bondary)/2
+        self.middle_safe_pressure = (self.top_safe_pressure_boundary + self.bottom_safe_pressure_bondary)/2
 
         self.Cal_top_bt_current_pressure = self.top_safe_pressure_boundary - self.PZR_pressure
         self.Cal_mid_bt_current_pressure = self.PZR_pressure - self.middle_safe_pressure        # -1~1
         self.Cal_bottom_bt_current_pressure = self.PZR_pressure - self.bottom_safe_pressure_bondary
+
+        # 보상 계산
+        R, R1, R2 = 0, 0, 0
+        if self.PZR_pressure >= self.middle_safe_pressure:
+            R += (self.top_safe_pressure_boundary - self.PZR_pressure) / 1000
+        else:
+            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary) / 1000
+        R1 += R
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
@@ -296,6 +304,7 @@ class A3Cagent(threading.Thread):
             'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
             'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary,
             'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary,
+            'R':R
         }
 
     def get_reward_done(self, A):
@@ -313,17 +322,17 @@ class A3Cagent(threading.Thread):
         # 보상 계산
         R, R1, R2 = 0, 0, 0
         if self.PZR_pressure > self.middle_safe_pressure:
-            R += self.Cal_top_bt_current_pressure/100
+            R += (self.top_safe_pressure_boundary - self.PZR_pressure)/1000
         else:
-            R += self.Cal_bottom_bt_current_pressure/100
+            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary)/1000
         R1 += R
 
-        if A == 0:
-            R += 0.005
-        R2 += R
+        # if A == 0:
+        #     R += 0.005
+        # R2 += R
 
         # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R2:.5f}-{R:.5f}-{R:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R:.5f}-{R:.5f}')
         return done, R
 
     def run_cns(self, i):
@@ -356,27 +365,29 @@ class A3Cagent(threading.Thread):
         else:
             self.send_action_append(['KSWO121'], [0])  # Pro up
 
-        #
-
         # Action Part
-        if action == 0:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
-        elif action == 1:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
-        elif action == 2:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
-        elif action == 3:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
-        elif action == 4:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
-        elif action == 5:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
-        elif action == 6:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
-        elif action == 7:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
-        elif action == 8:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
+        if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
+        elif action == 1: self.send_action_append(['KSWO101', 'KSWO102'], [1, 0])   # All Stay
+        elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
+        #
+        # if action == 0:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
+        # elif action == 1:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
+        # elif action == 2:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
+        # elif action == 3:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
+        # elif action == 4:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
+        # elif action == 5:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
+        # elif action == 6:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
+        # elif action == 7:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
+        # elif action == 8:
+        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -486,7 +497,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 150:
+                    if self.db.train_DB['Step'] > 50:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -506,7 +517,7 @@ class DB:
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(19, 13))
-        self.gs = self.fig.add_gridspec(24, 3)
+        self.gs = self.fig.add_gridspec(27, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
@@ -515,7 +526,7 @@ class DB:
                     self.fig.add_subplot(self.gs[15:18, :]),  # 6
                     self.fig.add_subplot(self.gs[18:21, :]),  # 7
                     self.fig.add_subplot(self.gs[21:24, :]),  # 8
-                    # self.fig.add_subplot(self.gs[16:18, :]), # 7
+                    self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     # self.fig.add_subplot(self.gs[18:22, :]),  # 8
                     # self.fig.add_subplot(self.gs[22:25, :]),  # 9
                     # self.fig.add_subplot(self.gs[17:20, :]),  # 9
@@ -539,7 +550,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(9)
+        Temp_R_A = np.zeros(3)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
@@ -600,6 +611,11 @@ class DB:
         self.axs[7].set_ylabel('Flow Sig')
         self.axs[7].legend(loc=2, fontsize=5)
         self.axs[7].grid()
+        #
+        self.axs[8].plot(self.gp_db['time'], self.gp_db['R'], 'g', label='Reward')
+        self.axs[8].set_ylabel('Rewaed')
+        self.axs[8].legend(loc=2, fontsize=5)
+        self.axs[8].grid()
         #
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
