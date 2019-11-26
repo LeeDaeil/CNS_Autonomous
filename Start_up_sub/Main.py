@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_6'
+MAKE_FILE_PATH = './VER_9'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=7, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=3, time_leg=5)
 
     def run(self):
         worker = self.build_A3C()
@@ -271,31 +271,31 @@ class A3Cagent(threading.Thread):
         self.Core_out_temp = self.CNS.mem['UUPPPL']['Val']          # 54.92
 
         # 가압기 안전 영역 설정 및 보상 계산
-        self.top_safe_pressure_boundary = 30
-        self.bottom_safe_pressure_bondary = 10
-        self.middle_safe_pressure = (self.top_safe_pressure_boundary + self.bottom_safe_pressure_bondary)/2
+        self.PZR_pressure_float = self.PZR_pressure/100             # 현재 압력을 float로 변환 25.47 -> 0.2547
 
-        self.Cal_top_bt_current_pressure = self.top_safe_pressure_boundary - self.PZR_pressure
-        self.Cal_mid_bt_current_pressure = self.PZR_pressure - self.middle_safe_pressure        # -1~1
-        self.Cal_bottom_bt_current_pressure = self.PZR_pressure - self.bottom_safe_pressure_bondary
+        self.top_safe_pressure_boundary = 0.30
+        self.bottom_safe_pressure_bondary = 0.10
+        self.middle_safe_pressure = 0.20
+
+        self.distance_top_current = self.top_safe_pressure_boundary - self.PZR_pressure_float
+        self.distance_bottom_current = self.PZR_pressure_float - self.bottom_safe_pressure_bondary
+        self.distance_mid = abs(self.PZR_pressure_float - self.middle_safe_pressure)
 
         # 보상 계산
         R, R1, R2 = 0, 0, 0
         if self.PZR_pressure >= self.middle_safe_pressure:
-            R += (self.top_safe_pressure_boundary - self.PZR_pressure) / 1000
+            R += self.distance_top_current + 0.1
         else:
-            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary) / 1000
+            R += self.distance_bottom_current + 0.1
         R1 += R
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_pressure/100, self.BFV122_pos,
+            self.PZR_pressure_float/100, self.distance_top_current, self.distance_bottom_current,
+            self.Charging_flow/100, self.BFV122_pos, self.distance_mid,
             # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
-            self.Charging_flow/100, self.Letdown_HX_flow/100,
             # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
-            self.Cal_bottom_bt_current_pressure/100,
             # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
-            self.Cal_mid_bt_current_pressure/100, self.Cal_top_bt_current_pressure/100,
         ]
 
         self.save_state = {
@@ -313,26 +313,24 @@ class A3Cagent(threading.Thread):
     def get_reward_done(self, A):
         # 현재 상태에 대한 보상 및 게임 종료 계산
 
-        # 게임 종료 계산
-        done = False
-        if self.Cal_top_bt_current_pressure < 0:
-            done = True
-        if self.Cal_bottom_bt_current_pressure < 0:
-            done = True
-        if self.PZR_level < 95:
-            done = True
-
         # 보상 계산
         R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure > self.middle_safe_pressure:
-            R += (self.top_safe_pressure_boundary - self.PZR_pressure)/10
+        if self.PZR_pressure >= self.middle_safe_pressure:
+            R += self.distance_top_current + 0.1
         else:
-            R += (self.PZR_pressure - self.bottom_safe_pressure_bondary)/10
+            R += self.distance_bottom_current + 0.1
         R1 += R
 
-        # if A == 0:
-        #     R += 0.005
-        # R2 += R
+        # 게임 종료 계산
+        done = False
+        if self.distance_top_current < 0:
+            done = True
+            R -= 0.5
+        if self.distance_bottom_current < 0:
+            done = True
+            R -= 0.5
+        if self.PZR_level < 95:
+            done = True
 
         # 각에피소드 마다 Log
         self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R:.5f}-{R:.5f}')
@@ -500,7 +498,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 50:
+                    if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -515,7 +513,7 @@ class DB:
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
                          'T_Avg_q_max': 0, 'T_Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 60,
+                         'Up_t': 0, 'Up_t_end': 10,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
