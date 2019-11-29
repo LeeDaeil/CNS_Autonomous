@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_9'
+MAKE_FILE_PATH = './VER_12'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=3, time_leg=5)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=5)
 
     def run(self):
         worker = self.build_A3C()
@@ -141,17 +141,17 @@ class MainNet:
             elif net_type == 'CLSTM':
                 shared = Conv1D(filters=10, kernel_size=5, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
-                shared = LSTM(64)(shared)
-                shared = Dense(120)(shared)
+                shared = LSTM(12)(shared)
+                shared = Dense(24)(shared)
 
         # ----------------------------------------------------------------------------------------------------
         # Common output network
         # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
-        actor_hidden = Dense(124, activation='relu', kernel_initializer='glorot_uniform')(shared)
+        actor_hidden = Dense(24, activation='relu', kernel_initializer='glorot_uniform')(shared)
         action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
 
         # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
-        value_hidden = Dense(64, activation='relu', kernel_initializer='he_uniform')(shared)
+        value_hidden = Dense(12, activation='relu', kernel_initializer='he_uniform')(shared)
         state_value = Dense(1, activation='linear', kernel_initializer='he_uniform')(value_hidden)
 
         actor = Model(inputs=state, outputs=action_prob)
@@ -283,7 +283,7 @@ class A3Cagent(threading.Thread):
 
         # 보상 계산
         R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure >= self.middle_safe_pressure:
+        if self.PZR_pressure_float >= self.middle_safe_pressure:
             R += self.distance_top_current + 0.1
         else:
             R += self.distance_bottom_current + 0.1
@@ -315,7 +315,7 @@ class A3Cagent(threading.Thread):
 
         # 보상 계산
         R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure >= self.middle_safe_pressure:
+        if self.PZR_pressure_float >= self.middle_safe_pressure:
             R += self.distance_top_current + 0.1
         else:
             R += self.distance_bottom_current + 0.1
@@ -362,9 +362,9 @@ class A3Cagent(threading.Thread):
         else:
             self.send_action_append(['KSWO125'], [0])  # Back Heater on
         if self.PZR_Pro_heater != 1:
-            self.send_action_append(['KSWO121'], [1])  # Pro up
+            self.send_action_append(['KSWO122'], [1])  # Pro up
         else:
-            self.send_action_append(['KSWO121'], [0])  # Pro up
+            self.send_action_append(['KSWO122'], [0])  # Pro up
 
         # Action Part
         if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
