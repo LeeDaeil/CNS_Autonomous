@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_6'
+MAKE_FILE_PATH = './VER_7'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -295,7 +295,7 @@ class A3Cagent(threading.Thread):
             # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
             start_2per_temp = 291.97
-            self.get_current_t_ref = start_2per_temp + (0.001) * self.Time_tick
+            self.get_current_t_ref = start_2per_temp + (0.0001) * self.Time_tick
 
             # if self.save_operation_point == {}:
             #     if self.Reactor_power > 0.3:
@@ -374,14 +374,15 @@ class A3Cagent(threading.Thread):
             pass
         Save_R2 = R
 
-        # action == 0: Stay     action == 1: Out        action == 2: In
-        # if A == 0:
-        #     R += 0.001
-        # else:
-        #     pass
+        #action == 0: Stay     action == 1: Out        action == 2: In
+        if A == 0:
+            R += 0.001
+        else:
+            pass
         Save_R3 = R
 
-        if Save_R1 < 0 or self.db.train_DB['Step'] >= 2900: # 3배속 일때
+        # if Save_R1 < 0 or self.db.train_DB['Step'] >= 2900: # 3배속 일때
+        if Save_R1 < 0 or self.db.train_DB['Step'] >= 2000: # 10배속 일때
             done = True
         else:
             done = False
@@ -440,7 +441,7 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate < 10: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate < 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         if 0.10 <= self.Reactor_power < 0.20:
@@ -607,7 +608,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 100:
+                    if self.db.train_DB['Step'] > 500:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
