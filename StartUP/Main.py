@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_3'
+MAKE_FILE_PATH = './VER_6'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -297,18 +297,18 @@ class A3Cagent(threading.Thread):
             start_2per_temp = 291.97
             self.get_current_t_ref = start_2per_temp + (0.001) * self.Time_tick
 
-            if self.save_operation_point == {}:
-                if self.Reactor_power > 0.3:
-                    # 저장 이 필요한 부분!
-                    self.save_operation_point['get_current_t_ref'] = self.get_current_t_ref
-                    self.save_operation_point['time_tick'] = self.Time_tick
-                else:
-                    pass # 초기 상태 -> 저장이 필요한 부분 전까지
-            else:
-                if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
-                    self.get_current_t_ref = start_2per_temp + (0.001) * (self.Time_tick - 1500)
-                else:
-                    self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
+            # if self.save_operation_point == {}:
+            #     if self.Reactor_power > 0.3:
+            #         # 저장 이 필요한 부분!
+            #         self.save_operation_point['get_current_t_ref'] = self.get_current_t_ref
+            #         self.save_operation_point['time_tick'] = self.Time_tick
+            #     else:
+            #         pass # 초기 상태 -> 저장이 필요한 부분 전까지
+            # else:
+            #     if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
+            #         self.get_current_t_ref = start_2per_temp + (0.001) * (self.Time_tick - 1500)
+            #     else:
+            #         self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
 
             self.up_dead_band = self.get_current_t_ref + 1
             self.down_dead_band = self.get_current_t_ref - 1
@@ -381,7 +381,7 @@ class A3Cagent(threading.Thread):
         #     pass
         Save_R3 = R
 
-        if Save_R1 < 0 or self.db.train_DB['Step'] >= 8000:
+        if Save_R1 < 0 or self.db.train_DB['Step'] >= 2900: # 3배속 일때
             done = True
         else:
             done = False
@@ -418,7 +418,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO100'], [0])
         if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
-        self.send_action_append(['KSWO78'], [1])
+        # self.send_action_append(['KSWO78'], [1]) # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
