@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_13'
+MAKE_FILE_PATH = './VER_14'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -305,8 +305,8 @@ class A3Cagent(threading.Thread):
             'FV145_pos': self.FV145_pos, 'FV145_close_act': self.FV145_close_act, 'FV145_open_act': self.FV145_open_act,
             'BFV122_pos': self.BFV122_pos, 'BFV122_close_act': self.BFV122_close_act, 'BFV122_open_act': self.BFV122_open_act,
             'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
-            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary,
-            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary,
+            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary*100,
+            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary*100,
             'R':R
         }
 
@@ -412,7 +412,7 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 5  # x 배속
+        self.cns_speed = 10  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
