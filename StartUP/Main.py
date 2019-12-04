@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_7'
+MAKE_FILE_PATH = './VER_8'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -41,7 +41,7 @@ class MainModel:
 
         count = 1
         while True:
-            sleep(2)
+            sleep(4)
             # 살아 있는지 보여줌
             workers_step = ''
             temp = []
@@ -294,8 +294,11 @@ class A3Cagent(threading.Thread):
             # 18 -> 98 따라서 1%증가시 요구되는 온도 증가량 18/98
             # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
+            # increase_slop = 0.0001(5배에서 시간당 1%임).
+            #               = 0.001 (5배에서 시간당 10%?)
+            increase_slop = 0.001
             start_2per_temp = 291.97
-            self.get_current_t_ref = start_2per_temp + (0.0001) * self.Time_tick
+            self.get_current_t_ref = start_2per_temp + (increase_slop) * self.Time_tick
 
             # if self.save_operation_point == {}:
             #     if self.Reactor_power > 0.3:
@@ -382,7 +385,7 @@ class A3Cagent(threading.Thread):
         Save_R3 = R
 
         # if Save_R1 < 0 or self.db.train_DB['Step'] >= 2900: # 3배속 일때
-        if Save_R1 < 0 or self.db.train_DB['Step'] >= 2000: # 10배속 일때
+        if Save_R1 < 0: # or self.db.train_DB['Step'] >= 2000: # 5배속 일때
             done = True
         else:
             done = False
