@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_12'
+MAKE_FILE_PATH = './VER_13'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -41,7 +41,7 @@ class MainModel:
 
         count = 1
         while True:
-            sleep(2)
+            sleep(5)
             # 살아 있는지 보여줌
             workers_step = ''
             temp = []
@@ -359,12 +359,12 @@ class A3Cagent(threading.Thread):
         # All Heater On
         if self.PZR_Back_heater == 0:
             self.send_action_append(['KSWO125'], [1])   # Back Heater on
-        else:
-            self.send_action_append(['KSWO125'], [0])  # Back Heater on
+        # else:
+        #     self.send_action_append(['KSWO125'], [0])  # Back Heater on
         if self.PZR_Pro_heater != 1:
             self.send_action_append(['KSWO122'], [1])  # Pro up
-        else:
-            self.send_action_append(['KSWO122'], [0])  # Pro up
+        # else:
+        #     self.send_action_append(['KSWO122'], [0])  # Pro up
 
         # Action Part
         if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
