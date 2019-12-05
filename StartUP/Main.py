@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_8'
+MAKE_FILE_PATH = './VER_9'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -315,8 +315,8 @@ class A3Cagent(threading.Thread):
 
             self.up_dead_band = self.get_current_t_ref + 1
             self.down_dead_band = self.get_current_t_ref - 1
-            self.up_operation_band = self.get_current_t_ref + 2
-            self.down_operation_band = self.get_current_t_ref - 2
+            self.up_operation_band = self.get_current_t_ref + 3
+            self.down_operation_band = self.get_current_t_ref - 3
 
         if self.Netbreak_condition == 1:
             self.db.train_DB['Net_triger'] = True
@@ -379,7 +379,7 @@ class A3Cagent(threading.Thread):
 
         #action == 0: Stay     action == 1: Out        action == 2: In
         if A == 0:
-            R += 0.001
+            R += 0.0005
         else:
             pass
         Save_R3 = R
@@ -447,33 +447,68 @@ class A3Cagent(threading.Thread):
             if self.load_rate < 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
-        if 0.10 <= self.Reactor_power < 0.20:
-            if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.200 <= self.Reactor_power < 0.300:
-            if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.300 <= self.Reactor_power < 0.400:
-            if self.load_set < 300: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.400 <= self.Reactor_power < 0.500:
-            if self.load_set < 400: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.500 <= self.Reactor_power < 0.600:
-            if self.load_set < 500: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.600 <= self.Reactor_power < 0.700:
-            if self.load_set < 600: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.700 <= self.Reactor_power < 0.800:
-            if self.load_set < 700: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.800 <= self.Reactor_power < 0.850:
-            if self.load_set < 800: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.850 <= self.Reactor_power < 1.100:
-            if self.load_set < 930: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        def range_fun(st,end,goal):
+            if st <= self.Reactor_power < end:
+                if self.load_set < goal:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                else:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+
+        range_fun(st=0.10, end=0.20, goal=100)
+        range_fun(st=0.20, end=0.25, goal=150)
+        range_fun(st=0.25, end=0.30, goal=200)
+        range_fun(st=0.30, end=0.35, goal=250)
+        range_fun(st=0.35, end=0.40, goal=300)
+        range_fun(st=0.40, end=0.45, goal=350)
+        range_fun(st=0.45, end=0.50, goal=400)
+        range_fun(st=0.50, end=0.55, goal=450)
+        range_fun(st=0.55, end=0.60, goal=500)
+        range_fun(st=0.60, end=0.65, goal=550)
+        range_fun(st=0.65, end=0.70, goal=600)
+        range_fun(st=0.70, end=0.75, goal=650)
+        range_fun(st=0.75, end=0.80, goal=700)
+        range_fun(st=0.80, end=0.85, goal=750)
+        range_fun(st=0.85, end=0.90, goal=800)
+        range_fun(st=0.90, end=0.95, goal=850)
+        range_fun(st=0.95, end=1.00, goal=900)
+        range_fun(st=1.00, end=1.50, goal=930)
+        #
+        # if 0.10 <= self.Reactor_power < 0.20:
+        #     if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # # if 0.200 <= self.Reactor_power < 0.300:
+        # if 0.200 <= self.Reactor_power < 0.250:
+        #     # if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     if self.load_set < 150: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.250 <= self.Reactor_power < 0.300:
+        #     # if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.300 <= self.Reactor_power < 0.350:
+        #     if self.load_set < 250: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.350 <= self.Reactor_power < 0.400:
+        #     if self.load_set < 300: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.400 <= self.Reactor_power < 0.500:
+        #     if self.load_set < 400: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.500 <= self.Reactor_power < 0.600:
+        #     if self.load_set < 500: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.600 <= self.Reactor_power < 0.700:
+        #     if self.load_set < 600: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.700 <= self.Reactor_power < 0.800:
+        #     if self.load_set < 700: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.800 <= self.Reactor_power < 0.850:
+        #     if self.load_set < 800: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.850 <= self.Reactor_power < 1.100:
+        #     if self.load_set < 930: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
         # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
         if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
