@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_9'
+MAKE_FILE_PATH = './VER_10'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -248,7 +248,6 @@ class A3Cagent(threading.Thread):
         '''
         네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
         '''
-
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
         self.Reactor_power = self.CNS.mem['QPROREL']['Val']
@@ -379,7 +378,7 @@ class A3Cagent(threading.Thread):
 
         #action == 0: Stay     action == 1: Out        action == 2: In
         if A == 0:
-            R += 0.0005
+            R += 0.00025
         else:
             pass
         Save_R3 = R
@@ -422,7 +421,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO100'], [0])
         if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
-        # self.send_action_append(['KSWO78'], [1]) # Makeup
+        self.send_action_append(['KSWO78'], [1]) # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -646,7 +645,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 500:
+                    if self.db.train_DB['Step'] > 2000:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
