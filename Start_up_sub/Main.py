@@ -322,6 +322,10 @@ class A3Cagent(threading.Thread):
             R += self.distance_bottom_current + 0.1
         R1 += R
 
+        if A in [0, 1, 2]:
+            R += 0.005
+        R2 += R
+
         # 게임 종료 계산
         done = False
         if self.distance_top_current < 0:
@@ -330,11 +334,11 @@ class A3Cagent(threading.Thread):
         if self.distance_bottom_current < 0:
             done = True
             R -= 0.5
-        if self.PZR_level < 95:
+        if self.PZR_level < 80:
             done = True
 
         # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R:.5f}-{R:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R2:.5f}-{R:.5f}')
         return done, R
 
     def run_cns(self, i):
