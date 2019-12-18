@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_14'
+MAKE_FILE_PATH = './VER_15'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=5)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=7, output_pa=9, time_leg=5)
 
     def run(self):
         worker = self.build_A3C()
@@ -274,8 +274,8 @@ class A3Cagent(threading.Thread):
         self.PZR_pressure_float = self.PZR_pressure/100             # 현재 압력을 float로 변환 25.47 -> 0.2547
 
         self.top_safe_pressure_boundary = 0.30
-        self.bottom_safe_pressure_bondary = 0.10
-        self.middle_safe_pressure = 0.20
+        self.bottom_safe_pressure_bondary = 0.20
+        self.middle_safe_pressure = 0.25
 
         self.distance_top_current = self.top_safe_pressure_boundary - self.PZR_pressure_float
         self.distance_bottom_current = self.PZR_pressure_float - self.bottom_safe_pressure_bondary
@@ -293,6 +293,7 @@ class A3Cagent(threading.Thread):
             # 네트워크의 Input 에 들어 가는 변수 들
             self.PZR_pressure_float/100, self.distance_top_current, self.distance_bottom_current,
             self.Charging_flow/100, self.BFV122_pos, self.distance_mid,
+            self.FV145_pos/100
             # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
             # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
             # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
@@ -367,28 +368,28 @@ class A3Cagent(threading.Thread):
         #     self.send_action_append(['KSWO122'], [0])  # Pro up
 
         # Action Part
-        if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
-        elif action == 1: self.send_action_append(['KSWO101', 'KSWO102'], [1, 0])   # All Stay
-        elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
+        # if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
+        # elif action == 1: self.send_action_append(['KSWO101', 'KSWO102'], [1, 0])   # All Stay
+        # elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
         #
-        # if action == 0:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
-        # elif action == 1:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
-        # elif action == 2:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
-        # elif action == 3:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
-        # elif action == 4:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
-        # elif action == 5:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
-        # elif action == 6:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
-        # elif action == 7:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
-        # elif action == 8:
-        #     self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
+        if action == 0:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
+        elif action == 1:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
+        elif action == 2:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
+        elif action == 3:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
+        elif action == 4:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
+        elif action == 5:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
+        elif action == 6:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
+        elif action == 7:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
+        elif action == 8:
+            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -551,7 +552,8 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(3)
+        # Temp_R_A = np.zeros(3)
+        Temp_R_A = np.zeros(9)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
