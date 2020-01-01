@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_2'
+MAKE_FILE_PATH = './VER_15'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +30,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=12, output_pa=9, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=7, output_pa=9, time_leg=5)
 
     def run(self):
         worker = self.build_A3C()
@@ -41,7 +41,7 @@ class MainModel:
 
         count = 1
         while True:
-            sleep(2)
+            sleep(5)
             # 살아 있는지 보여줌
             workers_step = ''
             temp = []
@@ -141,17 +141,17 @@ class MainNet:
             elif net_type == 'CLSTM':
                 shared = Conv1D(filters=10, kernel_size=5, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
-                shared = LSTM(64)(shared)
-                shared = Dense(120)(shared)
+                shared = LSTM(12)(shared)
+                shared = Dense(24)(shared)
 
         # ----------------------------------------------------------------------------------------------------
         # Common output network
         # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
-        actor_hidden = Dense(124, activation='relu', kernel_initializer='glorot_uniform')(shared)
+        actor_hidden = Dense(24, activation='relu', kernel_initializer='glorot_uniform')(shared)
         action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
 
         # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
-        value_hidden = Dense(64, activation='relu', kernel_initializer='he_uniform')(shared)
+        value_hidden = Dense(12, activation='relu', kernel_initializer='he_uniform')(shared)
         state_value = Dense(1, activation='linear', kernel_initializer='he_uniform')(value_hidden)
 
         actor = Model(inputs=state, outputs=action_prob)
@@ -271,20 +271,32 @@ class A3Cagent(threading.Thread):
         self.Core_out_temp = self.CNS.mem['UUPPPL']['Val']          # 54.92
 
         # 가압기 안전 영역 설정 및 보상 계산
-        self.top_safe_pressure_boundary = 30
-        self.bottom_safe_pressure_bondary = 10
-        self.middle_safe_pressure = (self.top_safe_pressure_boundary - self.bottom_safe_pressure_bondary)/2
+        self.PZR_pressure_float = self.PZR_pressure/100             # 현재 압력을 float로 변환 25.47 -> 0.2547
 
-        self.Cal_top_bt_current_pressure = self.top_safe_pressure_boundary - self.PZR_pressure
-        self.Cal_mid_bt_current_pressure = self.PZR_pressure - self.middle_safe_pressure        # -1~1
-        self.Cal_bottom_bt_current_pressure = self.PZR_pressure - self.bottom_safe_pressure_bondary
+        self.top_safe_pressure_boundary = 0.30
+        self.bottom_safe_pressure_bondary = 0.20
+        self.middle_safe_pressure = 0.25
+
+        self.distance_top_current = self.top_safe_pressure_boundary - self.PZR_pressure_float
+        self.distance_bottom_current = self.PZR_pressure_float - self.bottom_safe_pressure_bondary
+        self.distance_mid = abs(self.PZR_pressure_float - self.middle_safe_pressure)
+
+        # 보상 계산
+        R, R1, R2 = 0, 0, 0
+        if self.PZR_pressure_float >= self.middle_safe_pressure:
+            R += self.distance_top_current + 0.1
+        else:
+            R += self.distance_bottom_current + 0.1
+        R1 += R
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
-            self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
-            self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
-            self.Cal_mid_bt_current_pressure/100, self.Cal_top_bt_current_pressure/100,
+            self.PZR_pressure_float/100, self.distance_top_current, self.distance_bottom_current,
+            self.Charging_flow/100, self.BFV122_pos, self.distance_mid,
+            self.FV145_pos/100
+            # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
+            # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
+            # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
         ]
 
         self.save_state = {
@@ -294,36 +306,35 @@ class A3Cagent(threading.Thread):
             'FV145_pos': self.FV145_pos, 'FV145_close_act': self.FV145_close_act, 'FV145_open_act': self.FV145_open_act,
             'BFV122_pos': self.BFV122_pos, 'BFV122_close_act': self.BFV122_close_act, 'BFV122_open_act': self.BFV122_open_act,
             'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
-            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary,
-            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary,
+            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary*100,
+            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary*100,
+            'R':R
         }
 
     def get_reward_done(self, A):
         # 현재 상태에 대한 보상 및 게임 종료 계산
 
+        # 보상 계산
+        R, R1, R2 = 0, 0, 0
+        if self.PZR_pressure_float >= self.middle_safe_pressure:
+            R += self.distance_top_current + 0.1
+        else:
+            R += self.distance_bottom_current + 0.1
+        R1 += R
+
         # 게임 종료 계산
         done = False
-        if self.Cal_top_bt_current_pressure < 0:
+        if self.distance_top_current < 0:
             done = True
-        if self.Cal_bottom_bt_current_pressure < 0:
+            R -= 0.5
+        if self.distance_bottom_current < 0:
             done = True
+            R -= 0.5
         if self.PZR_level < 95:
             done = True
 
-        # 보상 계산
-        R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure > self.middle_safe_pressure:
-            R += self.Cal_top_bt_current_pressure/100
-        else:
-            R += self.Cal_bottom_bt_current_pressure/100
-        R1 += R
-
-        if A == 0:
-            R += 0.05
-        R2 += R
-
         # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R2:.5f}-{R:.5f}-{R:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R:.5f}-{R:.5f}')
         return done, R
 
     def run_cns(self, i):
@@ -349,16 +360,18 @@ class A3Cagent(threading.Thread):
         # All Heater On
         if self.PZR_Back_heater == 0:
             self.send_action_append(['KSWO125'], [1])   # Back Heater on
-        else:
-            self.send_action_append(['KSWO125'], [0])  # Back Heater on
+        # else:
+        #     self.send_action_append(['KSWO125'], [0])  # Back Heater on
         if self.PZR_Pro_heater != 1:
-            self.send_action_append(['KSWO121'], [1])  # Pro up
-        else:
-            self.send_action_append(['KSWO121'], [0])  # Pro up
-
-        #
+            self.send_action_append(['KSWO122'], [1])  # Pro up
+        # else:
+        #     self.send_action_append(['KSWO122'], [0])  # Pro up
 
         # Action Part
+        # if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
+        # elif action == 1: self.send_action_append(['KSWO101', 'KSWO102'], [1, 0])   # All Stay
+        # elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
+        #
         if action == 0:
             self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
         elif action == 1:
@@ -400,7 +413,7 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 5  # x 배속
+        self.cns_speed = 10  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
@@ -486,7 +499,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 0:
+                    if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
@@ -501,12 +514,12 @@ class DB:
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
                          'T_Avg_q_max': 0, 'T_Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 60,
+                         'Up_t': 0, 'Up_t_end': 10,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(19, 13))
-        self.gs = self.fig.add_gridspec(24, 3)
+        self.gs = self.fig.add_gridspec(27, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
@@ -515,7 +528,7 @@ class DB:
                     self.fig.add_subplot(self.gs[15:18, :]),  # 6
                     self.fig.add_subplot(self.gs[18:21, :]),  # 7
                     self.fig.add_subplot(self.gs[21:24, :]),  # 8
-                    # self.fig.add_subplot(self.gs[16:18, :]), # 7
+                    self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     # self.fig.add_subplot(self.gs[18:22, :]),  # 8
                     # self.fig.add_subplot(self.gs[22:25, :]),  # 9
                     # self.fig.add_subplot(self.gs[17:20, :]),  # 9
@@ -539,6 +552,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
+        # Temp_R_A = np.zeros(3)
         Temp_R_A = np.zeros(9)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
@@ -600,6 +614,11 @@ class DB:
         self.axs[7].set_ylabel('Flow Sig')
         self.axs[7].legend(loc=2, fontsize=5)
         self.axs[7].grid()
+        #
+        self.axs[8].plot(self.gp_db['time'], self.gp_db['R'], 'g', label='Reward')
+        self.axs[8].set_ylabel('Rewaed')
+        self.axs[8].legend(loc=2, fontsize=5)
+        self.axs[8].grid()
         #
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
         # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
