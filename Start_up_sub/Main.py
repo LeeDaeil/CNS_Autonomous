@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_15'
+MAKE_FILE_PATH = './VER_16'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -257,10 +257,12 @@ class A3Cagent(threading.Thread):
         self.PZR_Pro_heater = self.CNS.mem['QPRZH']['Val']          # 0-1 pos
         self.PZR_Pro_close_act = self.CNS.mem['KSWO121']['Val']     # Close (0 off - 1 on)
         self.PZR_Pro_open_act = self.CNS.mem['KSWO122']['Val']      # Open (0 off - 1 on)
-        self.FV145_man = self.CNS.mem['KLAMPO89']['Val']            # 0(Auto) - 1(Man)
-        self.FV145_pos = self.CNS.mem['ZINST36']['Val']             # 13.95
-        self.FV145_close_act = self.CNS.mem['KSWO90']['Val']        # Close (0 off - 1 on)
-        self.FV145_open_act = self.CNS.mem['KSWO91']['Val']         # Open (0 off - 1 on)
+        self.HV142_man = self.CNS.mem['KLAMPO89']['Val']            # 0(Auto) - 1(Man)
+
+        self.HV142_pos = self.CNS.mem['BHV142']['Val']             # 13.95
+        self.HV142_close_act = self.CNS.mem['KSWO231']['Val']        # Close (0 off - 1 on)
+        self.HV145_open_act = self.CNS.mem['KSWO232']['Val']         # Open (0 off - 1 on)
+
         self.BFV122_man = self.CNS.mem['KLAMPO95']['Val']           # 0(Auto) - 1(Man)
         self.BFV122_pos = self.CNS.mem['BFV122']['Val']             # 0.70
         self.BFV122_close_act = self.CNS.mem['KSWO101']['Val']      # Close (0 off - 1 on)
@@ -291,10 +293,10 @@ class A3Cagent(threading.Thread):
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_pressure_float/100, self.distance_top_current, self.distance_bottom_current,
-            self.Charging_flow/100, self.BFV122_pos, self.distance_mid,
-            self.FV145_pos/100
-            # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.FV145_pos/100, self.BFV122_pos,
+            self.PZR_pressure_float / 100, self.distance_top_current, self.distance_bottom_current,
+            self.Charging_flow / 100, self.BFV122_pos, self.distance_mid,
+            self.HV142_pos
+            # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.HV142_pos/100, self.BFV122_pos,
             # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
             # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
         ]
@@ -303,7 +305,7 @@ class A3Cagent(threading.Thread):
             # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
             'CNS_time': self.Time_tick,
             'PZR_pressure': self.PZR_pressure, 'PZR_level': self.PZR_level, 'PZR_temp': self.PZR_temp,
-            'FV145_pos': self.FV145_pos, 'FV145_close_act': self.FV145_close_act, 'FV145_open_act': self.FV145_open_act,
+            'HV142_pos': self.HV142_pos, 'HV142_close_act': self.HV142_close_act, 'HV142_open_act': self.HV145_open_act,
             'BFV122_pos': self.BFV122_pos, 'BFV122_close_act': self.BFV122_close_act, 'BFV122_open_act': self.BFV122_open_act,
             'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
             'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary*100,
@@ -377,23 +379,23 @@ class A3Cagent(threading.Thread):
         # elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
         #
         if action == 0:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
         elif action == 1:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # FV145 Close, BFV122 Stay
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # HV142 Close, BFV122 Stay
         elif action == 2:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # FV145 Open, BFV122 Stay
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # HV142 Open, BFV122 Stay
         elif action == 3:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # FV145 Stay, BFV122 Close
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # HV142 Stay, BFV122 Close
         elif action == 4:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # FV145 Close, BFV122 Close
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # HV142 Close, BFV122 Close
         elif action == 5:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, FV145 Close
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, HV142 Close
         elif action == 6:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # FV145 Stay, BFV122 Open
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # HV142 Stay, BFV122 Open
         elif action == 7:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # FV145 Close, BFV122 Open
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # HV142 Close, BFV122 Open
         elif action == 8:
-            self.send_action_append(['KSWO90', 'KSWO91', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # FV145 Open, BFV122 Open
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # HV142 Open, BFV122 Open
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -602,14 +604,14 @@ class DB:
         self.axs[4].legend(loc=2, fontsize=5)
         self.axs[4].grid()
         #
-        self.axs[5].plot(self.gp_db['time'], self.gp_db['FV145_pos'], 'r', label='FV145_POS')
-        self.axs[5].set_ylabel('FV145 POS [%]')
+        self.axs[5].plot(self.gp_db['time'], self.gp_db['HV142_pos'], 'r', label='HV142_POS')
+        self.axs[5].set_ylabel('HV142 POS [%]')
         self.axs[5].legend(loc=2, fontsize=5)
         self.axs[5].grid()
         #
-        self.axs[6].plot(self.gp_db['time'], self.gp_db['FV145_close_act'], 'g', label='Close')
-        self.axs[6].plot(self.gp_db['time'], self.gp_db['FV145_open_act'], 'r', label='Open')
-        self.axs[6].set_ylabel('FV145 Sig')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_close_act'], 'g', label='Close')
+        self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_open_act'], 'r', label='Open')
+        self.axs[6].set_ylabel('HV142 Sig')
         self.axs[6].legend(loc=2, fontsize=5)
         self.axs[6].grid()
         #
