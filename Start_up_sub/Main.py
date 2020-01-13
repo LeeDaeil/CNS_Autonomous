@@ -326,6 +326,8 @@ class A3Cagent(threading.Thread):
 
         if A in [0, 1, 2]:
             R += 0.005
+        elif A in [3, 4, 5]:
+            R += 0.01
         R2 += R
 
         # 게임 종료 계산
@@ -389,7 +391,7 @@ class A3Cagent(threading.Thread):
         elif action == 4:
             self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # HV142 Close, BFV122 Close
         elif action == 5:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # BFV122 Open, HV142 Close
+            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # HV142 Open, BFV122 Close
         elif action == 6:
             self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # HV142 Stay, BFV122 Open
         elif action == 7:
