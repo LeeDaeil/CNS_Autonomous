@@ -18,7 +18,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from StartUP.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_1'
+MAKE_FILE_PATH = './VER_11'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -41,7 +41,7 @@ class MainModel:
 
         count = 1
         while True:
-            sleep(2)
+            sleep(4)
             # 살아 있는지 보여줌
             workers_step = ''
             temp = []
@@ -248,7 +248,6 @@ class A3Cagent(threading.Thread):
         '''
         네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
         '''
-
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
         self.Reactor_power = self.CNS.mem['QPROREL']['Val']
@@ -294,26 +293,30 @@ class A3Cagent(threading.Thread):
             # 18 -> 98 따라서 1%증가시 요구되는 온도 증가량 18/98
             # 1분당 1% 증가시 0.00306 도씩 초당 증가해야함.
             # 2% start_ref_temp = 290.2 매틱 마다 0.00306 씩 증가
+            # increase_slop = 0.0001(5배에서 시간당 1%임).
+            #               = 0.001 (5배에서 시간당 10%?, 분당 약 0.46~0.5%, 0.085도/분) - Ver10
+            #               = 0.001 (5배에서 시간당 10%?, 분당 약 0.46~0.5%, ?도/분) - Ver11
+            increase_slop = 0.001489
             start_2per_temp = 291.97
-            self.get_current_t_ref = start_2per_temp + (0.0005) * self.Time_tick
+            self.get_current_t_ref = start_2per_temp + (increase_slop) * self.Time_tick
 
-            if self.save_operation_point == {}:
-                if self.Reactor_power > 0.3:
-                    # 저장 이 필요한 부분!
-                    self.save_operation_point['get_current_t_ref'] = self.get_current_t_ref
-                    self.save_operation_point['time_tick'] = self.Time_tick
-                else:
-                    pass # 초기 상태 -> 저장이 필요한 부분 전까지
-            else:
-                if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
-                    self.get_current_t_ref = start_2per_temp + (0.0005) * (self.Time_tick - 1500)
-                else:
-                    self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
+            # if self.save_operation_point == {}:
+            #     if self.Reactor_power > 0.3:
+            #         # 저장 이 필요한 부분!
+            #         self.save_operation_point['get_current_t_ref'] = self.get_current_t_ref
+            #         self.save_operation_point['time_tick'] = self.Time_tick
+            #     else:
+            #         pass # 초기 상태 -> 저장이 필요한 부분 전까지
+            # else:
+            #     if self.Time_tick > self.save_operation_point['time_tick'] + 1500:
+            #         self.get_current_t_ref = start_2per_temp + (0.001) * (self.Time_tick - 1500)
+            #     else:
+            #         self.get_current_t_ref = self.save_operation_point['get_current_t_ref']
 
             self.up_dead_band = self.get_current_t_ref + 1
             self.down_dead_band = self.get_current_t_ref - 1
-            self.up_operation_band = self.get_current_t_ref + 2
-            self.down_operation_band = self.get_current_t_ref - 2
+            self.up_operation_band = self.get_current_t_ref + 3
+            self.down_operation_band = self.get_current_t_ref - 3
 
         if self.Netbreak_condition == 1:
             self.db.train_DB['Net_triger'] = True
@@ -352,6 +355,45 @@ class A3Cagent(threading.Thread):
             'Reactor_power': self.Reactor_power,
         }
 
+    def get_reward_done(self, A):
+        # 현재 상태에 대한 보상 및 게임 종료 계산
+
+        # 보상 계산 -------
+        # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
+        if self.Tavg > self.get_current_t_ref:
+            R = (self.up_operation_band - self.Tavg) / 100
+        else:
+            R = (self.Tavg - self.down_operation_band) / 100
+        # Save_R1은 게임 종료의 Trigger
+        Save_R1 = R
+
+        # Dead_band 안에 있으면 추가점
+        if self.up_dead_band <= self.Tavg <= self.down_dead_band:
+            if self.Tavg > self.get_current_t_ref:
+                R += (self.up_dead_band - self.Tavg) / 200
+            else:
+                R += (self.Tavg - self.down_dead_band) / 200
+        else:
+            pass
+        Save_R2 = R
+
+        #action == 0: Stay     action == 1: Out        action == 2: In
+        if A == 0:
+            R += 0.00015
+        else:
+            pass
+        Save_R3 = R
+
+        # if Save_R1 < 0 or self.db.train_DB['Step'] >= 2900: # 3배속 일때
+        if Save_R1 < 0 or self.db.train_DB['Step'] >= 2000: # 5배속 일때
+            done = True
+        else:
+            done = False
+
+        # 각에피소드 마다 Log
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
+        return done, R
+
     def run_cns(self, i):
         for _ in range(0, i):
             self.CNS.run_freeze_CNS()
@@ -380,7 +422,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO100'], [0])
         if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
-        self.send_action_append(['KSWO78'], [1])
+        self.send_action_append(['KSWO78'], [1]) # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -402,36 +444,71 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate < 10: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate < 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
-        if 0.10 <= self.Reactor_power < 0.20:
-            if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.200 <= self.Reactor_power < 0.300:
-            if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.300 <= self.Reactor_power < 0.400:
-            if self.load_set < 300: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.400 <= self.Reactor_power < 0.500:
-            if self.load_set < 400: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.500 <= self.Reactor_power < 0.600:
-            if self.load_set < 500: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.600 <= self.Reactor_power < 0.700:
-            if self.load_set < 600: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.700 <= self.Reactor_power < 0.800:
-            if self.load_set < 700: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.800 <= self.Reactor_power < 0.850:
-            if self.load_set < 800: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        if 0.850 <= self.Reactor_power < 1.100:
-            if self.load_set < 930: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
-            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        def range_fun(st,end,goal):
+            if st <= self.Reactor_power < end:
+                if self.load_set < goal:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                else:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+
+        range_fun(st=0.10, end=0.20, goal=100)
+        range_fun(st=0.20, end=0.25, goal=150)
+        range_fun(st=0.25, end=0.30, goal=200)
+        range_fun(st=0.30, end=0.35, goal=250)
+        range_fun(st=0.35, end=0.40, goal=300)
+        range_fun(st=0.40, end=0.45, goal=350)
+        range_fun(st=0.45, end=0.50, goal=400)
+        range_fun(st=0.50, end=0.55, goal=450)
+        range_fun(st=0.55, end=0.60, goal=500)
+        range_fun(st=0.60, end=0.65, goal=550)
+        range_fun(st=0.65, end=0.70, goal=600)
+        range_fun(st=0.70, end=0.75, goal=650)
+        range_fun(st=0.75, end=0.80, goal=700)
+        range_fun(st=0.80, end=0.85, goal=750)
+        range_fun(st=0.85, end=0.90, goal=800)
+        range_fun(st=0.90, end=0.95, goal=850)
+        range_fun(st=0.95, end=1.00, goal=900)
+        range_fun(st=1.00, end=1.50, goal=930)
+        #
+        # if 0.10 <= self.Reactor_power < 0.20:
+        #     if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # # if 0.200 <= self.Reactor_power < 0.300:
+        # if 0.200 <= self.Reactor_power < 0.250:
+        #     # if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     if self.load_set < 150: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.250 <= self.Reactor_power < 0.300:
+        #     # if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     if self.load_set < 200: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.300 <= self.Reactor_power < 0.350:
+        #     if self.load_set < 250: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.350 <= self.Reactor_power < 0.400:
+        #     if self.load_set < 300: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.400 <= self.Reactor_power < 0.500:
+        #     if self.load_set < 400: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.500 <= self.Reactor_power < 0.600:
+        #     if self.load_set < 500: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.600 <= self.Reactor_power < 0.700:
+        #     if self.load_set < 600: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.700 <= self.Reactor_power < 0.800:
+        #     if self.load_set < 700: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.800 <= self.Reactor_power < 0.850:
+        #     if self.load_set < 800: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+        # if 0.850 <= self.Reactor_power < 1.100:
+        #     if self.load_set < 930: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+        #     else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
         # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
         if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
@@ -463,46 +540,7 @@ class A3Cagent(threading.Thread):
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
-    def get_reward_done(self, A):
-        # 현재 상태에 대한 보상 및 게임 종료 계산
-
-        # 보상 계산 -------
-        # 현재 reactor power 가 출력 기준 선보다 높아지거나, 낮아지면 거리만큼의 차가 보상으로 제공
-        if self.Tavg > self.get_current_t_ref:
-            R = (self.up_operation_band - self.Tavg) / 100
-        else:
-            R = (self.Tavg - self.down_operation_band) / 100
-        # Save_R1은 게임 종료의 Trigger
-        Save_R1 = R
-
-        # Dead_band 안에 있으면 추가점
-        if self.up_dead_band <= self.Tavg <= self.down_dead_band:
-            if self.Tavg > self.get_current_t_ref:
-                R += (self.up_dead_band - self.Tavg) / 200
-            else:
-                R += (self.Tavg - self.down_dead_band) / 200
-        else:
-            pass
-        Save_R2 = R
-
-        # action == 0: Stay     action == 1: Out        action == 2: In
-        if A == 0:
-            R += 0.001
-        else:
-            pass
-        Save_R3 = R
-
-        if Save_R1 < 0 or self.db.train_DB['Step'] >= 8000:
-            done = True
-        else:
-            done = False
-
-        # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{Save_R1:.5f}-{Save_R2:.5f}-{Save_R3:.5f}')
-        return done, R
-
     def train_network(self):
-
         def discount_reward(rewards):
             discounted_reward = np.zeros_like(rewards)
             running_add = 0
@@ -522,7 +560,7 @@ class A3Cagent(threading.Thread):
     def run(self):
         global episode
 
-        self.cns_speed = 2
+        self.cns_speed = 5
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
@@ -533,7 +571,7 @@ class A3Cagent(threading.Thread):
             self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             sleep(1)
 
-        iter_cns = 2                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
@@ -551,6 +589,12 @@ class A3Cagent(threading.Thread):
                 if len(self.db.train_DB['Now_S']) > self.input_time_length:
                     # 네트워크에 사용할 입력 데이터 다 쌓이면 제어하도록 설계
                     break
+
+                # 2.2 제어 정보와, 상태에 대한 정보를 저장한다. - 제어 이전의 데이터 세이브
+                self.save_state['Act'] = 0
+                self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
+                self.db.save_state(self.save_state)
+
                 self.db.train_DB['Step'] += iter_cns
 
             # 2. 반복 수행 시작
@@ -602,7 +646,7 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
-                    if self.db.train_DB['Step'] > 100:
+                    if self.db.train_DB['Step'] > 1000:
                         self.db.draw_img(current_ep=episode)
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
