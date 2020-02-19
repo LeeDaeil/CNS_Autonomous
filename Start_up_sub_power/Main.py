@@ -31,7 +31,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=7, output_pa=9, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=13, output_pa=3, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -245,6 +245,9 @@ class A3Cagent(threading.Thread):
         self.rod_start = False
         self.hold_tick = 60*30  # 60 tick * 30분
         self.end_time = 0
+
+        self.one_agents_episode = 0
+
         done_, R_ = self.update_parameter(A=0)
 
     def update_parameter(self, A):
@@ -361,7 +364,7 @@ class A3Cagent(threading.Thread):
             self.rod_start = True  # 20퍼 미만에서 Start!
 
         if self.Tavg > 306.5:
-            self.rod_start = True
+            self.rod_start = False
 
         # 중간 홀드하는 로직
         if self.rod_start:
@@ -412,7 +415,7 @@ class A3Cagent(threading.Thread):
         dead_condition_1 = min(self.up_operation_band - self.Tavg, self.Tavg - self.down_operation_band)
         if dead_condition_1 <= 0: done_counter += 1
 
-        if self.db.train_DB['Step'] > 40: ## TEST
+        if self.db.train_DB['Step'] > 3500: ## TEST
             done_counter += 1
 
         if True:
@@ -442,6 +445,13 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                      ]}
+        self.save_state['R'] = R
+        self.save_state['S'] = self.db.train_DB['Step']
+        self.save_state['UP_D'] = self.up_dead_band
+        self.save_state['UP_O'] = self.up_operation_band
+        self.save_state['DOWN_D'] = self.down_dead_band
+        self.save_state['DOWN_O'] = self.down_operation_band
+
         return done, R
 
     def run_cns(self, i):
@@ -469,7 +479,11 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO100'], [0])
         if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
-        self.send_action_append(['KSWO78', 'WDEWT'], [1, 1]) # Makeup
+
+        #self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
+        if self.rod_pos[0] >= 228 and self.rod_pos[1] >= 228 and self.rod_pos[0] >= 100:
+            # 거의 많이 뽑혔을때 Makeup
+            self.send_action_append(['KSWO78', 'WDEWT'], [1, 1]) # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -574,7 +588,7 @@ class A3Cagent(threading.Thread):
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
             self.save_operation_point = {}
-            self.CNS.init_cns(initial_nub=13)
+            self.CNS.init_cns(initial_nub=17)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             sleep(2)
             self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
@@ -657,6 +671,14 @@ class A3Cagent(threading.Thread):
                     if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
 
+
+                    self.save_tick = deque([0, 0], maxlen=2)
+                    self.save_st = deque([False, False], maxlen=2)
+                    self.gap = 0
+                    self.rod_start = False
+                    self.hold_tick = 60 * 30  # 60 tick * 30분
+                    self.end_time = 0
+
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
                     start_or_initial_cns(mal_time=mal_time)
                     break
@@ -719,16 +741,25 @@ class DB:
         for _ in self.axs:
             _.clear()
         #
-        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='PZR_pressure')
+        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
         self.axs[0].legend(loc=2, fontsize=5)
         self.axs[0].set_ylabel('PZR pressure [%]')
         self.axs[0].grid()
-        # #
-        # self.axs[1].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'g', label='PZR_level')
-        # self.axs[1].legend(loc=2, fontsize=5)
-        # self.axs[1].set_ylabel('PZR level')
-        # self.axs[1].grid()
-        # #
+        #
+        self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
+        self.axs[1].legend(loc=2, fontsize=5)
+        self.axs[1].set_ylabel('PZR level')
+        self.axs[1].grid()
+        #
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_O'], 'g', label='DOWN_O', color='blue', lw=1)
+        self.axs[2].legend(loc=2, fontsize=5)
+        self.axs[2].set_ylabel('PZR level')
+        self.axs[2].grid()
+        #
         # self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
         # self.axs[2].legend(loc=2, fontsize=5)
         # self.axs[2].set_ylabel('PZR temp')
