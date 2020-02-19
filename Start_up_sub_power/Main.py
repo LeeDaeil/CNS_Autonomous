@@ -6,6 +6,7 @@ from keras import backend as K
 #------------------------------------------------------------------
 import threading
 import datetime
+from collections import deque
 import pandas as pd
 import numpy as np
 from time import sleep
@@ -18,7 +19,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_17'
+MAKE_FILE_PATH = './VER_1'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -30,7 +31,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=7, output_pa=9, time_leg=5)
+        self.main_net = MainNet(net_type='LSTM', input_pa=7, output_pa=9, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -208,8 +209,6 @@ class MainNet:
 class A3Cagent(threading.Thread):
     def __init__(self, Remote_ip, Remote_port, CNS_ip, CNS_port, main_net, Sess, Summary_ops):
         threading.Thread.__init__(self)
-        # 운전 관련 정보 분당 x%
-        self.operation_mode = 0.5
         # CNS와 통신과 데이터 교환이 가능한 모듈 호출
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
 
@@ -240,109 +239,209 @@ class A3Cagent(threading.Thread):
             self.db.initial_train_DB()
 
         # 사용되는 입력 파라메터 업데이트
-        self.update_parameter()
+        self.save_tick = deque([0, 0], maxlen=2)
+        self.save_st = deque([False, False], maxlen=2)
+        self.gap = 0
+        self.rod_start = False
+        self.hold_tick = 60*30  # 60 tick * 30분
+        self.end_time = 0
+        done_, R_ = self.update_parameter(A=0)
 
-    def update_parameter(self):
+    def update_parameter(self, A):
         '''
         네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
         '''
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
-        self.PZR_pressure = self.CNS.mem['ZINST58']['Val']          # 25.47
-        self.PZR_level = self.CNS.mem['ZINST63']['Val']             # 100.00
-        self.PZR_temp = self.CNS.mem['UPRZ']['Val']                 # 68.74
-        self.PZR_Back_heater = self.CNS.mem['KLAMPO118']['Val']     # 0(off) - 1(on)
-        self.PZR_Back_on_off_act = self.CNS.mem['KSWO125']['Val']   # 0(off) - 1(on)
-        self.PZR_Pro_heater = self.CNS.mem['QPRZH']['Val']          # 0-1 pos
-        self.PZR_Pro_close_act = self.CNS.mem['KSWO121']['Val']     # Close (0 off - 1 on)
-        self.PZR_Pro_open_act = self.CNS.mem['KSWO122']['Val']      # Open (0 off - 1 on)
-        self.HV142_man = self.CNS.mem['KLAMPO89']['Val']            # 0(Auto) - 1(Man)
+        self.Reactor_power = self.CNS.mem['QPROREL']['Val']         # 0.02
+        self.Tavg = self.CNS.mem['UAVLEGM']['Val']  # 308.21
+        self.Tref = self.CNS.mem['UAVLEGS']['Val']  # 308.22
+        self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
 
-        self.HV142_pos = self.CNS.mem['BHV142']['Val']             # 13.95
-        self.HV142_close_act = self.CNS.mem['KSWO231']['Val']        # Close (0 off - 1 on)
-        self.HV145_open_act = self.CNS.mem['KSWO232']['Val']         # Open (0 off - 1 on)
+        self.charging_valve_state = self.CNS.mem['KLAMPO95']['Val'] # 0(Auto) - 1(Man)
+        self.main_feed_valve_1_state = self.CNS.mem['KLAMPO147']['Val']
+        self.main_feed_valve_2_state = self.CNS.mem['KLAMPO148']['Val']
+        self.main_feed_valve_3_state = self.CNS.mem['KLAMPO149']['Val']
+        self.vct_level = self.CNS.mem['ZVCT']['Val']                # 74.45
+        self.pzr_level = self.CNS.mem['ZINST63']['Val']             # 34.32
+        #
+        self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
+        self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']            # Turbine ac condition
+        self.Turbine_real = self.CNS.mem['KBCDO19']['Val']          # 20
+        self.load_set = self.CNS.mem['KBCDO20']['Val']              # Turbine load set point
+        self.load_rate = self.CNS.mem['KBCDO21']['Val']             # Turbine load rate
+        self.Mwe_power = self.CNS.mem['KBCDO22']['Val']             # 0
 
-        self.BFV122_man = self.CNS.mem['KLAMPO95']['Val']           # 0(Auto) - 1(Man)
-        self.BFV122_pos = self.CNS.mem['BFV122']['Val']             # 0.70
-        self.BFV122_close_act = self.CNS.mem['KSWO101']['Val']      # Close (0 off - 1 on)
-        self.BFV122_open_act = self.CNS.mem['KSWO102']['Val']       # Open (0 off - 1 on)
-        self.Charging_flow = self.CNS.mem['WCHGNO']['Val']          # 7.5
-        self.Letdown_HX_flow = self.CNS.mem['WNETLD']['Val']        # 8.43
-        self.Letdown_HX_temp = self.CNS.mem['UNRHXUT']['Val']       # 34.07
-        self.Core_out_temp = self.CNS.mem['UUPPPL']['Val']          # 54.92
+        self.Netbreak_condition = self.CNS.mem['KLAMPO224']['Val']  # 0 : Off, 1 : On
+        self.trip_block = self.CNS.mem['KLAMPO22']['Val']           # Trip block condition 0 : Off, 1 : On
+        #
+        self.steam_dump_condition = self.CNS.mem['KLAMPO150']['Val'] # 0: auto 1: man
+        self.heat_drain_pump_condition = self.CNS.mem['KLAMPO244']['Val'] # 0: off, 1: on
+        self.main_feed_pump_1 = self.CNS.mem['KLAMPO241']['Val']     # 0: off, 1: on
+        self.main_feed_pump_2 = self.CNS.mem['KLAMPO242']['Val']     # 0: off, 1: on
+        self.main_feed_pump_3 = self.CNS.mem['KLAMPO243']['Val']     # 0: off, 1: on
+        self.cond_pump_1 = self.CNS.mem['KLAMPO181']['Val']          # 0: off, 1: on
+        self.cond_pump_2 = self.CNS.mem['KLAMPO182']['Val']          # 0: off, 1: on
+        self.cond_pump_3 = self.CNS.mem['KLAMPO183']['Val']          # 0: off, 1: on
 
-        # 가압기 안전 영역 설정 및 보상 계산
-        self.PZR_pressure_float = self.PZR_pressure/100             # 현재 압력을 float로 변환 25.47 -> 0.2547
+        self.ax_off = self.CNS.mem['CAXOFF']['Val']                  # -0.63
 
-        self.top_safe_pressure_boundary = 0.30
-        self.bottom_safe_pressure_bondary = 0.20
-        self.middle_safe_pressure = 0.25
-
-        self.distance_top_current = self.top_safe_pressure_boundary - self.PZR_pressure_float
-        self.distance_bottom_current = self.PZR_pressure_float - self.bottom_safe_pressure_bondary
-        self.distance_mid = abs(self.PZR_pressure_float - self.middle_safe_pressure)
-
-        # 보상 계산
-        R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure_float >= self.middle_safe_pressure:
-            R += self.distance_top_current + 0.1
+        # 제어봉 조작 시 안전 영역 및 보상 계산
+        '''
+        - 10배로 돌릴 예정임. 1배: CNS 5 tick 1초, 5배 CNS 5 tick 5초, 10배 CNS 5 tick 10초.
+        - 출력이 100% 일때 온도는 306도가 되어야 함. 10배로 하는 경우 갑이 급격히 올라가서 5초를 버틸 수 없음.
+        - 5배의 경우 시나리오 17번에서 10초 이상 버팀.
+        
+        - 보론은 처음 넣기 시작하면 출력이 너무 올라가기 때문에, 보론은 20% 이후에 주입함.
+        - 특히나 2%에서 보론을 넣지 않으면, 출력이 올라가지 않아 최적임.
+        
+        [1]
+        - 291.97에서 증가 한다고 할때 306도 까지, y 증가는 14.03임.
+            - 최대 출력은 99% 라고 가정. 2%부터 99% 까지 증가는  97% 임. y 증가는 97
+            - 따라서 분당 1% 증가는 14.03 / 97 도 증가임. [1% = 0.1446도]
+            - 5배 이므로 5tick은 5초 -> 60초는 60Tick 임. 
+            - 60tick = 0.1446도 이며, 현재 틱당 온도 증가율을 알기위해서
+            - 1tick = 0.1446 / 60 = 0.00241도 가 나온다.
+            - [1]식 설명
+        [1-1]
+        - 중간에 멈추는 시나리오가 있다는 것을 명심하자.
+            - 출력이 20이 도달 하였을 때와 같은 부득이한 경우에. 0, 1로 제어가 가능한 로직의 설계가 필요하다.
+            - 초기 [0, 0] 인 상태이며 초기 Tick = 0이다.
+        [2]
+        - Ref 온도에서 +- 1도는 dead band
+        - Ref 온도에서 +- 3도는 Operation range
+        
+        [3]
+        - 출력과, 제한치 까지 거리 계산
+        - 현재 온도가 292도 기준 온도가 290이다. 제한치가 295 ~ 285 라고 하면,
+            - 최대 온도 295 - 현재 온도 292 = 3 (1)
+            - 현재 온도 292 - 최저 온도 285 = 7 (2)
+            - 이 상태는 향후 최대 온도로 도달 할 가능성이 높은 상태이다.
+            - 이때 보상은 (1)번을 선택해야한다. 즉, 계산된 보상 중 가장 작은 값을 선택해야 함.
+            - 이유는, 기준온도와 동일한 경우, 최대 보상을 얻어야 하기 때문이다.
+            - 최대 온도 295 - 현재 온도 290 = 5
+            - 현재 온도 290 - 최소 온도 285 = 5
+            
+        - 추가적인 보상도 고려한다.
+            - 온도 범위에서 +-0.5 구간은 보상을 균일하게 준다.
+                - 즉 온도가 290.5, 289.5 사이면 최대 보상을 제공한다. 그러면, [- 0.4, 4.5, 5, 4.5] 값 중 4.5 이상은 
+                  5로 처리한다.
+            - 균일화된 보상 범위 내에서 만약 제어봉을 조작하지 않으면 + 1점을 부여한다.
+            
+            - 제어를 하면 - 0.5점을 부여한다.
+            
+        - 종료 조건 계산
+            - 첫번째 종료 조건은 Up/Down operation band를 벗어나는 경우다.
+                - 현재 온도가 292도 기준 온도가 290이다. 제한치가 291 ~ 289 라고 하면,
+                - 최대 온도 291 - 현재 온도 292 = -1 (1)
+                - 현재 온도 292 - 최저 온도 289 = 3 (2)
+                따라서 이 경우도 보상과 동일하게 계산되며, 0보다 작아지면 죽는다고 보면된다.
+        - 입력 값 계산
+        
+                
+        - 시나리오는
+            - 10초 Charging Valve Auto
+            - 20% 출력 대기 30분.. 분당 1% 증가시 
+            - 제어봉이 모두 인출된 경우 보론을 넣기 시작한다.
+        '''
+        # [1-1]
+        if self.Reactor_power > 0.2:  # reactor power 가 20퍼이상이 되면, 출력을 유지하도록 함. tick을 고정
+            # 20퍼 이상인 부분을 감지하였고, 대기 시간 감소 시키면서 계산이 진행됨
+            if self.end_time == 0:
+                # 초기 상태이므로 이때부터 타이머 시작 : 현재 시간 + 홀드 할 시간
+                self.end_time += self.hold_tick + self.Time_tick
+            if self.end_time < self.Time_tick:
+                # 만약 end time 이 1000tick 인데, 현재 1200tick 이면 홀드하는 시간 종료
+                self.rod_start = True
+            else:
+                # 이 부분은 Time_tick이 더 작아서 아직 홀드하는 상태
+                self.rod_start = False
         else:
-            R += self.distance_bottom_current + 0.1
-        R1 += R
+            self.rod_start = True  # 20퍼 미만에서 Start!
+
+        if self.Tavg > 306.5:
+            self.rod_start = True
+
+        # 중간 홀드하는 로직
+        if self.rod_start:
+            if self.save_st[0] != self.save_st[1]:
+                self.gap = self.Time_tick - self.save_tick[-1]
+            self.save_tick.append(self.Time_tick - self.gap)
+        else: # no start
+            self.save_tick.append(self.save_tick[-1])
+        self.save_st.append(self.rod_start)
+
+        # [1]
+        start_2per_temp = 291.97
+        self.get_current_t_ref = start_2per_temp + self.save_tick[-1] * 0.00241
+
+        # [2]
+        self.up_dead_band = self.get_current_t_ref + 1
+        self.down_dead_band = self.get_current_t_ref - 1
+        self.up_operation_band = self.get_current_t_ref + 3
+        self.down_operation_band = self.get_current_t_ref - 3
+
+        # [3]
+        self.distance_dead_top_current = self.up_dead_band - self.Tavg
+        self.distance_dead_bottom_current = self.Tavg - self.down_dead_band
+        # 보상 계산 - 이때 계산된 보상은 정수 값이며, -값도 나올 수 있다.
+        self.distance_reward = min(self.distance_dead_bottom_current, self.distance_dead_top_current)
+
+        if self.distance_reward >= 4.5: # 4.5 이상은 5로
+            if A == 0:
+                self.distance_reward = 5 + 1 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
+            else:
+                self.distance_reward = 5
+        
+        # 제어를 하면 -0.5점
+        if A == 0:
+            pass
+        else:
+            self.distance_reward += -0.5
+
+        if self.distance_reward <= 0:
+            R = 0
+        else:
+            R = self.distance_reward/100    # 5-> 0.05로
+
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{R:.5f}-{R:.5f}-{R:.5f}')
+
+        # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
+        done_counter = 0
+        dead_condition_1 = min(self.up_operation_band - self.Tavg, self.Tavg - self.down_operation_band)
+        if dead_condition_1 <= 0: done_counter += 1
+
+        if self.db.train_DB['Step'] > 40: ## TEST
+            done_counter += 1
+
+        if True:
+            # 최종 종료 조건 계산
+            if done_counter > 0:
+                done = True
+            else:
+                done = False
 
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.PZR_pressure_float / 100, self.distance_top_current, self.distance_bottom_current,
-            self.Charging_flow / 100, self.BFV122_pos, self.distance_mid,
-            self.HV142_pos
-            # self.PZR_pressure/100, self.PZR_level/100, self.PZR_temp/100, self.HV142_pos/100, self.BFV122_pos,
-            # self.Charging_flow/100, self.Letdown_HX_flow/100, self.Letdown_HX_temp/100,
-            # self.Core_out_temp/100, self.Cal_bottom_bt_current_pressure/100,
+            self.Reactor_power, self.up_dead_band/1000, self.down_dead_band/1000, self.get_current_t_ref/1000, self.Mwe_power/1000,
+            self.up_operation_band/1000, self.down_operation_band/1000,
+            self.load_set/100, self.Tavg/1000,
+            self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
         ]
 
-        self.save_state = {
-            # 그래프를 그리기 + 데이터 저장 위해서 필요한 변수들
-            'CNS_time': self.Time_tick,
-            'PZR_pressure': self.PZR_pressure, 'PZR_level': self.PZR_level, 'PZR_temp': self.PZR_temp,
-            'HV142_pos': self.HV142_pos, 'HV142_close_act': self.HV142_close_act, 'HV142_open_act': self.HV145_open_act,
-            'BFV122_pos': self.BFV122_pos, 'BFV122_close_act': self.BFV122_close_act, 'BFV122_open_act': self.BFV122_open_act,
-            'Charging_flow': self.Charging_flow, 'Letdown_HX_flow': self.Letdown_HX_flow, 'Letdown_HX_temp': self.Letdown_HX_temp,
-            'Core_out_temp': self.Core_out_temp, 'top_safe_pressure_boundary': self.top_safe_pressure_boundary*100,
-            'bottom_safe_pressure_bondary': self.bottom_safe_pressure_bondary*100,
-            'R':R
-        }
-
-    def get_reward_done(self, A):
-        # 현재 상태에 대한 보상 및 게임 종료 계산
-
-        # 보상 계산
-        R, R1, R2 = 0, 0, 0
-        if self.PZR_pressure_float >= self.middle_safe_pressure:
-            R += self.distance_top_current + 0.1
-        else:
-            R += self.distance_bottom_current + 0.1
-        R1 += R
-
-        if A in [0, 1, 2]:
-            R += 0.005
-        elif A in [3, 4, 5]:
-            R += 0.01
-        R2 += R
-
-        # 게임 종료 계산
-        done = False
-        if self.distance_top_current < 0:
-            done = True
-            R -= 0.5
-        if self.distance_bottom_current < 0:
-            done = True
-            R -= 0.5
-        if self.PZR_level < 80:
-            done = True
-
-        # 각에피소드 마다 Log
-        self.logger.info(f'{self.one_agents_episode:4}-{R1:.5f}-{R1:.5f}-{R2:.5f}-{R:.5f}')
+        self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
+                                                                     'QPROREL', # power
+                                                                     'UAVLEGM', # Tavg
+                                                                     'UAVLEGS', # Tref
+                                                                     'KLAMPO95', # charging vlave state
+                                                                     'KLAMPO147', 'KLAMPO148', 'KLAMPO149',
+                                                                     'ZVCT', 'ZINST63', 'KBCDO17', 'KBCDO18',
+                                                                     'KBCDO19', 'KBCDO20', 'KBCDO21', 'KBCDO22',
+                                                                     'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
+                                                                     'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
+                                                                     'KLAMPO182', 'KLAMPO183', 'CAXOFF',
+                                                                     ]}
         return done, R
 
     def run_cns(self, i):
@@ -365,39 +464,88 @@ class A3Cagent(threading.Thread):
         self.para = []
         self.val = []
 
-        # All Heater On
-        if self.PZR_Back_heater == 0:
-            self.send_action_append(['KSWO125'], [1])   # Back Heater on
-        # else:
-        #     self.send_action_append(['KSWO125'], [0])  # Back Heater on
-        if self.PZR_Pro_heater != 1:
-            self.send_action_append(['KSWO122'], [1])  # Pro up
-        # else:
-        #     self.send_action_append(['KSWO122'], [0])  # Pro up
+        # 주급수 및 CVCS 자동
+        if self.charging_valve_state == 1:
+            self.send_action_append(['KSWO100'], [0])
+        if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
+            self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
+        self.send_action_append(['KSWO78', 'WDEWT'], [1, 1]) # Makeup
 
-        # Action Part
-        # if action == 0: self.send_action_append(['KSWO101', 'KSWO102'], [0, 0])   # All Stay
-        # elif action == 1: self.send_action_append(['KSWO101', 'KSWO102'], [1, 0])   # All Stay
-        # elif action == 2: self.send_action_append(['KSWO101', 'KSWO102'], [0, 1])   # All Stay
-        #
-        if action == 0:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 0, 0])   # All Stay
-        elif action == 1:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 0, 0])   # HV142 Close, BFV122 Stay
-        elif action == 2:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 0, 0])   # HV142 Open, BFV122 Stay
-        elif action == 3:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 1, 0])   # HV142 Stay, BFV122 Close
-        elif action == 4:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 1, 0])   # HV142 Close, BFV122 Close
-        elif action == 5:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 1, 0])   # HV142 Open, BFV122 Close
-        elif action == 6:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 0, 0, 1])   # HV142 Stay, BFV122 Open
-        elif action == 7:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [1, 0, 0, 1])   # HV142 Close, BFV122 Open
-        elif action == 8:
-            self.send_action_append(['KSWO231', 'KSWO232', 'KSWO101', 'KSWO102'], [0, 1, 0, 1])   # HV142 Open, BFV122 Open
+        # 절차서 구성 순서로 진행
+        # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
+        if self.Reactor_power >= 0.04 and self.Turbine_setpoint != 1800:
+            if self.Turbine_setpoint < 1790: # 1780 -> 1872
+                self.send_action_append(['KSWO213'], [1])
+            elif self.Turbine_setpoint >= 1790:
+                self.send_action_append(['KSWO213'], [0])
+        # 1) 출력 4% 이상에서 터빈 acc 를 200 이하로 맞춘다.
+        if self.Reactor_power >= 0.04 and self.Turbine_ac != 210:
+            if self.Turbine_ac < 200:
+                self.send_action_append(['KSWO215'], [1])
+            elif self.Turbine_ac >= 200:
+                self.send_action_append(['KSWO215'], [0])
+        # 2) 출력 10% 이상에서는 Trip block 우회한다.
+        if self.Reactor_power >= 0.10 and self.trip_block != 1:
+            self.send_action_append(['KSWO22', 'KSWO21'], [1, 1])
+        # 2) 출력 10% 이상에서는 rate를 50까지 맞춘다.
+        if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
+            if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
+            else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+            if self.load_rate < 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
+
+        def range_fun(st,end,goal):
+            if st <= self.Reactor_power < end:
+                if self.load_set < goal:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                else:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+
+        range_fun(st=0.10, end=0.20, goal=100)
+        range_fun(st=0.20, end=0.25, goal=150)
+        range_fun(st=0.25, end=0.30, goal=200)
+        range_fun(st=0.30, end=0.35, goal=250)
+        range_fun(st=0.35, end=0.40, goal=300)
+        range_fun(st=0.40, end=0.45, goal=350)
+        range_fun(st=0.45, end=0.50, goal=400)
+        range_fun(st=0.50, end=0.55, goal=450)
+        range_fun(st=0.55, end=0.60, goal=500)
+        range_fun(st=0.60, end=0.65, goal=550)
+        range_fun(st=0.65, end=0.70, goal=600)
+        range_fun(st=0.70, end=0.75, goal=650)
+        range_fun(st=0.75, end=0.80, goal=700)
+        range_fun(st=0.80, end=0.85, goal=750)
+        range_fun(st=0.85, end=0.90, goal=800)
+        range_fun(st=0.90, end=0.95, goal=850)
+        range_fun(st=0.95, end=1.00, goal=900)
+        range_fun(st=1.00, end=1.50, goal=930)
+
+        # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
+        if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
+            self.send_action_append(['KSWO244'], [1])
+        # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, steam dump auto로 전향
+        if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.steam_dump_condition == 1:
+            self.send_action_append(['KSWO176'], [0])
+        # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, heat drain pump on
+        if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
+            self.send_action_append(['KSWO205'], [1])
+        # 5) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
+        if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
+            self.send_action_append(['KSWO205'], [1])
+        # 6) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
+        if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+            self.send_action_append(['KSWO193'], [1])
+        # 7) 출력 50% 이상 및 전기 출력이 475Mwe
+        if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+            self.send_action_append(['KSWO206'], [1])
+        # 8) 출력 80% 이상 및 전기 출력이 765Mwe
+        if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
+            self.send_action_append(['KSWO192'], [1])
+
+        # 9) 제어봉 조작 신호를 보내기
+        if action == 0: self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
+        elif action == 1: self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
+        elif action == 2: self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -421,7 +569,7 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 10  # x 배속
+        self.cns_speed = 5  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
@@ -442,7 +590,7 @@ class A3Cagent(threading.Thread):
             self.one_agents_episode = episode
             while True:
                 self.run_cns(iter_cns)
-                self.update_parameter()
+                done, R = self.update_parameter(A=0)
                 self.db.add_now_state(Now_S=self.state)
                 # if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
                 #     # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
@@ -479,10 +627,9 @@ class A3Cagent(threading.Thread):
 
                     # 2.3 제어에 대하여 CNS 동작 시키고 현재 상태 업데이트한다.
                     self.run_cns(iter_cns)
-                    self.update_parameter()
+                    # 2.4 새로운 상태를 업데이트 하고 상태 평가를 진행 한다.
+                    done, R = self.update_parameter(A=Action_net)
                     self.db.add_now_state(Now_S=self.state) # self.state 가 업데이트 된 상태이다. New state
-                    # 2.4 새로운 상태에 대한 상태 평가를 시작한다.
-                    done, R = self.get_reward_done(A=Action_net)
                     # 2.5 평가를 저장한다.
                     self.db.add_train_DB(S=old_state, R=R, A=Action_net)
                     # 2.5 기타 변수를 업데이트 한다.
@@ -526,7 +673,7 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(19, 13))
+        self.fig = plt.figure(constrained_layout=True, figsize=(19, 20))
         self.gs = self.fig.add_gridspec(27, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
@@ -537,9 +684,6 @@ class DB:
                     self.fig.add_subplot(self.gs[18:21, :]),  # 7
                     self.fig.add_subplot(self.gs[21:24, :]),  # 8
                     self.fig.add_subplot(self.gs[24:27, :]),  # 9
-                    # self.fig.add_subplot(self.gs[18:22, :]),  # 8
-                    # self.fig.add_subplot(self.gs[22:25, :]),  # 9
-                    # self.fig.add_subplot(self.gs[17:20, :]),  # 9
                     ]
 
     def initial_train_DB(self):
@@ -560,8 +704,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        # Temp_R_A = np.zeros(3)
-        Temp_R_A = np.zeros(9)
+        Temp_R_A = np.zeros(3)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
@@ -576,81 +719,54 @@ class DB:
         for _ in self.axs:
             _.clear()
         #
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['PZR_pressure'], 'g', label='PZR_pressure')
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['top_safe_pressure_boundary'], 'b', label='PZR_top_pressure')
-        self.axs[0].plot(self.gp_db['time'], self.gp_db['bottom_safe_pressure_bondary'], 'b', label='PZR_bottom_pressure')
+        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='PZR_pressure')
         self.axs[0].legend(loc=2, fontsize=5)
         self.axs[0].set_ylabel('PZR pressure [%]')
         self.axs[0].grid()
-        #
-        self.axs[1].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'g', label='PZR_level')
-        self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].set_ylabel('PZR level')
-        self.axs[1].grid()
-        #
-        self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
-        self.axs[2].legend(loc=2, fontsize=5)
-        self.axs[2].set_ylabel('PZR temp')
-        self.axs[2].grid()
-        #
-        self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
-        self.axs[3].legend(loc=2, fontsize=5)
-        self.axs[3].set_ylabel('BFV122 POS [%]')
-        self.axs[3].grid()
-        #
-        self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
-        self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
-        # self.axs[2].set_yticks((900, 1800))
-        # self.axs[2].set_yticklabels(('900', '1800'))
-        self.axs[4].set_ylabel('BFV122 Sig')
-        self.axs[4].legend(loc=2, fontsize=5)
-        self.axs[4].grid()
-        #
-        self.axs[5].plot(self.gp_db['time'], self.gp_db['HV142_pos'], 'r', label='HV142_POS')
-        self.axs[5].set_ylabel('HV142 POS [%]')
-        self.axs[5].legend(loc=2, fontsize=5)
-        self.axs[5].grid()
-        #
-        self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_close_act'], 'g', label='Close')
-        self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_open_act'], 'r', label='Open')
-        self.axs[6].set_ylabel('HV142 Sig')
-        self.axs[6].legend(loc=2, fontsize=5)
-        self.axs[6].grid()
-        #
-        self.axs[7].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
-        self.axs[7].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
-        self.axs[7].set_ylabel('Flow Sig')
-        self.axs[7].legend(loc=2, fontsize=5)
-        self.axs[7].grid()
-        #
-        self.axs[8].plot(self.gp_db['time'], self.gp_db['R'], 'g', label='Reward')
-        self.axs[8].set_ylabel('Rewaed')
-        self.axs[8].legend(loc=2, fontsize=5)
-        self.axs[8].grid()
-        #
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Net_break'], label='Net break')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Trip_block'], label='Trip block')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Stem_pump'], label='Stem dump valve auto')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['Heat_pump'], label='Heat pump')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF1'], label='Main Feed Water Pump 1')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF2'], label='Main Feed Water Pump 2')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['MF3'], label='Main Feed Water Pump 3')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF1'], label='Condensor Pump 1')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF2'], label='Condensor Pump 2')
-        # self.axs[6].plot(self.gp_db['time'], self.gp_db['CF3'], label='Condensor Pump 3')
-        # self.axs[6].set_yticks((0, 1))
-        # self.axs[6].set_yticklabels(('Off', 'On'))
-        # self.axs[6].legend(loc=7, fontsize=5)
+        # #
+        # self.axs[1].plot(self.gp_db['time'], self.gp_db['PZR_level'], 'g', label='PZR_level')
+        # self.axs[1].legend(loc=2, fontsize=5)
+        # self.axs[1].set_ylabel('PZR level')
+        # self.axs[1].grid()
+        # #
+        # self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
+        # self.axs[2].legend(loc=2, fontsize=5)
+        # self.axs[2].set_ylabel('PZR temp')
+        # self.axs[2].grid()
+        # #
+        # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
+        # self.axs[3].legend(loc=2, fontsize=5)
+        # self.axs[3].set_ylabel('BFV122 POS [%]')
+        # self.axs[3].grid()
+        # #
+        # self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
+        # self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
+        # self.axs[4].set_ylabel('BFV122 Sig')
+        # self.axs[4].legend(loc=2, fontsize=5)
+        # self.axs[4].grid()
+        # #
+        # self.axs[5].plot(self.gp_db['time'], self.gp_db['HV142_pos'], 'r', label='HV142_POS')
+        # self.axs[5].set_ylabel('HV142 POS [%]')
+        # self.axs[5].legend(loc=2, fontsize=5)
+        # self.axs[5].grid()
+        # #
+        # self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_close_act'], 'g', label='Close')
+        # self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_open_act'], 'r', label='Open')
+        # self.axs[6].set_ylabel('HV142 Sig')
+        # self.axs[6].legend(loc=2, fontsize=5)
         # self.axs[6].grid()
         # #
-        # self.axs[7].plot(self.gp_db['time'], self.gp_db['ax_off'], label='Temp_avg')
-        # self.axs[7].legend(loc=7, fontsize=5)
+        # self.axs[7].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
+        # self.axs[7].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
+        # self.axs[7].set_ylabel('Flow Sig')
+        # self.axs[7].legend(loc=2, fontsize=5)
         # self.axs[7].grid()
         # #
-        # self.axs[8].plot(self.gp_db['time'], self.gp_db['Reactor_power'], label='Reactor')
-        # self.axs[8].set_xlabel('Time [s]')
+        # self.axs[8].plot(self.gp_db['time'], self.gp_db['R'], 'g', label='Reward')
+        # self.axs[8].set_ylabel('Rewaed')
+        # self.axs[8].legend(loc=2, fontsize=5)
         # self.axs[8].grid()
-        #
+
         self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
                          facecolor=None)
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
