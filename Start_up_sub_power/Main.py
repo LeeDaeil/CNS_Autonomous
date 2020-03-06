@@ -19,7 +19,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub.CNS_UDP import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './VER_1'
+MAKE_FILE_PATH = './VER_2'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -31,7 +31,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=13, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=13, output_pa=3, time_leg=10)
 
     def run(self):
         worker = self.build_A3C()
@@ -366,6 +366,8 @@ class A3Cagent(threading.Thread):
         if self.Tavg > 306.5:
             self.rod_start = False
 
+        self.save_st.append(self.rod_start)
+
         # 중간 홀드하는 로직
         if self.rod_start:
             if self.save_st[0] != self.save_st[1]:
@@ -373,7 +375,6 @@ class A3Cagent(threading.Thread):
             self.save_tick.append(self.Time_tick - self.gap)
         else: # no start
             self.save_tick.append(self.save_tick[-1])
-        self.save_st.append(self.rod_start)
 
         # [1]
         start_2per_temp = 291.97
@@ -387,26 +388,39 @@ class A3Cagent(threading.Thread):
 
         # [3]
         self.distance_dead_top_current = self.up_dead_band - self.Tavg
+        self.distance_op_top_current = self.up_operation_band - self.Tavg
         self.distance_dead_bottom_current = self.Tavg - self.down_dead_band
+        self.distance_op_bottom_current = self.Tavg - self.down_operation_band
         # 보상 계산 - 이때 계산된 보상은 정수 값이며, -값도 나올 수 있다.
         self.distance_reward = min(self.distance_dead_bottom_current, self.distance_dead_top_current)
+        self.distance_op_reward = min(self.distance_op_bottom_current, self.distance_op_top_current)
 
         if self.distance_reward >= 4.5: # 4.5 이상은 5로
             if A == 0:
-                self.distance_reward = 5 + 1 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
+                self.distance_reward = 5 + 0.1 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
             else:
                 self.distance_reward = 5
-        
-        # 제어를 하면 -0.5점
+
+        # 제어를 하면 -0.1점
         if A == 0:
             pass
         else:
-            self.distance_reward += -0.5
+            self.distance_reward += -0.1
 
+        # 범위에 따른 보상 계산
+        R = 0
         if self.distance_reward <= 0:
-            R = 0
+            # dead 범위를 벗어난 경우로, 이 경우 op의 보상만 계산한다.
+            if self.distance_op_reward < 0:
+                R += 0
+            else:
+                R += self.distance_op_reward
         else:
-            R = self.distance_reward/100    # 5-> 0.05로
+            # dead 범위 있는 보상으로 op 보상 + dead 보상까지 받는다.
+            R += self.distance_op_reward
+            R += self.distance_reward
+
+        R = R/100 # 최종 R은 100이 나뉜다.
 
         self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{R:.5f}-{R:.5f}-{R:.5f}')
 
@@ -428,10 +442,10 @@ class A3Cagent(threading.Thread):
         self.state =[
             # 네트워크의 Input 에 들어 가는 변수 들
             self.Reactor_power, self.up_dead_band/1000, self.down_dead_band/1000, self.get_current_t_ref/1000, self.Mwe_power/1000,
-            self.up_operation_band/1000, self.down_operation_band/1000,
-            self.load_set/100, self.Tavg/1000,
-            self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
-        ]
+                                self.up_operation_band/1000, self.down_operation_band/1000,
+                                self.load_set/100, self.Tavg/1000,
+                                self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
+                                ]
 
         self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
                                                                      'QPROREL', # power
@@ -444,6 +458,7 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
+                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
                                                                      ]}
         self.save_state['R'] = R
         self.save_state['S'] = self.db.train_DB['Step']
@@ -695,7 +710,7 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(19, 20))
+        self.fig = plt.figure(constrained_layout=True, figsize=(19, 25))
         self.gs = self.fig.add_gridspec(27, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
@@ -760,6 +775,12 @@ class DB:
         self.axs[2].set_ylabel('PZR level')
         self.axs[2].grid()
         #
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'g', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'g', label='Reward')
+        self.axs[3].legend(loc=2, fontsize=5)
+        self.axs[3].set_ylabel('PZR level')
+        self.axs[3].grid()
         # self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
         # self.axs[2].legend(loc=2, fontsize=5)
         # self.axs[2].set_ylabel('PZR temp')
