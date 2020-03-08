@@ -17,9 +17,9 @@ import shutil
 import logging
 import logging.handlers
 #------------------------------------------------------------------
-from Start_up_sub.CNS_UDP import CNS
+from Start_up_sub_power.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = './FAST/VER_0'
+MAKE_FILE_PATH = f'./FAST/VER_0_{datetime.datetime.month}_{datetime.datetime.day}_{datetime.datetime.minute}_{datetime.datetime.second}'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -292,9 +292,11 @@ class A3Cagent(threading.Thread):
 
         # 제어봉 조작 시 안전 영역 및 보상 계산
         '''
-        - 10배로 돌릴 예정임. 1배: CNS 5 tick 1초, 5배 CNS 5 tick 5초, 10배 CNS 5 tick 10초.
-        - 출력이 100% 일때 온도는 306도가 되어야 함. 10배로 하는 경우 갑이 급격히 올라가서 5초를 버틸 수 없음.
-        - 5배의 경우 시나리오 17번에서 10초 이상 버팀.
+        # - 10배로 돌릴 예정임. 1배: CNS 5 tick 1초, 5배 CNS 5 tick 5초, 10배 CNS 5 tick 10초.
+        # - 출력이 100% 일때 온도는 306도가 되어야 함. 10배로 하는 경우 갑이 급격히 올라가서 5초를 버틸 수 없음.
+        # - 5배의 경우 시나리오 17번에서 10초 이상 버팀.
+        
+        - 50 tick 씩 돌고 데이터를 에이전트에게 제공함.
         
         - 보론은 처음 넣기 시작하면 출력이 너무 올라가기 때문에, 보론은 20% 이후에 주입함.
         - 특히나 2%에서 보론을 넣지 않으면, 출력이 올라가지 않아 최적임.
