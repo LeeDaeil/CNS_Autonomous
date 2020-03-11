@@ -19,7 +19,8 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub_power.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
-MAKE_FILE_PATH = f'./FAST/VER_0_{datetime.datetime.month}_{datetime.datetime.day}_{datetime.datetime.minute}_{datetime.datetime.second}'
+get_file_time_path = datetime.datetime.now()
+MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -60,7 +61,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.89', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [20, 0, 0]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.86', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [1, 0, 0]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.6', Remote_port=com_port + i,
@@ -296,7 +297,7 @@ class A3Cagent(threading.Thread):
         # - 출력이 100% 일때 온도는 306도가 되어야 함. 10배로 하는 경우 갑이 급격히 올라가서 5초를 버틸 수 없음.
         # - 5배의 경우 시나리오 17번에서 10초 이상 버팀.
         
-        - 50 tick 씩 돌고 데이터를 에이전트에게 제공함.
+        - 100 tick 씩 돌고 데이터를 에이전트에게 제공함.
         
         - 보론은 처음 넣기 시작하면 출력이 너무 올라가기 때문에, 보론은 20% 이후에 주입함.
         - 특히나 2%에서 보론을 넣지 않으면, 출력이 올라가지 않아 최적임.
@@ -304,10 +305,16 @@ class A3Cagent(threading.Thread):
         [1]
         - 291.97에서 증가 한다고 할때 306도 까지, y 증가는 14.03임.
             - 최대 출력은 99% 라고 가정. 2%부터 99% 까지 증가는  97% 임. y 증가는 97
-            - 따라서 분당 1% 증가는 14.03 / 97 도 증가임. [1% = 0.1446도]
-            - 5배 이므로 5tick은 5초 -> 60초는 60Tick 임. 
-            - 60tick = 0.1446도 이며, 현재 틱당 온도 증가율을 알기위해서
-            - 1tick = 0.1446 / 60 = 0.00241도 가 나온다.
+            - 따라서 1% 증가는 14.03 / 97 도 증가임. [1% = 0.1446도]
+            - 1배 이므로 5tick은 1초 -> 60초는 300Tick 임.
+            - 1분당 1% 증가로 계산의 경우
+            - 300tick "1분당" = 0.1446 "1%" 도 이며, 현재 틱당 온도 증가율을 알기위해서
+                - ex 1분당 0.5% 증가로 계산하는 경우
+                - 300tick = 0.1446 "1%" * 0.5 "0.5%" 
+            - 1tick = 0.1446 / 300 = 4.82e-4도 가 나온다.
+            + Ver0에서는 시간당 3%로 올리고 싶으며, 60분당 3%
+                + 300 tick * 60 = 0.1446 * 3 -> 300 tick * 20 = 0.1446
+                + 1tick = 0.1446 / 6000 = 2.41e-5 로 수행한다. [수식 2.41e-5]
             - [1]식 설명
         [1-1]
         - 중간에 멈추는 시나리오가 있다는 것을 명심하자.
@@ -380,13 +387,13 @@ class A3Cagent(threading.Thread):
 
         # [1]
         start_2per_temp = 291.97
-        self.get_current_t_ref = start_2per_temp + self.save_tick[-1] * 0.00241
+        self.get_current_t_ref = start_2per_temp + self.save_tick[-1] * 2.41e-5 *2
 
         # [2]
         self.up_dead_band = self.get_current_t_ref + 1
         self.down_dead_band = self.get_current_t_ref - 1
-        self.up_operation_band = self.get_current_t_ref + 3
-        self.down_operation_band = self.get_current_t_ref - 3
+        self.up_operation_band = self.get_current_t_ref + 2
+        self.down_operation_band = self.get_current_t_ref - 2
 
         # [3]
         self.distance_dead_top_current = self.up_dead_band - self.Tavg
@@ -397,32 +404,23 @@ class A3Cagent(threading.Thread):
         self.distance_reward = min(self.distance_dead_bottom_current, self.distance_dead_top_current)
         self.distance_op_reward = min(self.distance_op_bottom_current, self.distance_op_top_current)
 
-        if self.distance_reward >= 4.5: # 4.5 이상은 5로
+        if self.distance_reward >= 0.45: # 4.5 이상은 5로
             if A == 0:
-                self.distance_reward = 5 + 0.1 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
+                self.distance_reward = 0.45 + 0.01 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
             else:
-                self.distance_reward = 5
-
-        # 제어를 하면 -0.1점
-        if A == 0:
-            pass
-        else:
-            self.distance_reward += -0.1
+                self.distance_reward = 0.45
 
         # 범위에 따른 보상 계산
         R = 0
         if self.distance_reward <= 0:
-            # dead 범위를 벗어난 경우로, 이 경우 op의 보상만 계산한다.
-            if self.distance_op_reward < 0:
-                R += 0
-            else:
-                R += self.distance_op_reward
+            # dead 범위를 벗어난 경우로, 이 경우 벗어난 정도(-값을 가짐)를 exp 함수로 계산하여 보상에 반영한다.
+            # - 값은 무한히 제공되지 않으며, +-2도를 벗어나는 조건까지 계산한다.
+            R += np.exp(self.distance_reward)
         else:
-            # dead 범위 있는 보상으로 op 보상 + dead 보상까지 받는다.
-            R += self.distance_op_reward
+            # dead 범위 있는 보상
             R += self.distance_reward
 
-        R = R/100 # 최종 R은 100이 나뉜다.
+        R = R / 1     # 최종 R은 1이 나뉜다.
 
         self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{R:.5f}-{R:.5f}-{R:.5f}')
 
@@ -431,7 +429,7 @@ class A3Cagent(threading.Thread):
         dead_condition_1 = min(self.up_operation_band - self.Tavg, self.Tavg - self.down_operation_band)
         if dead_condition_1 <= 0: done_counter += 1
 
-        if self.db.train_DB['Step'] > 3500: ## TEST
+        if self.db.train_DB['Step'] > 5000: ## TEST
             done_counter += 1
 
         if True:
@@ -441,7 +439,7 @@ class A3Cagent(threading.Thread):
             else:
                 done = False
 
-        self.state =[
+        self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
             self.Reactor_power, self.up_dead_band/1000, self.down_dead_band/1000, self.get_current_t_ref/1000, self.Mwe_power/1000,
                                 self.up_operation_band/1000, self.down_operation_band/1000,
@@ -462,6 +460,10 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                      'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
                                                                      ]}
+        self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
+                                     self.CNS.mem['KBCDO9']['Val'] + \
+                                     self.CNS.mem['KBCDO8']['Val'] + \
+                                     self.CNS.mem['KBCDO7']['Val']
         self.save_state['R'] = R
         self.save_state['S'] = self.db.train_DB['Step']
         self.save_state['UP_D'] = self.up_dead_band
@@ -522,7 +524,7 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate < 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 2: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st,end,goal):
@@ -607,7 +609,7 @@ class A3Cagent(threading.Thread):
             self.save_operation_point = {}
             self.CNS.init_cns(initial_nub=17)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
-            # sleep(2)
+            # sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             # sleep(1)
 
@@ -711,17 +713,17 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(19, 25))
-        self.gs = self.fig.add_gridspec(27, 3)
+        self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
+        self.gs = self.fig.add_gridspec(15, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
                     self.fig.add_subplot(self.gs[9:12, :]),  # 4
                     self.fig.add_subplot(self.gs[12:15, :]),  # 5
-                    self.fig.add_subplot(self.gs[15:18, :]),  # 6
-                    self.fig.add_subplot(self.gs[18:21, :]),  # 7
-                    self.fig.add_subplot(self.gs[21:24, :]),  # 8
-                    self.fig.add_subplot(self.gs[24:27, :]),  # 9
+                    # self.fig.add_subplot(self.gs[15:18, :]),  # 6
+                    # self.fig.add_subplot(self.gs[18:21, :]),  # 7
+                    # self.fig.add_subplot(self.gs[21:24, :]),  # 8
+                    # self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     ]
 
     def initial_train_DB(self):
@@ -777,11 +779,17 @@ class DB:
         self.axs[2].grid()
         #
         self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'g', label='Reward')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'g', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Reward')
         self.axs[3].legend(loc=2, fontsize=5)
         self.axs[3].set_ylabel('PZR level')
         self.axs[3].grid()
+        #
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
+        self.axs[4].legend(loc=2, fontsize=5)
+        self.axs[4].set_ylabel('ROD pos')
+        self.axs[4].grid()
+
         # self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
         # self.axs[2].legend(loc=2, fontsize=5)
         # self.axs[2].set_ylabel('PZR temp')
