@@ -32,7 +32,8 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=13, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=13, output_pa=3, time_leg=10)
+        self.main_net.load_model('ROD')
 
     def run(self):
         worker = self.build_A3C()
@@ -61,7 +62,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.86', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [1, 0, 0]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.86', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [20, 0, 0]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.6', Remote_port=com_port + i,
@@ -137,7 +138,7 @@ class MainNet:
                 shared = Dense(70)(shared)
 
             elif net_type == 'LSTM':
-                shared = LSTM(32, activation='relu')(state)
+                shared = LSTM(32, activation='sigmoid')(state)
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
@@ -149,11 +150,11 @@ class MainNet:
         # ----------------------------------------------------------------------------------------------------
         # Common output network
         # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
-        actor_hidden = Dense(24, activation='relu', kernel_initializer='glorot_uniform')(shared)
+        actor_hidden = Dense(24, activation='sigmoid', kernel_initializer='glorot_uniform')(shared)
         action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
 
         # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
-        value_hidden = Dense(12, activation='relu', kernel_initializer='he_uniform')(shared)
+        value_hidden = Dense(12, activation='sigmoid', kernel_initializer='he_uniform')(shared)
         state_value = Dense(1, activation='linear', kernel_initializer='he_uniform')(value_hidden)
 
         actor = Model(inputs=state, outputs=action_prob)
@@ -205,6 +206,10 @@ class MainNet:
     def save_model(self, name):
         self.actor.save_weights("{}/Model/{}_A3C_actor.h5".format(MAKE_FILE_PATH, name))
         self.critic.save_weights("{}/Model/{}_A3C_cric.h5".format(MAKE_FILE_PATH, name))
+
+    def load_model(self, name):
+        self.actor.load_weights("FAST/VER_0_3_12_57_57/Model/{}_A3C_actor.h5".format(name))
+        self.critic.load_weights("FAST/VER_0_3_12_57_57/Model/{}_A3C_cric.h5".format(name))
 
 
 class A3Cagent(threading.Thread):
@@ -387,7 +392,7 @@ class A3Cagent(threading.Thread):
 
         # [1]
         start_2per_temp = 291.97
-        self.get_current_t_ref = start_2per_temp + self.save_tick[-1] * 2.41e-5 *2
+        self.get_current_t_ref = start_2per_temp + self.save_tick[-1] * 2.41e-5 * 2
 
         # [2]
         self.up_dead_band = self.get_current_t_ref + 1
@@ -415,14 +420,19 @@ class A3Cagent(threading.Thread):
         if self.distance_reward <= 0:
             # dead 범위를 벗어난 경우로, 이 경우 벗어난 정도(-값을 가짐)를 exp 함수로 계산하여 보상에 반영한다.
             # - 값은 무한히 제공되지 않으며, +-2도를 벗어나는 조건까지 계산한다.
-            R += np.exp(self.distance_reward)
+            R -= self.distance_reward ** 2
         else:
             # dead 범위 있는 보상
             R += self.distance_reward
+        #
 
-        R = R / 1     # 최종 R은 1이 나뉜다.
+        # Nan 값 방지.
+        if self.Tavg == 0:
+            R = 0
+        R = R / 100     # 최종 R은 1이 나뉜다.
 
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{R:.5f}-{R:.5f}-{R:.5f}')
+        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
+                         f'{np.exp(self.distance_reward):.5f}-{self.Tavg:.5f}')
 
         # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
         done_counter = 0
@@ -480,7 +490,11 @@ class A3Cagent(threading.Thread):
     def predict_action(self, actor, input_window):
         predict_result = actor.predict([[input_window]])
         policy = predict_result[0]
-        action = np.random.choice(np.shape(policy)[0], 1, p=policy)[0]
+        try:
+            action = np.random.choice(np.shape(policy)[0], 1, p=policy)[0]
+        except:
+            print(policy)
+            sleep(10000)
         return action, predict_result
 
     def send_action_append(self, pa, va):
