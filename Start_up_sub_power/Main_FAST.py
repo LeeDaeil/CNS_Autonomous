@@ -33,7 +33,7 @@ class MainModel:
         self._make_folder()
         self._make_tensorboaed()
         self.main_net = MainNet(net_type='LSTM', input_pa=13, output_pa=3, time_leg=10)
-        self.main_net.load_model('ROD')
+        #self.main_net.load_model('ROD')
 
     def run(self):
         worker = self.build_A3C()
@@ -62,10 +62,10 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.86', '192.168.0.90', '192.168.0.91'], [7100, 7200, 7300], [20, 0, 0]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 20, 20]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
-                    worker.append(A3Cagent(Remote_ip='192.168.0.6', Remote_port=com_port + i,
+                    worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
                                            CNS_ip=cnsip, CNS_port=com_port + i,
                                            main_net=self.main_net, Sess=self.sess,
                                            Summary_ops=[self.summary_op, self.summary_placeholders,
