@@ -356,7 +356,6 @@ class A3Cagent(threading.Thread):
                 따라서 이 경우도 보상과 동일하게 계산되며, 0보다 작아지면 죽는다고 보면된다.
         - 입력 값 계산
         
-                
         - 시나리오는
             - 10초 Charging Valve Auto
             - 20% 출력 대기 30분.. 분당 1% 증가시 
@@ -411,7 +410,7 @@ class A3Cagent(threading.Thread):
 
         if self.distance_reward >= 0.45: # 4.5 이상은 5로
             if A == 0:
-                self.distance_reward = 0.45 + 0.01 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
+                self.distance_reward = 0.45 + 0.05 # 4.5 이상인데, 해당 부분을 유지하기위해 제어를 안하면 + 1 점
             else:
                 self.distance_reward = 0.45
 
@@ -541,31 +540,17 @@ class A3Cagent(threading.Thread):
             if self.load_rate <= 2: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
-        def range_fun(st,end,goal):
+        def range_fun(st, end, goal):
             if st <= self.Reactor_power < end:
                 if self.load_set < goal:
                     self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                 else:
                     self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-
-        range_fun(st=0.10, end=0.20, goal=100)
-        range_fun(st=0.20, end=0.25, goal=150)
-        range_fun(st=0.25, end=0.30, goal=200)
-        range_fun(st=0.30, end=0.35, goal=250)
-        range_fun(st=0.35, end=0.40, goal=300)
-        range_fun(st=0.40, end=0.45, goal=350)
-        range_fun(st=0.45, end=0.50, goal=400)
-        range_fun(st=0.50, end=0.55, goal=450)
-        range_fun(st=0.55, end=0.60, goal=500)
-        range_fun(st=0.60, end=0.65, goal=550)
-        range_fun(st=0.65, end=0.70, goal=600)
-        range_fun(st=0.70, end=0.75, goal=650)
-        range_fun(st=0.75, end=0.80, goal=700)
-        range_fun(st=0.80, end=0.85, goal=750)
-        range_fun(st=0.85, end=0.90, goal=800)
-        range_fun(st=0.90, end=0.95, goal=850)
-        range_fun(st=0.95, end=1.00, goal=900)
-        range_fun(st=1.00, end=1.50, goal=930)
+        for start_power in range(5, 100, 5):
+            start_power_real = start_power/100          # 5->0.05
+            end_power_real = start_power_real+0.05      # 0.05 ~ 0.10
+            goal_power = end_power_real * 9             # 0.10 * 900 = 90Mwe
+            range_fun(st=start_power_real, end=end_power_real, goal=goal_power)
 
         # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
         if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
