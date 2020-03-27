@@ -62,7 +62,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [20, 20, 20]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [5, 5, 5]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -138,7 +138,7 @@ class MainNet:
                 shared = Dense(70)(shared)
 
             elif net_type == 'LSTM':
-                shared = LSTM(32, activation='sigmoid')(state)
+                shared = LSTM(32)(state)
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
@@ -430,8 +430,9 @@ class A3Cagent(threading.Thread):
             R = 0
         R = R / 100     # 최종 R은 1이 나뉜다.
 
-        self.logger.info(f'{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
-                         f'{np.exp(self.distance_reward):.5f}-{self.Tavg:.5f}')
+
+        self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
+                         f'{np.exp(self.distance_reward):.5f}-{self.Tavg:.5f}-{self.Time_tick}]')
 
         # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
         done_counter = 0
@@ -468,6 +469,7 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                      'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
+                                                                     'FANGLE'
                                                                      ]}
         self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
                                      self.CNS.mem['KBCDO9']['Val'] + \
@@ -546,11 +548,26 @@ class A3Cagent(threading.Thread):
                     self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                 else:
                     self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-        for start_power in range(5, 100, 5):
-            start_power_real = start_power/100          # 5->0.05
-            end_power_real = start_power_real+0.05      # 0.05 ~ 0.10
-            goal_power = end_power_real * 9             # 0.10 * 900 = 90Mwe
-            range_fun(st=start_power_real, end=end_power_real, goal=goal_power)
+
+        range_fun(st=0.05, end=0.10, goal=90)
+        range_fun(st=0.10, end=0.15, goal=135)
+        range_fun(st=0.15, end=0.20, goal=180)
+        range_fun(st=0.20, end=0.25, goal=225)
+        range_fun(st=0.25, end=0.30, goal=270)
+        range_fun(st=0.30, end=0.35, goal=315)
+        range_fun(st=0.35, end=0.40, goal=360)
+        range_fun(st=0.40, end=0.45, goal=405)
+        range_fun(st=0.45, end=0.50, goal=450)
+        range_fun(st=0.50, end=0.55, goal=495)
+        range_fun(st=0.55, end=0.60, goal=540)
+        range_fun(st=0.60, end=0.65, goal=585)
+        range_fun(st=0.65, end=0.70, goal=630)
+        range_fun(st=0.70, end=0.75, goal=675)
+        range_fun(st=0.75, end=0.80, goal=720)
+        range_fun(st=0.80, end=0.85, goal=765)
+        range_fun(st=0.85, end=0.90, goal=810)
+        range_fun(st=0.90, end=0.95, goal=855)
+        range_fun(st=0.95, end=0.100, goal=900)
 
         # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
         if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
@@ -620,6 +637,8 @@ class A3Cagent(threading.Thread):
         while episode < 50000:
             # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
             self.one_agents_episode = episode
+            start_ep_time = datetime.datetime.now()
+            self.logger.info(f'[{datetime.datetime.now()}] Start ep')
             while True:
                 self.run_cns(iter_cns)
                 done, R = self.update_parameter(A=0)
@@ -676,6 +695,8 @@ class A3Cagent(threading.Thread):
 
                 # 2.7 done에 도달함.
                 if done:
+                    self.logger.info(f'[{datetime.datetime.now()}] Training Done - {start_ep_time}~'
+                                     f'{datetime.datetime.now()}')
                     episode += 1
                     # tensorboard update
                     stats = [self.db.train_DB['TotR'],
@@ -686,8 +707,10 @@ class A3Cagent(threading.Thread):
                     summary_str = self.sess.run(self.summary_op)
                     self.summary_writer.add_summary(summary_str, episode)
 
+                    self.logger.info(f'[{datetime.datetime.now()}] Save img')
                     if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
+
 
                     self.save_tick = deque([0, 0], maxlen=2)
                     self.save_st = deque([False, False], maxlen=2)
@@ -698,6 +721,8 @@ class A3Cagent(threading.Thread):
 
                     mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
                     start_or_initial_cns(mal_time=mal_time)
+                    self.logger.info(f'[{datetime.datetime.now()}] Episode_done - {start_ep_time}~'
+                                     f'{datetime.datetime.now()}')
                     break
 
 
@@ -827,7 +852,7 @@ class DB:
         # self.axs[8].legend(loc=2, fontsize=5)
         # self.axs[8].grid()
 
-        self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=600,
+        self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
                          facecolor=None)
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 

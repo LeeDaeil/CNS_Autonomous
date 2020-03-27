@@ -38,7 +38,8 @@ class CNS:
         return shared_mem
 
     def update_mem(self):
-        data, _ = self.resv_sock.recvfrom(44388)
+        #data, _ = self.resv_sock.recvfrom(44388)
+        data, _ = self.resv_sock.recvfrom(2008)
         data = data[8:]
         # print(len(data)) data의 8바이트를 제외한 나머지 버퍼의 크기
         for i in range(0, len(data), 20):
