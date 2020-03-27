@@ -468,8 +468,9 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
-                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
-                                                                     'FANGLE'
+                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
+                                                                     'FANGLE',
+                                                                     'UAVLEGS'
                                                                      ]}
         self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
                                      self.CNS.mem['KBCDO9']['Val'] + \
@@ -539,7 +540,7 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate <= 2: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 1: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
@@ -738,14 +739,14 @@ class DB:
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
-        self.gs = self.fig.add_gridspec(15, 3)
+        self.gs = self.fig.add_gridspec(21, 3)
         self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
                     self.fig.add_subplot(self.gs[3:6, :]),  # 2
                     self.fig.add_subplot(self.gs[6:9, :]),  # 3
                     self.fig.add_subplot(self.gs[9:12, :]),  # 4
                     self.fig.add_subplot(self.gs[12:15, :]),  # 5
-                    # self.fig.add_subplot(self.gs[15:18, :]),  # 6
-                    # self.fig.add_subplot(self.gs[18:21, :]),  # 7
+                    self.fig.add_subplot(self.gs[15:18, :]),  # 6
+                    self.fig.add_subplot(self.gs[18:21, :]),  # 7
                     # self.fig.add_subplot(self.gs[21:24, :]),  # 8
                     # self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     ]
@@ -814,10 +815,17 @@ class DB:
         self.axs[4].set_ylabel('ROD pos')
         self.axs[4].grid()
 
-        # self.axs[2].plot(self.gp_db['time'], self.gp_db['PZR_temp'], 'g', label='PZR_temp')
-        # self.axs[2].legend(loc=2, fontsize=5)
-        # self.axs[2].set_ylabel('PZR temp')
-        # self.axs[2].grid()
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'g', label='Acc')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'g', label='Real')
+        self.axs[5].legend(loc=2, fontsize=5)
+        self.axs[5].set_ylabel('Turbine Real')
+        self.axs[5].grid()
+
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'g', label='PZR_temp')
+        self.axs[6].legend(loc=2, fontsize=5)
+        self.axs[6].set_ylabel('PZR temp')
+        self.axs[6].grid()
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         # self.axs[3].legend(loc=2, fontsize=5)
