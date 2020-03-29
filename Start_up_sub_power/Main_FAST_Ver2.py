@@ -32,7 +32,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=14, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -138,7 +138,9 @@ class MainNet:
                 shared = Dense(70)(shared)
 
             elif net_type == 'LSTM':
-                shared = LSTM(32)(state)
+                shared = LSTM(64)(state)
+                #shared = LSTM(64, return_sequences=True)(state)
+                #shared = LSTM(64)(shared)
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
@@ -316,25 +318,26 @@ class A3Cagent(threading.Thread):
         # - 60분 * 300 Tick/분 = 0.03
         # - 1 Tick = (0.03)/(60*300) = 1.66e-6
 
-        self.get_current_ref_power = self.Time_tick * 1.66e-6
+        self.get_current_ref_power = self.Time_tick * 1.66e-6 + 0.02
 
         # * 목표 시간 98% 증가 100/3 = 36.66 시간 -> 36.66h * 60m/h * 300tick/m = 600000 Tick 에 100%
         # * 600000 Tick 또는 2000 iter에 목표치 도착. 도착 후 상태 유지로 전환.
         # * 50 iter = 300 * 50 = +15000 tick 총 수행시간 615000 tick
 
         if self.Time_tick >= 600000:
-            self.get_current_ref_power = 600000 * 1.66e-6
+            self.get_current_ref_power = 600000 * 1.66e-6 + 0.02
 
         # [1-1] ref power 에서 +- 1% 로 운전한다.
-        self.get_up_ref_power = self.get_current_t_ref + 0.01 # + 1%
-        self.get_down_ref_power = self.get_current_t_ref - 0.01  # + 1%
+        self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
+        self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
 
         # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
         #       음의 값이 나올 수 있다.
         # ex
-        # 출력이 10% +- 1% 라면 0.09 ~ 0.11 사이임.
-        # 현재 출력이 9.5%라면, up: 0.11-0.095 = 0.005, down: 0.095 - 0.09 = 0.005 최소 값은 0.005
-        # 현재 출력이 9.0%라면, up: 0.11-0.090 = 0.02, down: 0.09 - 0.09 = 0.000 최소 값은 0.000
+        # 출력이 10% +- 2% 라면 0.08 ~ 0.12 사이임.
+        # 현재 출력이 9.5%라면, up: 0.12-0.095 = 0.025, down: 0.095 - 0.08 = 0.015 최소 값은 0.015
+        # 현재 출력이 12.0%라면, up: 0.12-0.12 = 0.00, down: 0.12 - 0.08 = 0.04 최소 값은 0.000 <- R min 0.00
+        # 현재 출력이 10.0%라면, up: 0.12-0.10 = 0.02, down: 0.10 - 0.08 = 0.02 최소 값은 0.020 <- R max 0.02
         self.distance_up_current = self.get_up_ref_power - self.Reactor_power
         self.distance_down_current = self.Reactor_power - self.get_down_ref_power
         self.distance_reward = min(self.distance_up_current, self.distance_down_current)
@@ -354,22 +357,32 @@ class A3Cagent(threading.Thread):
             else:
                 self.mismatch_reward = 0
         else: #OFF
+            self.mismatch_Tavg_Tref = self.Tref - self.Tavg
             self.mismatch_reward = 0
 
         # 보상 계산:
         R = 0
         if True:
             # Goal 1
-            R += self.distance_reward   # 보상 범위: 0.01 ~ 0 # 범위 초가시 (-) 보상
+            # self.distance_reward range (0 ~ 0.02)
+            if self.distance_reward >= 0.018:
+                R += 0.02   # 보상 범위: 0.02 ~ 0.18 # Good
+            else:
+                if 0.01 <= self.distance_reward < 0.018:
+                    R += self.distance_reward
+                else:   # 0.01 < self.distance_reward
+                    R += self.distance_reward/2
             # Goal 2
             R += self.mismatch_reward/100   # 보상 범위: 0.00 ~ 0.01
+            # Goal 3
+            if A == 0:
+                R += 0.01
+            else:
+                R += 0
         # Nan 값 방지.
         if self.Tavg == 0:
             R = 0
-        R = R * 1     # 최종 R은 1이 나뉜다.
-
-        self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
-                         f'{self.mismatch_reward}-{self.Tavg:.5f}-{self.Time_tick}]')
+        R = R * 0.1     # 최종 R은 0.1을 곱한다.
 
         # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
         done_counter = 0
@@ -387,13 +400,20 @@ class A3Cagent(threading.Thread):
             else:
                 done = False
 
+        self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
+                         f'{self.mismatch_reward}-{R}-{self.Time_tick}]')
+
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
             self.Reactor_power, self.get_current_ref_power, self.get_up_ref_power,
+            #self.Reactor_power, self.get_current_ref_power, self.get_up_ref_power,
             self.get_down_ref_power, self.Mwe_power/1000,
+            #self.get_down_ref_power, self.Mwe_power/1000,
             self.distance_up_current, self.distance_down_current,
-            self.load_set/100, self.Tavg/1000, self.Tref/1000, self.mismatch_Tavg_Tref/100,
-            self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
+            #self.distance_up_current, self.distance_down_current,
+            self.Tavg/1000, self.Tref/1000
+            #self.load_set/100, self.Tavg/1000, self.Tref/1000, self.mismatch_Tavg_Tref/100,
+            #self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
         ]
 
         self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
@@ -455,10 +475,10 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
 
         #self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
-        if self.boron_conc >= 404:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.5])  # Makeup
-        else:
-            self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
+        # if self.boron_conc >= 404:
+        #     self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.5])  # Makeup
+        # else:
+        #     self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -649,7 +669,7 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    if self.db.train_DB['Step'] > 100:
+                    if self.db.train_DB['Step'] > 50:
                         self.db.draw_img(current_ep=episode)
 
 
@@ -728,47 +748,39 @@ class DB:
         self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'r', label='Power_UP')
         self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'r', label='Power_DOWN')
         self.axs[0].legend(loc=2, fontsize=5)
-        self.axs[0].set_ylabel('Reactor Power')
         self.axs[0].grid()
         #
         self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
         self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].set_ylabel('Reward')
         self.axs[1].grid()
         #
         self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
         self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'r', label='Ref', color='red', lw=1)
         self.axs[2].legend(loc=2, fontsize=5)
-        self.axs[2].set_ylabel('Temperature [Average/Ref]')
         self.axs[2].grid()
         #
         self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Load Set')
         self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Load Rate')
         self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Real Power')
         self.axs[3].legend(loc=2, fontsize=5)
-        self.axs[3].set_ylabel('Ele Power')
         self.axs[3].grid()
         #
         self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
         self.axs[4].legend(loc=2, fontsize=5)
-        self.axs[4].set_ylabel('ROD pos')
         self.axs[4].grid()
 
         self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
         self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'b', label='Acc')
         self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'r', label='Real')
         self.axs[5].legend(loc=2, fontsize=5)
-        self.axs[5].set_ylabel('Turbine Real')
         self.axs[5].grid()
 
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], 'g', label='Boron')
         self.axs[6].legend(loc=2, fontsize=5)
-        self.axs[6].set_ylabel('Boron conc')
         self.axs[6].grid()
 
         self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['EDEWT'], 'g', label='Boron Tank')
         self.axs[7].legend(loc=2, fontsize=5)
-        self.axs[7].set_ylabel('Boron Tank')
         self.axs[7].grid()
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
