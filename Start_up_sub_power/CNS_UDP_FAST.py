@@ -131,12 +131,19 @@ class CNS:
             # sleep(1)
 
     def run_freeze_CNS(self):
+        old_cont = self.mem['KCNTOMS']['Val']
         self.run_cns()
         while True:
             self.update_mem()
-            if self.mem['KFZRUN']['Val'] == 4:
-                # 1회 run 완료 시 4로 변환
-                break
+            new_cont = self.mem['KCNTOMS']['Val']
+            if old_cont != new_cont:
+                if self.mem['KFZRUN']['Val'] == 4:
+                    # 1회 run 완료 시 4로 변환
+                    break
+                else:
+                    pass
+            else:
+                pass
 
 
 if __name__ == '__main__':

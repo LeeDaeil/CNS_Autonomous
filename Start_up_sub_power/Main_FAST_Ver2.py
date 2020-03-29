@@ -19,6 +19,12 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub_power.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
+import sys
+from PyQt5.QtWidgets import QApplication, QDialog
+from Start_up_sub_power.SHOW_GUI import Ui_Dialog as SHOW_GUI_WIN
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from PyQt5 import QtCore
+#
 get_file_time_path = datetime.datetime.now()
 MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
 os.mkdir(MAKE_FILE_PATH)
@@ -42,6 +48,9 @@ class MainModel:
             sleep(1)
         print('All agent start done')
 
+        window_ = show_window(worker)
+        window_.start()
+
         count = 1
         while True:
             sleep(5)
@@ -62,7 +71,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [5, 5, 5]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [2, 2, 2]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -213,6 +222,133 @@ class MainNet:
         self.actor.load_weights("FAST/VER_0_3_12_57_57/Model/{}_A3C_actor.h5".format(name))
         self.critic.load_weights("FAST/VER_0_3_12_57_57/Model/{}_A3C_cric.h5".format(name))
 
+
+class show_window(threading.Thread):
+    def __init__(self, get_agent_info):
+        threading.Thread.__init__(self)
+        self.agents_info = get_agent_info
+
+    def run(self):
+        app = QApplication(sys.argv)
+        w = Myform(self.agents_info)
+        sys.exit(app.exec_())
+
+class Myform(QDialog):
+    def __init__(self, agents_info):
+        super().__init__()
+        self.agents_info = agents_info
+        self.ui = SHOW_GUI_WIN()
+        self.ui.setupUi(self)
+
+        for nub in range(len(self.agents_info)):
+            self.ui.comboBox.addItem(f'{nub}')
+
+        self.grp_show = plt.figure(constrained_layout=True, figsize=(10, 9))  # , tight_layout={'pad': 1})
+
+        self.gs = self.grp_show.add_gridspec(24, 3)
+        self.axs = [self.grp_show.add_subplot(self.gs[0:3, :]),  # 1
+                    self.grp_show.add_subplot(self.gs[3:6, :]),  # 2
+                    self.grp_show.add_subplot(self.gs[6:9, :]),  # 3
+                    self.grp_show.add_subplot(self.gs[9:12, :]),  # 4
+                    self.grp_show.add_subplot(self.gs[12:15, :]),  # 5
+                    self.grp_show.add_subplot(self.gs[15:18, :]),  # 6
+                    self.grp_show.add_subplot(self.gs[18:21, :]),  # 7
+                    self.grp_show.add_subplot(self.gs[21:24, :]),  # 8
+                    # self.grp_show.add_subplot(self.gs[24:27, :]),  # 9
+                    ]
+
+        self.grp_show_canv = FigureCanvasQTAgg(self.grp_show)
+        self.ui.DIS.addWidget(self.grp_show_canv)
+
+        self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowStaysOnTopHint)
+        self.show()
+
+        timer = QtCore.QTimer(self)
+        timer.timeout.connect(self.update_window)
+        timer.start(600)
+
+    def update_window(self):
+        for _ in self.axs:
+            _.clear()
+        #
+        get_worker = self.agents_info[int(self.ui.comboBox.currentText())]
+        self.gp_db = get_worker.db.gp_db
+        try:
+            #
+            self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
+            self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'r', label='Power_UP')
+            self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'r', label='Power_DOWN')
+            self.axs[0].legend(loc=2, fontsize=5)
+            self.axs[0].grid()
+            #
+            self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
+            self.axs[1].legend(loc=2, fontsize=5)
+            self.axs[1].grid()
+            #
+            self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
+            self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'r', label='Ref', color='red', lw=1)
+            self.axs[2].legend(loc=2, fontsize=5)
+            self.axs[2].grid()
+            #
+            self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Load Set')
+            self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Load Rate')
+            self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Real Power')
+            self.axs[3].legend(loc=2, fontsize=5)
+            self.axs[3].grid()
+            #
+            self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
+            self.axs[4].legend(loc=2, fontsize=5)
+            self.axs[4].grid()
+
+            self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
+            self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'b', label='Acc')
+            self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'r', label='Real')
+            self.axs[5].legend(loc=2, fontsize=5)
+            self.axs[5].grid()
+
+            self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], 'g', label='Boron')
+            self.axs[6].legend(loc=2, fontsize=5)
+            self.axs[6].grid()
+
+            self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['EDEWT'], 'g', label='Boron Tank')
+            self.axs[7].legend(loc=2, fontsize=5)
+            self.axs[7].grid()
+            # # #
+            # # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
+            # # self.axs[3].legend(loc=2, fontsize=5)
+            # # self.axs[3].set_ylabel('BFV122 POS [%]')
+            # # self.axs[3].grid()
+            # # #
+            # # self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_close_act'], 'g', label='Close')
+            # # self.axs[4].plot(self.gp_db['time'], self.gp_db['BFV122_open_act'], 'r', label='Open')
+            # # self.axs[4].set_ylabel('BFV122 Sig')
+            # # self.axs[4].legend(loc=2, fontsize=5)
+            # # self.axs[4].grid()
+            # # #
+            # # self.axs[5].plot(self.gp_db['time'], self.gp_db['HV142_pos'], 'r', label='HV142_POS')
+            # # self.axs[5].set_ylabel('HV142 POS [%]')
+            # # self.axs[5].legend(loc=2, fontsize=5)
+            # # self.axs[5].grid()
+            # # #
+            # # self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_close_act'], 'g', label='Close')
+            # # self.axs[6].plot(self.gp_db['time'], self.gp_db['HV142_open_act'], 'r', label='Open')
+            # # self.axs[6].set_ylabel('HV142 Sig')
+            # # self.axs[6].legend(loc=2, fontsize=5)
+            # # self.axs[6].grid()
+            # # #
+            # # self.axs[7].plot(self.gp_db['time'], self.gp_db['Charging_flow'], 'g', label='Charging_flow')
+            # # self.axs[7].plot(self.gp_db['time'], self.gp_db['Letdown_HX_flow'], 'r', label='Letdown_HX_flow')
+            # # self.axs[7].set_ylabel('Flow Sig')
+            # # self.axs[7].legend(loc=2, fontsize=5)
+            # # self.axs[7].grid()
+            # # #
+            # # self.axs[8].plot(self.gp_db['time'], self.gp_db['R'], 'g', label='Reward')
+            # # self.axs[8].set_ylabel('Rewaed')
+            # # self.axs[8].legend(loc=2, fontsize=5)
+            # # self.axs[8].grid()
+            self.grp_show_canv.draw()
+        except:
+            pass
 
 class A3Cagent(threading.Thread):
     def __init__(self, Remote_ip, Remote_port, CNS_ip, CNS_port, main_net, Sess, Summary_ops):
@@ -669,7 +805,7 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    if self.db.train_DB['Step'] > 50:
+                    if self.db.train_DB['Step'] > 100:
                         self.db.draw_img(current_ep=episode)
 
 
