@@ -110,7 +110,7 @@ class CNS:
         #     sig.append(1)
         para.append('KFZRUN')
         # sig.append(3)
-        sig.append(200)     # 200 - 100 -> 100 tick
+        sig.append(400)     # 400 - 100 -> 300 tick
         return self._send_control_signal(para, sig)
 
     def init_cns(self, initial_nub):
