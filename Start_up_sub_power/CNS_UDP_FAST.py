@@ -110,7 +110,7 @@ class CNS:
         #     sig.append(1)
         para.append('KFZRUN')
         # sig.append(3)
-        sig.append(400)     # 400 - 100 -> 300 tick
+        sig.append(200)     # 400 - 300 -> 300 tick 60초
         return self._send_control_signal(para, sig)
 
     def init_cns(self, initial_nub):
@@ -131,12 +131,12 @@ class CNS:
             # sleep(1)
 
     def run_freeze_CNS(self):
-        old_cont = self.mem['KCNTOMS']['Val']
+        old_cont = self.mem['KCNTOMS']['Val'] + 100
         self.run_cns()
         while True:
             self.update_mem()
             new_cont = self.mem['KCNTOMS']['Val']
-            if old_cont != new_cont:
+            if old_cont == new_cont:
                 if self.mem['KFZRUN']['Val'] == 4:
                     # 1회 run 완료 시 4로 변환
                     break

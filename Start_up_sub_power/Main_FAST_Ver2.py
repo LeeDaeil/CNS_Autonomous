@@ -26,7 +26,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5 import QtCore
 #
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
+MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_' \
+                 f'{get_file_time_path.hour}_' \
+                 f'{get_file_time_path.minute}_' \
+                 f'{get_file_time_path.second}_'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -38,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=9, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=5, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -48,8 +51,12 @@ class MainModel:
             sleep(1)
         print('All agent start done')
 
-        window_ = show_window(worker)
-        window_.start()
+        # window_ = show_window(worker)
+        # window_.start()
+        #
+        # app = QApplication(sys.argv)
+        # w = Myform(worker)
+        # sys.exit(app.exec_())
 
         count = 1
         while True:
@@ -71,7 +78,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [2, 2, 2]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [10, 10, 10]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -147,9 +154,9 @@ class MainNet:
                 shared = Dense(70)(shared)
 
             elif net_type == 'LSTM':
-                shared = LSTM(64)(state)
-                #shared = LSTM(64, return_sequences=True)(state)
-                #shared = LSTM(64)(shared)
+                #shared = LSTM(64)(state)
+                shared = LSTM(64, return_sequences=True)(state)
+                shared = LSTM(64)(shared)
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
@@ -196,7 +203,7 @@ class MainNet:
         actor_loss = loss + 0.01*entropy
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
+        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -209,7 +216,7 @@ class MainNet:
         loss = K.mean(K.square(discounted_reward - value))
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
+        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
@@ -243,6 +250,8 @@ class Myform(QDialog):
         for nub in range(len(self.agents_info)):
             self.ui.comboBox.addItem(f'{nub}')
 
+        self.ui.comboBox.currentIndexChanged.connect(self.update_window)
+
         self.grp_show = plt.figure(constrained_layout=True, figsize=(10, 9))  # , tight_layout={'pad': 1})
 
         self.gs = self.grp_show.add_gridspec(24, 3)
@@ -262,10 +271,6 @@ class Myform(QDialog):
 
         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowStaysOnTopHint)
         self.show()
-
-        timer = QtCore.QTimer(self)
-        timer.timeout.connect(self.update_window)
-        timer.start(600)
 
     def update_window(self):
         for _ in self.axs:
@@ -394,7 +399,7 @@ class A3Cagent(threading.Thread):
 
         done_, R_ = self.update_parameter(A=0)
 
-    def update_parameter(self, A):
+    def update_parameter(self, A, only_val_up=False):
         '''
         네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
         '''
@@ -437,152 +442,181 @@ class A3Cagent(threading.Thread):
 
         self.ax_off = self.CNS.mem['CAXOFF']['Val']                  # -0.63
 
-        # 제어봉 조작 시 안전 영역 및 보상 계산
-        '''
-        2020-03-28 재작성
-        # 1 iter는 300 Tick을 계산함. 5 Tick은 1초로 1분씩 진행함.
-        # 출력이 100% 일때 Tavg = 308.15, Tref = 308.22375 임.
-        #         2%  일때 Tavg = 292.00, Tref = 291.70001 임.   
-        
-        - 출력 2%에서 보론의 농도는 637로써 출력 100%에 보론의 농도 404로 맞추기 위해 Make-up을 지속적으로 주입한다.
-        '''
+        if not only_val_up:
+            # 제어봉 조작 시 안전 영역 및 보상 계산
+            '''
+            2020-03-28 재작성
+            # 1 iter는 300 Tick을 계산함. 5 Tick은 1초로 1분씩 진행함.
+            # 출력이 100% 일때 Tavg = 308.15, Tref = 308.22375 임.
+            #         2%  일때 Tavg = 292.00, Tref = 291.70001 임.   
+            
+            - 출력 2%에서 보론의 농도는 637로써 출력 100%에 보론의 농도 404로 맞추기 위해 Make-up을 지속적으로 주입한다.
+            '''
 
-        # [1]
-        # - 목적 - 원자로 출력을 시간당 얼마를 증가 시켜야하는지 계획하기 위해 계산한다.
-        # - 시간당 3% 증가하는 것이 목표이다. (절차서 최대 3% 초과금지)
-        # - CNS는 [300Tick 당 1분]을 제어할 것이며, 따라서 60분에 0.03 증가한다.
-        # - 60분 * 300 Tick/분 = 0.03
-        # - 1 Tick = (0.03)/(60*300) = 1.66e-6
+            # [1]
+            # - 목적 - 원자로 출력을 시간당 얼마를 증가 시켜야하는지 계획하기 위해 계산한다.
+            # - 시간당 3% 증가하는 것이 목표이다. (절차서 최대 3% 초과금지)
+            # - CNS는 [300Tick 당 1분]을 제어할 것이며, 따라서 60분에 0.03 증가한다.
+            # - 60분 * 300 Tick/분 = 0.03
+            # - 1 Tick = (0.03)/(60*300) = 1.66e-6
 
-        self.get_current_ref_power = self.Time_tick * 1.66e-6 + 0.02
+            # 시간당 0.03퍼 증가
+            one_tick = 0.03/(60*300*0.5)
+            self.get_current_ref_power = self.Time_tick * one_tick + 0.02
 
-        # * 목표 시간 98% 증가 100/3 = 36.66 시간 -> 36.66h * 60m/h * 300tick/m = 600000 Tick 에 100%
-        # * 600000 Tick 또는 2000 iter에 목표치 도착. 도착 후 상태 유지로 전환.
-        # * 50 iter = 300 * 50 = +15000 tick 총 수행시간 615000 tick
+            # * 목표 시간 98% 증가 100/3 = 36.66 시간 -> 36.66h * 60m/h * 300tick/m = 600000 Tick 에 100%
+            # * 600000 Tick 또는 2000 iter에 목표치 도착. 도착 후 상태 유지로 전환.
+            # * 50 iter = 300 * 50 = +15000 tick 총 수행시간 615000 tick
 
-        if self.Time_tick >= 600000:
-            self.get_current_ref_power = 600000 * 1.66e-6 + 0.02
+            if self.Time_tick >= 600000:
+                self.get_current_ref_power = 600000 * 1.66e-6 + 0.02
 
-        # [1-1] ref power 에서 +- 1% 로 운전한다.
-        self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
-        self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
+            # [1-1] ref power 에서 +- 1% 로 운전한다.
+            self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
+            self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
 
-        # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
-        #       음의 값이 나올 수 있다.
-        # ex
-        # 출력이 10% +- 2% 라면 0.08 ~ 0.12 사이임.
-        # 현재 출력이 9.5%라면, up: 0.12-0.095 = 0.025, down: 0.095 - 0.08 = 0.015 최소 값은 0.015
-        # 현재 출력이 12.0%라면, up: 0.12-0.12 = 0.00, down: 0.12 - 0.08 = 0.04 최소 값은 0.000 <- R min 0.00
-        # 현재 출력이 10.0%라면, up: 0.12-0.10 = 0.02, down: 0.10 - 0.08 = 0.02 최소 값은 0.020 <- R max 0.02
-        self.distance_up_current = self.get_up_ref_power - self.Reactor_power
-        self.distance_down_current = self.Reactor_power - self.get_down_ref_power
-        self.distance_reward = min(self.distance_up_current, self.distance_down_current)
+            # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
+            #       음의 값이 나올 수 있다.
+            # ex
+            # 출력이 10% +- 2% 라면 0.08 ~ 0.12 사이임.
+            # 현재 출력이 9.5%라면, up: 0.12-0.095 = 0.025, down: 0.095 - 0.08 = 0.015 최소 값은 0.015
+            # 현재 출력이 12.0%라면, up: 0.12-0.12 = 0.00, down: 0.12 - 0.08 = 0.04 최소 값은 0.000 <- R min 0.00
+            # 현재 출력이 10.0%라면, up: 0.12-0.10 = 0.02, down: 0.10 - 0.08 = 0.02 최소 값은 0.020 <- R max 0.02
+            self.distance_up_current = self.get_up_ref_power - self.Reactor_power
+            self.distance_down_current = self.Reactor_power - self.get_down_ref_power
+            self.distance_reward = min(self.distance_up_current, self.distance_down_current)
 
-        # [2]
-        # - 목적 - Tref와 Tavg 편차를 계산하여 보상을 제공한다.
-        # 이 보상은 Net Break이후 계산되어 제어됨. 이를 통해 에이전트는 한 단계를 클리어한 경험을 제공하는 것이 목표임.
-        # Tref/Tavg의 편차는 반드시 지켜야하는 조건이나, 초기 Net break에서 지켜지지 않음으로 지키는 경우 보상을 많이줌.
+            # [2]
+            # - 목적 - Tref와 Tavg 편차를 계산하여 보상을 제공한다.
+            # 이 보상은 Net Break이후 계산되어 제어됨. 이를 통해 에이전트는 한 단계를 클리어한 경험을 제공하는 것이 목표임.
+            # Tref/Tavg의 편차는 반드시 지켜야하는 조건이나, 초기 Net break에서 지켜지지 않음으로 지키는 경우 보상을 많이줌.
 
-        # Mismatch에 대한 보상은 Netbreak가 된 이후 부터 계산됨.
-        if self.Netbreak_condition == 1: # ON
-            self.mismatch_Tavg_Tref = self.Tref - self.Tavg
-            # mismatch 는 +- 1도 이내 들어와야 보상이 제공된다.
-            if abs(self.mismatch_Tavg_Tref) <= 1:
-                # +0.7도 또는 -0.7도 인 경우 0.3의 보상 제공함.
-                self.mismatch_reward = 1 - abs(self.mismatch_Tavg_Tref)
-            else:
+            # Mismatch에 대한 보상은 Netbreak가 된 이후 부터 계산됨.
+            if self.Netbreak_condition == 1: # ON
+                self.mismatch_Tavg_Tref = self.Tref - self.Tavg
+                # mismatch 는 +- 1도 이내 들어와야 보상이 제공된다.
+                if abs(self.mismatch_Tavg_Tref) <= 1:
+                    # +0.7도 또는 -0.7도 인 경우 0.3의 보상 제공함.
+                    self.mismatch_reward = 1 - abs(self.mismatch_Tavg_Tref)
+                else:
+                    self.mismatch_reward = 0
+            else: #OFF
+                self.mismatch_Tavg_Tref = self.Tref - self.Tavg
                 self.mismatch_reward = 0
-        else: #OFF
-            self.mismatch_Tavg_Tref = self.Tref - self.Tavg
-            self.mismatch_reward = 0
 
-        # 보상 계산:
-        R = 0
-        if True:
-            # Goal 1
-            # self.distance_reward range (0 ~ 0.02)
-            if self.distance_reward >= 0.018:
-                R += 0.02   # 보상 범위: 0.02 ~ 0.18 # Good
-            else:
-                if 0.01 <= self.distance_reward < 0.018:
-                    R += self.distance_reward
-                else:   # 0.01 < self.distance_reward
-                    R += self.distance_reward/2
-            # Goal 2
-            R += self.mismatch_reward/100   # 보상 범위: 0.00 ~ 0.01
-            # Goal 3
-            if A == 0:
-                R += 0.01
-            else:
-                R += 0
-        # Nan 값 방지.
-        if self.Tavg == 0:
+            # 보상 계산:
             R = 0
-        R = R * 0.1     # 최종 R은 0.1을 곱한다.
+            if True:
+                # Goal 1
+                # self.distance_reward range (0 ~ 0.02)
+                if self.distance_reward >= 0.018:
+                    R += 0.02   # 보상 범위: 0.02 ~ 0.18 # Good
+                else:
+                    if 0.01 <= self.distance_reward < 0.018:
+                        R += self.distance_reward
+                    else:   # 0.01 < self.distance_reward
+                        R += self.distance_reward * 0.90
+                # Goal 2
+                R += self.mismatch_reward/100   # 보상 범위: 0.00 ~ 0.01
+                # Goal 3
+                if A == 0:
+                    R += 0
+                else:
+                    R += 0
 
-        # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
-        done_counter = 0
-        if self.distance_reward < 0:
-            R -= 0.02  # 목표 실패!!
-            done_counter += 1
-        if self.Time_tick >= 615000:
-            R += 0.02    # 목표 달성!!
-            done_counter += 1
+                # Gaol 3
+                Goal_tick = 615000
+                Now_tick = self.Time_tick   # 0 -> 100 -> 200
 
-        if True:
-            # 최종 종료 조건 계산
-            if done_counter > 0:
-                done = True
-            else:
-                done = False
+                R += (Now_tick/Goal_tick)*2    # 100/615000 -> 1.626e-4 / [0 ~ 1] *2 -> [0 ~ 2]
 
-        self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
-                         f'{self.mismatch_reward}-{R}-{self.Time_tick}]')
+            # Nan 값 방지.
+            if self.Tavg == 0:
+                R = 0
+            R = (R * 100)/3     # 최종 R은 10을 곱한다. [0.03~0] * 100/3 -> [1 ~ 0]
+            R = round(R, 5)
 
-        self.state = [
-            # 네트워크의 Input 에 들어 가는 변수 들
-            self.Reactor_power, self.get_current_ref_power, self.get_up_ref_power,
-            #self.Reactor_power, self.get_current_ref_power, self.get_up_ref_power,
-            self.get_down_ref_power, self.Mwe_power/1000,
-            #self.get_down_ref_power, self.Mwe_power/1000,
-            self.distance_up_current, self.distance_down_current,
-            #self.distance_up_current, self.distance_down_current,
-            self.Tavg/1000, self.Tref/1000
-            #self.load_set/100, self.Tavg/1000, self.Tref/1000, self.mismatch_Tavg_Tref/100,
-            #self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
-        ]
+            # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
+            done_counter = 0
+            if self.distance_reward < 0:
+                #R -= 0.02  # 목표 실패!!
+                done_counter += 1
+            if self.Reactor_power < 0.01:
+                done_counter += 1
+            if self.Time_tick >= 615000:
+                R += 0.02    # 목표 달성!!
+                done_counter += 1
 
-        self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
-                                                                     'QPROREL', # power
-                                                                     'UAVLEGM', # Tavg
-                                                                     'UAVLEGS', # Tref
-                                                                     'KLAMPO95', # charging vlave state
-                                                                     'KLAMPO147', 'KLAMPO148', 'KLAMPO149',
-                                                                     'ZVCT', 'ZINST63',
-                                                                     'KBCDO16',
-                                                                     'KBCDO17', 'KBCDO18',
-                                                                     'KBCDO19', 'KBCDO20', 'KBCDO21', 'KBCDO22',
-                                                                     'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
-                                                                     'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
-                                                                     'KLAMPO182', 'KLAMPO183', 'CAXOFF',
-                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
-                                                                     'FANGLE',
-                                                                     'EDEWT'
-                                                                     ]}
-        self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
-                                     self.CNS.mem['KBCDO9']['Val'] + \
-                                     self.CNS.mem['KBCDO8']['Val'] + \
-                                     self.CNS.mem['KBCDO7']['Val']
-        self.save_state['R'] = R
-        self.save_state['S'] = self.db.train_DB['Step']
-        self.save_state['UP_D'] = self.get_up_ref_power
-        self.save_state['DOWN_D'] = self.get_down_ref_power
+            if True:
+                # 최종 종료 조건 계산
+                if done_counter > 0:
+                    done = True
+                else:
+                    done = False
 
-        return done, R
+            self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.distance_reward:.5f}-'
+                             f'{self.mismatch_reward}-{R}-{self.Time_tick}]')
+
+            self.state = [
+                # 네트워크의 Input 에 들어 가는 변수 들
+                round(self.Reactor_power, 5),                   # 0.02 ~ 1.00
+                round(self.distance_up_current*100/4, 5),       # 0.00 ~ 0.04 -> 0.0 ~ 1.0
+                round(self.distance_down_current*100/4, 5),     # 0.00 ~ 0.04 -> 0.0 ~ 1.0
+                round(self.get_up_ref_power, 5),                # 0.00 ~ 1.02
+                round(self.get_down_ref_power, 5),              # 0.00 ~ 0.98
+
+                #round(self.Reactor_power, 5), round(self.get_up_ref_power, 5), round(self.get_down_ref_power, 5),
+                #self.get_current_ref_power, self.get_up_ref_power,
+                #self.Reactor_power, self.get_current_ref_power, self.get_up_ref_power,
+                #self.get_down_ref_power, self.Mwe_power/1000,
+                #self.get_down_ref_power, self.Mwe_power/1000,
+                #round(self.distance_up_current, 5), round(self.distance_down_current, 5),
+                #self.distance_up_current, self.distance_down_current,
+                #self.Tavg/1000, self.Tref/1000
+                #self.load_set/100, self.Tavg/1000, self.Tref/1000, self.mismatch_Tavg_Tref/100,
+                #self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
+            ]
+
+            self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
+                                                                         'QPROREL', # power
+                                                                         'UAVLEGM', # Tavg
+                                                                         'UAVLEGS', # Tref
+                                                                         'KLAMPO95', # charging vlave state
+                                                                         'KLAMPO147', 'KLAMPO148', 'KLAMPO149',
+                                                                         'ZVCT', 'ZINST63',
+                                                                         'KBCDO16',
+                                                                         'KBCDO17', 'KBCDO18',
+                                                                         'KBCDO19', 'KBCDO20', 'KBCDO21', 'KBCDO22',
+                                                                         'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
+                                                                         'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
+                                                                         'KLAMPO182', 'KLAMPO183', 'CAXOFF',
+                                                                         'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
+                                                                         'FANGLE',
+                                                                         'EDEWT'
+                                                                         ]}
+            self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
+                                         self.CNS.mem['KBCDO9']['Val'] + \
+                                         self.CNS.mem['KBCDO8']['Val'] + \
+                                         self.CNS.mem['KBCDO7']['Val']
+            self.save_state['R'] = R
+            self.save_state['S'] = self.db.train_DB['Step']
+            self.save_state['UP_D'] = self.get_up_ref_power
+            self.save_state['DOWN_D'] = self.get_down_ref_power
+            for state_val in range(len(self.state)):
+                self.save_state[f'{state_val}'] = self.state[state_val]
+            return done, R
+        else:
+            return 0
 
     def run_cns(self, i):
         for _ in range(0, i):
-            self.CNS.run_freeze_CNS()
+            if _ == 0:
+                # ACT
+                self.CNS.run_freeze_CNS()
+            else:
+                # pass
+                self.update_parameter(A=0, only_val_up=True)
+                self.send_action(action=0)
 
     def predict_action(self, actor, input_window):
         predict_result = actor.predict([[input_window]])
@@ -610,11 +644,11 @@ class A3Cagent(threading.Thread):
         if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
 
-        #self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
-        # if self.boron_conc >= 404:
-        #     self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.5])  # Makeup
-        # else:
-        #     self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
+        # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
+        if self.boron_conc >= 404:
+            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.1])  # Makeup
+        else:
+            self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -726,7 +760,7 @@ class A3Cagent(threading.Thread):
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             # sleep(1)
 
-        iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        iter_cns = 5                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
@@ -749,6 +783,9 @@ class A3Cagent(threading.Thread):
 
                 # 2.2 제어 정보와, 상태에 대한 정보를 저장한다. - 제어 이전의 데이터 세이브
                 self.save_state['Act'] = 0
+                self.save_state['P_A_1'] = 0
+                self.save_state['P_A_2'] = 0
+                self.save_state['P_A_3'] = 0
                 self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
                 self.db.save_state(self.save_state)
 
@@ -770,6 +807,9 @@ class A3Cagent(threading.Thread):
 
                     # 2.2 제어 정보와, 상태에 대한 정보를 저장한다.
                     self.save_state['Act'] = Action_net
+                    self.save_state['P_A_1'] = Action_probability[0][0]
+                    self.save_state['P_A_2'] = Action_probability[0][1]
+                    self.save_state['P_A_3'] = Action_probability[0][2]
                     self.save_state['time'] = self.db.train_DB['Step']*self.cns_speed
                     self.db.save_state(self.save_state)
 
@@ -805,7 +845,7 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    if self.db.train_DB['Step'] > 100:
+                    if self.db.train_DB['Step'] > 50:
                         self.db.draw_img(current_ep=episode)
 
 
@@ -834,24 +874,24 @@ class DB:
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
-        self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
-        self.gs = self.fig.add_gridspec(24, 3)
-        self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
-                    self.fig.add_subplot(self.gs[3:6, :]),  # 2
-                    self.fig.add_subplot(self.gs[6:9, :]),  # 3
-                    self.fig.add_subplot(self.gs[9:12, :]),  # 4
-                    self.fig.add_subplot(self.gs[12:15, :]),  # 5
-                    self.fig.add_subplot(self.gs[15:18, :]),  # 6
-                    self.fig.add_subplot(self.gs[18:21, :]),  # 7
-                    self.fig.add_subplot(self.gs[21:24, :]),  # 8
-                    # self.fig.add_subplot(self.gs[24:27, :]),  # 9
-                    ]
+        # self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
+        # self.gs = self.fig.add_gridspec(24, 3)
+        # self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
+        #             self.fig.add_subplot(self.gs[3:6, :]),  # 2
+        #             self.fig.add_subplot(self.gs[6:9, :]),  # 3
+        #             self.fig.add_subplot(self.gs[9:12, :]),  # 4
+        #             self.fig.add_subplot(self.gs[12:15, :]),  # 5
+        #             self.fig.add_subplot(self.gs[15:18, :]),  # 6
+        #             self.fig.add_subplot(self.gs[18:21, :]),  # 7
+        #             self.fig.add_subplot(self.gs[21:24, :]),  # 8
+        #             # self.fig.add_subplot(self.gs[24:27, :]),  # 9
+        #             ]
 
     def initial_train_DB(self):
         self.train_DB = {'Now_S': [], 'S': [], 'Reward': [], 'Act': [],
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 60,
+                         'Up_t': 0, 'Up_t_end': 20,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
@@ -877,47 +917,47 @@ class DB:
         self.gp_db = self.gp_db.append(temp, ignore_index=True)
 
     def draw_img(self, current_ep):
-        for _ in self.axs:
-            _.clear()
+        # for _ in self.axs:
+        #     _.clear()
+        # #
+        # self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
+        # self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'r', label='Power_UP')
+        # self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'r', label='Power_DOWN')
+        # self.axs[0].legend(loc=2, fontsize=5)
+        # self.axs[0].grid()
+        # #
+        # self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
+        # self.axs[1].legend(loc=2, fontsize=5)
+        # self.axs[1].grid()
+        # #
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'r', label='Ref', color='red', lw=1)
+        # self.axs[2].legend(loc=2, fontsize=5)
+        # self.axs[2].grid()
+        # #
+        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Load Set')
+        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Load Rate')
+        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Real Power')
+        # self.axs[3].legend(loc=2, fontsize=5)
+        # self.axs[3].grid()
+        # #
+        # self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
+        # self.axs[4].legend(loc=2, fontsize=5)
+        # self.axs[4].grid()
         #
-        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
-        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'r', label='Power_UP')
-        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'r', label='Power_DOWN')
-        self.axs[0].legend(loc=2, fontsize=5)
-        self.axs[0].grid()
+        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
+        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'b', label='Acc')
+        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'r', label='Real')
+        # self.axs[5].legend(loc=2, fontsize=5)
+        # self.axs[5].grid()
         #
-        self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
-        self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].grid()
+        # self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], 'g', label='Boron')
+        # self.axs[6].legend(loc=2, fontsize=5)
+        # self.axs[6].grid()
         #
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'r', label='Ref', color='red', lw=1)
-        self.axs[2].legend(loc=2, fontsize=5)
-        self.axs[2].grid()
-        #
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Load Set')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Load Rate')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Real Power')
-        self.axs[3].legend(loc=2, fontsize=5)
-        self.axs[3].grid()
-        #
-        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
-        self.axs[4].legend(loc=2, fontsize=5)
-        self.axs[4].grid()
-
-        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
-        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'b', label='Acc')
-        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'r', label='Real')
-        self.axs[5].legend(loc=2, fontsize=5)
-        self.axs[5].grid()
-
-        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], 'g', label='Boron')
-        self.axs[6].legend(loc=2, fontsize=5)
-        self.axs[6].grid()
-
-        self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['EDEWT'], 'g', label='Boron Tank')
-        self.axs[7].legend(loc=2, fontsize=5)
-        self.axs[7].grid()
+        # self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['EDEWT'], 'g', label='Boron Tank')
+        # self.axs[7].legend(loc=2, fontsize=5)
+        # self.axs[7].grid()
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         # self.axs[3].legend(loc=2, fontsize=5)
@@ -952,8 +992,8 @@ class DB:
         # self.axs[8].legend(loc=2, fontsize=5)
         # self.axs[8].grid()
 
-        self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
-                         facecolor=None)
+        # self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
+        #                  facecolor=None)
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 
 
