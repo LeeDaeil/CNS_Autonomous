@@ -26,7 +26,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5 import QtCore
 #
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_' \
+MAKE_FILE_PATH = f'./FAST/VER_1_{get_file_time_path.month}_{get_file_time_path.day}_' \
                  f'{get_file_time_path.hour}_' \
                  f'{get_file_time_path.minute}_' \
                  f'{get_file_time_path.second}_'
@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=5, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=5, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -458,22 +458,39 @@ class A3Cagent(threading.Thread):
             # - 시간당 3% 증가하는 것이 목표이다. (절차서 최대 3% 초과금지)
             # - CNS는 [300Tick 당 1분]을 제어할 것이며, 따라서 60분에 0.03 증가한다.
             # - 60분 * 300 Tick/분 = 0.03
-            # - 1 Tick = (0.03)/(60*300) = 1.66e-6
+            # - 1 Tick = (0.06)/(60*300) = 3.33e-6
 
-            # 시간당 0.03퍼 증가
-            one_tick = 0.03/(60*300*0.5)
+            # 시간당 6.00퍼 증가
+            increse_pow_per = 0.06
+            one_tick = increse_pow_per/(60*300)
             self.get_current_ref_power = self.Time_tick * one_tick + 0.02
 
-            # * 목표 시간 98% 증가 100/3 = 36.66 시간 -> 36.66h * 60m/h * 300tick/m = 600000 Tick 에 100%
-            # * 600000 Tick 또는 2000 iter에 목표치 도착. 도착 후 상태 유지로 전환.
-            # * 50 iter = 300 * 50 = +15000 tick 총 수행시간 615000 tick
+            # * 목표 시간 98% 증가 100/6 = 6.66 시간 -> 6.66h * 60m/h * 300tick/m = 300000 Tick 에 100%
+            # * 300000 Tick 에 목표치 도착. 도착 후 상태 유지로 전환.
+            # * 300000 Tick / 200 Tick 당 1Iter = 3000Tick
+            # * 50 iter = 200 * 50 = +10000 tick 총 수행시간 310000 tick
 
-            if self.Time_tick >= 600000:
-                self.get_current_ref_power = 600000 * 1.66e-6 + 0.02
+            when_100_per = (100/(increse_pow_per*100))*60*300
+            if self.Time_tick >= when_100_per:
+                self.get_current_ref_power = when_100_per * one_tick + 0.02
 
-            # [1-1] ref power 에서 +- 1% 로 운전한다.
-            self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
-            self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
+            if False:
+                # [1-1] ref power 에서 +- 1% 로 운전한다.
+                self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
+                self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
+            if True:
+                # [1-1] ref power 에서 +- 1% + a 로 범위가 늘어난다.
+                self.get_up_ref_power = self.get_current_ref_power + 0.02
+                if self.Time_tick >= when_100_per:
+                    self.get_up_ref_power += (when_100_per/when_100_per) * 0.02
+                else:
+                    self.get_up_ref_power += (self.Time_tick / when_100_per) * 0.01
+
+                self.get_down_ref_power = self.get_current_ref_power - 0.02
+                if self.Time_tick >= when_100_per:
+                    self.get_down_ref_power -= (when_100_per/when_100_per) * 0.01
+                else:
+                    self.get_down_ref_power -= (self.Time_tick / when_100_per) * 0.02
 
             # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
             #       음의 값이 나올 수 있다.
@@ -508,32 +525,39 @@ class A3Cagent(threading.Thread):
             R = 0
             if True:
                 # Goal 1
-                # self.distance_reward range (0 ~ 0.02)
-                if self.distance_reward >= 0.018:
-                    R += 0.02   # 보상 범위: 0.02 ~ 0.18 # Good
-                else:
-                    if 0.01 <= self.distance_reward < 0.018:
-                        R += self.distance_reward
-                    else:   # 0.01 < self.distance_reward
-                        R += self.distance_reward * 0.90
+                if False:
+                    # self.distance_reward range (0 ~ 0.04)
+                    if self.distance_reward >= 0.04:
+                        R += 0.04   # 보상 범위: 0.04 ~ 0.04 # Good
+                    else:
+                        if 0.01 <= self.distance_reward < 0.018:
+                            R += self.distance_reward
+                        else:   # 0.01 < self.distance_reward
+                            R += self.distance_reward * 0.90
+                R += self.distance_reward
+
+                R += R*10   # [0 ~ 0.02] -> [0 ~ 0.4]
+
                 # Goal 2
-                R += self.mismatch_reward/100   # 보상 범위: 0.00 ~ 0.01
+                R += self.mismatch_reward/10   # 보상 범위: [0 ~ 1] -> [0.0 ~ 0.1]
+
                 # Goal 3
                 if A == 0:
                     R += 0
                 else:
                     R += 0
 
-                # Gaol 3
-                Goal_tick = 615000
-                Now_tick = self.Time_tick   # 0 -> 100 -> 200
+                # Gaol 4
+                # Goal_tick = when_100_per
+                # Now_tick = self.Time_tick   # 0 -> 100 -> 200
 
-                R += (Now_tick/Goal_tick)*2    # 100/615000 -> 1.626e-4 / [0 ~ 1] *2 -> [0 ~ 2]
+                # R += (Now_tick/Goal_tick)*0.7    # 100/120000 -> ... / [0 ~ 1]  -> [0 ~ 0.7]
 
             # Nan 값 방지.
             if self.Tavg == 0:
                 R = 0
-            R = (R * 100)/3     # 최종 R은 10을 곱한다. [0.03~0] * 100/3 -> [1 ~ 0]
+                
+            R = (R * 10)     # 최종 R은 10을 곱한다. [0 ~ 0.1] * 10 -> [0 ~ 1]
             R = round(R, 5)
 
             # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
@@ -543,7 +567,7 @@ class A3Cagent(threading.Thread):
                 done_counter += 1
             if self.Reactor_power < 0.01:
                 done_counter += 1
-            if self.Time_tick >= 615000:
+            if self.Time_tick >= when_100_per + 10000:
                 R += 0.02    # 목표 달성!!
                 done_counter += 1
 
@@ -615,6 +639,7 @@ class A3Cagent(threading.Thread):
                 self.CNS.run_freeze_CNS()
             else:
                 # pass
+                self.CNS.run_freeze_CNS()
                 self.update_parameter(A=0, only_val_up=True)
                 self.send_action(action=0)
 
@@ -760,7 +785,7 @@ class A3Cagent(threading.Thread):
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             # sleep(1)
 
-        iter_cns = 5                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        iter_cns = 3                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
@@ -789,7 +814,7 @@ class A3Cagent(threading.Thread):
                 self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
                 self.db.save_state(self.save_state)
 
-                self.db.train_DB['Step'] += iter_cns
+                self.db.train_DB['Step'] += 1
 
             # 2. 반복 수행 시작
             while True:
@@ -821,7 +846,7 @@ class A3Cagent(threading.Thread):
                     # 2.5 평가를 저장한다.
                     self.db.add_train_DB(S=old_state, R=R, A=Action_net)
                     # 2.5 기타 변수를 업데이트 한다.
-                    self.db.train_DB['Step'] += iter_cns
+                    self.db.train_DB['Step'] += 1
 
                     # 2.6 일정 시간 마다 네트워크를 업데이트 한다. 또는 죽으면 update 한다.
                     if self.db.train_DB['Up_t'] >= self.db.train_DB['Up_t_end'] or done:
