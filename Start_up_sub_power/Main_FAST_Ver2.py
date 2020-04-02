@@ -525,15 +525,15 @@ class A3Cagent(threading.Thread):
             R = 0
             if True:
                 # Goal 1
-                if False:
-                    # self.distance_reward range (0 ~ 0.04)
-                    if self.distance_reward >= 0.04:
-                        R += 0.04   # 보상 범위: 0.04 ~ 0.04 # Good
-                    else:
-                        if 0.01 <= self.distance_reward < 0.018:
-                            R += self.distance_reward
-                        else:   # 0.01 < self.distance_reward
-                            R += self.distance_reward * 0.90
+                # if False:
+                #     # self.distance_reward range (0 ~ 0.04)
+                #     if self.distance_reward >= 0.04:
+                #         R += 0.04   # 보상 범위: 0.04 ~ 0.04 # Good
+                #     else:
+                #         if 0.01 <= self.distance_reward < 0.018:
+                #             R += self.distance_reward
+                #         else:   # 0.01 < self.distance_reward
+                #             R += self.distance_reward * 0.90
                 R += self.distance_reward
 
                 R += R*10   # [0 ~ 0.02] -> [0 ~ 0.4]
@@ -556,7 +556,7 @@ class A3Cagent(threading.Thread):
             # Nan 값 방지.
             if self.Tavg == 0:
                 R = 0
-                
+
             R = (R * 10)     # 최종 R은 10을 곱한다. [0 ~ 0.1] * 10 -> [0 ~ 1]
             R = round(R, 5)
 
@@ -785,7 +785,7 @@ class A3Cagent(threading.Thread):
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
             # sleep(1)
 
-        iter_cns = 3                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
+        iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
         mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
@@ -870,7 +870,7 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    if self.db.train_DB['Step'] > 50:
+                    if self.db.train_DB['Step'] > 10:
                         self.db.draw_img(current_ep=episode)
 
 
