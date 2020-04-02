@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=5, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=9, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -474,23 +474,25 @@ class A3Cagent(threading.Thread):
             if self.Time_tick >= when_100_per:
                 self.get_current_ref_power = when_100_per * one_tick + 0.02
 
-            if False:
-                # [1-1] ref power 에서 +- 1% 로 운전한다.
-                self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
-                self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
+            # if False:
+            #     # [1-1] ref power 에서 +- 1% 로 운전한다.
+            #     self.get_up_ref_power = self.get_current_ref_power + 0.02      # + 1.5%
+            #     self.get_down_ref_power = self.get_current_ref_power - 0.02    # + 1.5%
+
             if True:
-                # [1-1] ref power 에서 +- 1% + a 로 범위가 늘어난다.
+                # [1-1] ref power 에서 +- 2% +> +-4% 로 범위가 늘어난다.
                 self.get_up_ref_power = self.get_current_ref_power + 0.02
                 if self.Time_tick >= when_100_per:
                     self.get_up_ref_power += (when_100_per/when_100_per) * 0.02
                 else:
-                    self.get_up_ref_power += (self.Time_tick / when_100_per) * 0.01
+                    self.get_up_ref_power += (self.Time_tick / when_100_per) * 0.02
 
                 self.get_down_ref_power = self.get_current_ref_power - 0.02
                 if self.Time_tick >= when_100_per:
-                    self.get_down_ref_power -= (when_100_per/when_100_per) * 0.01
+                    self.get_down_ref_power -= (when_100_per/when_100_per) * 0.02
                 else:
                     self.get_down_ref_power -= (self.Time_tick / when_100_per) * 0.02
+                # 기대되는 보상의 범위는 [0 ~ 0.04]
 
             # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
             #       음의 값이 나올 수 있다.
@@ -534,11 +536,18 @@ class A3Cagent(threading.Thread):
                 #             R += self.distance_reward
                 #         else:   # 0.01 < self.distance_reward
                 #             R += self.distance_reward * 0.90
-                R += self.distance_reward
 
-                R += R*10   # [0 ~ 0.02] -> [0 ~ 0.4]
+                # 기대되는 보상 [0 ~ 0.04]
+                # 범위를 벗어나는 경우 R_이 음의 값을 가진다. 이때는 보상을 제공하지 않는다.
+                if self.distance_reward <= 0:
+                    R_ = 0
+                else:
+                    R_ = self.distance_reward
+
+                R += R_*10   # [0 ~ 0.04] -> [0 ~ 0.4]
 
                 # Goal 2
+                # Goal 1의 범위와 상관 없이 보상을 제공한다.
                 R += self.mismatch_reward/10   # 보상 범위: [0 ~ 1] -> [0.0 ~ 0.1]
 
                 # Goal 3
@@ -557,18 +566,18 @@ class A3Cagent(threading.Thread):
             if self.Tavg == 0:
                 R = 0
 
-            R = (R * 10)     # 최종 R은 10을 곱한다. [0 ~ 0.1] * 10 -> [0 ~ 1]
+            R = (R * 2)     # 최종 R은 2를 곱한다. [0 ~ 0.5] * 2 -> [0 ~ 1]
             R = round(R, 5)
 
             # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
             done_counter = 0
             if self.distance_reward < 0:
-                #R -= 0.02  # 목표 실패!!
+                R = -1.0  # 목표 실패!!
                 done_counter += 1
             if self.Reactor_power < 0.01:
                 done_counter += 1
             if self.Time_tick >= when_100_per + 10000:
-                R += 0.02    # 목표 달성!!
+                R += 1.0    # 목표 달성!!
                 done_counter += 1
 
             if True:
@@ -588,6 +597,10 @@ class A3Cagent(threading.Thread):
                 round(self.distance_down_current*100/4, 5),     # 0.00 ~ 0.04 -> 0.0 ~ 1.0
                 round(self.get_up_ref_power, 5),                # 0.00 ~ 1.02
                 round(self.get_down_ref_power, 5),              # 0.00 ~ 0.98
+                round(self.rod_pos[0]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
+                round(self.rod_pos[1]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
+                round(self.rod_pos[2]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
+                round(self.rod_pos[3]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
 
                 #round(self.Reactor_power, 5), round(self.get_up_ref_power, 5), round(self.get_down_ref_power, 5),
                 #self.get_current_ref_power, self.get_up_ref_power,
@@ -598,7 +611,6 @@ class A3Cagent(threading.Thread):
                 #self.distance_up_current, self.distance_down_current,
                 #self.Tavg/1000, self.Tref/1000
                 #self.load_set/100, self.Tavg/1000, self.Tref/1000, self.mismatch_Tavg_Tref/100,
-                #self.rod_pos[0]/1000, self.rod_pos[1]/1000, self.rod_pos[2]/1000, self.rod_pos[3]/1000,
             ]
 
             self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
@@ -671,7 +683,7 @@ class A3Cagent(threading.Thread):
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
         if self.boron_conc >= 404:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.1])  # Makeup
+            self.send_action_append(['KSWO77', 'WDEWT'], [1, 1])  # Makeup
         else:
             self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
@@ -695,7 +707,9 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
             if self.load_set < 100: self.send_action_append(['KSWO225', 'KSWO224'], [1, 0]) # 터빈 load를 150 Mwe 까지,
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-            if self.load_rate <= 1: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+
+            # Turbine Load Rate
+            if self.load_rate <= 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
