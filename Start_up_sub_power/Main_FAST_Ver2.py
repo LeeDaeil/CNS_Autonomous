@@ -240,6 +240,7 @@ class show_window(threading.Thread):
         w = Myform(self.agents_info)
         sys.exit(app.exec_())
 
+
 class Myform(QDialog):
     def __init__(self, agents_info):
         super().__init__()
@@ -355,6 +356,7 @@ class Myform(QDialog):
         except:
             pass
 
+
 class A3Cagent(threading.Thread):
     def __init__(self, Remote_ip, Remote_port, CNS_ip, CNS_port, main_net, Sess, Summary_ops):
         threading.Thread.__init__(self)
@@ -461,7 +463,7 @@ class A3Cagent(threading.Thread):
             # - 1 Tick = (0.06)/(60*300) = 3.33e-6
 
             # 시간당 6.00퍼 증가
-            increse_pow_per = 0.06
+            increse_pow_per = 0.03
             one_tick = increse_pow_per/(60*300)
             self.get_current_ref_power = self.Time_tick * one_tick + 0.02
 
@@ -709,7 +711,7 @@ class A3Cagent(threading.Thread):
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
             # Turbine Load Rate
-            if self.load_rate <= 5: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 1: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
@@ -884,7 +886,7 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    if self.db.train_DB['Step'] > 10:
+                    if self.db.train_DB['Step'] > 50:
                         self.db.draw_img(current_ep=episode)
 
 
