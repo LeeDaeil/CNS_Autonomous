@@ -485,15 +485,15 @@ class A3Cagent(threading.Thread):
                 # [1-1] ref power 에서 +- 2% +> +-4% 로 범위가 늘어난다.
                 self.get_up_ref_power = self.get_current_ref_power + 0.02
                 if self.Time_tick >= when_100_per:
-                    self.get_up_ref_power += (when_100_per/when_100_per) * 0.02
+                    self.get_up_ref_power += (when_100_per/when_100_per) * 0.04
                 else:
-                    self.get_up_ref_power += (self.Time_tick / when_100_per) * 0.02
+                    self.get_up_ref_power += (self.Time_tick / when_100_per) * 0.04
 
                 self.get_down_ref_power = self.get_current_ref_power - 0.02
                 if self.Time_tick >= when_100_per:
-                    self.get_down_ref_power -= (when_100_per/when_100_per) * 0.02
+                    self.get_down_ref_power -= (when_100_per/when_100_per) * 0.04
                 else:
-                    self.get_down_ref_power -= (self.Time_tick / when_100_per) * 0.02
+                    self.get_down_ref_power -= (self.Time_tick / when_100_per) * 0.04
                 # 기대되는 보상의 범위는 [0 ~ 0.04]
 
             # [1-2] ref power 에서 거리를 계산하여 보상을 구한다.
@@ -603,6 +603,9 @@ class A3Cagent(threading.Thread):
                 round(self.rod_pos[1]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
                 round(self.rod_pos[2]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
                 round(self.rod_pos[3]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
+                round(self.Tref/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
+                round(self.Tavg/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
+                round(self.Mwe_power/900, 5),                 # 0 ~ 900 -> 0 ~ 1.0
 
                 #round(self.Reactor_power, 5), round(self.get_up_ref_power, 5), round(self.get_down_ref_power, 5),
                 #self.get_current_ref_power, self.get_up_ref_power,
@@ -685,7 +688,7 @@ class A3Cagent(threading.Thread):
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
         if self.boron_conc >= 404:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 1])  # Makeup
+            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.2])  # Makeup
         else:
             self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
@@ -711,7 +714,7 @@ class A3Cagent(threading.Thread):
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
             # Turbine Load Rate
-            if self.load_rate <= 1: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 2: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
