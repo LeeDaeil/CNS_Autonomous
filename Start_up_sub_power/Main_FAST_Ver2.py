@@ -687,7 +687,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
-        if self.Netbreak_condition == 1:
+        if self.Mwe_power >= 2:
             self.send_action_append(['KSWO77', 'WDEWT'], [1, 1])  # Makeup
         else:
             self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
@@ -714,7 +714,7 @@ class A3Cagent(threading.Thread):
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
             # Turbine Load Rate
-            if self.load_rate <= 2: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 3: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
