@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=9, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -687,8 +687,8 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
-        if self.boron_conc >= 404:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.2])  # Makeup
+        if self.Netbreak_condition == 1:
+            self.send_action_append(['KSWO77', 'WDEWT'], [1, 1])  # Makeup
         else:
             self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
