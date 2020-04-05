@@ -514,15 +514,12 @@ class A3Cagent(threading.Thread):
 
             # Mismatch에 대한 보상은 Netbreak가 된 이후 부터 계산됨.
             if self.Netbreak_condition == 1: # ON
-                self.mismatch_Tavg_Tref = self.Tref - self.Tavg
-                # mismatch 는 +- 1도 이내 들어와야 보상이 제공된다.
-                if abs(self.mismatch_Tavg_Tref) <= 1:
-                    # +0.7도 또는 -0.7도 인 경우 0.3의 보상 제공함.
-                    self.mismatch_reward = 1 - abs(self.mismatch_Tavg_Tref)
-                else:
-                    self.mismatch_reward = 0
+                self.mis_hi_bound = self.Tref + 10
+                self.mis_low_bound = self.Tref - 10
+                self.mis_hi_to_cur_dis = self.mis_hi_bound - self.Tavg
+                self.mis_low_to_cur_dis = self.Tavg - self.mis_low_bound
+                self.mismatch_reward = min(self.mis_hi_bound, self.mis_low_bound)
             else: #OFF
-                self.mismatch_Tavg_Tref = self.Tref - self.Tavg
                 self.mismatch_reward = 0
 
             # 보상 계산:
@@ -541,16 +538,18 @@ class A3Cagent(threading.Thread):
 
                 # 기대되는 보상 [0 ~ 0.04]
                 # 범위를 벗어나는 경우 R_이 음의 값을 가진다. 이때는 보상을 제공하지 않는다.
-                if self.distance_reward <= 0:
-                    R_ = 0
+                if self.Netbreak_condition != 1:
+                    if self.distance_reward <= 0:
+                        R_ = 0
+                    else:
+                        R_ = self.distance_reward
+
+                    R += R_*10   # [0 ~ 0.04] -> [0 ~ 0.4]
+
                 else:
-                    R_ = self.distance_reward
-
-                R += R_*10   # [0 ~ 0.04] -> [0 ~ 0.4]
-
-                # Goal 2
-                # Goal 1의 범위와 상관 없이 보상을 제공한다.
-                R += self.mismatch_reward/10   # 보상 범위: [0 ~ 1] -> [0.0 ~ 0.1]
+                    # Goal 2
+                    # Goal 1의 범위와 상관 없이 보상을 제공한다.
+                    R += self.mismatch_reward/10   # 보상 범위: [0 ~ 10] -> [0.0 ~ 1]
 
                 # Goal 3
                 if A == 0:
@@ -568,14 +567,19 @@ class A3Cagent(threading.Thread):
             if self.Tavg == 0:
                 R = 0
 
-            R = (R * 2)     # 최종 R은 2를 곱한다. [0 ~ 0.5] * 2 -> [0 ~ 1]
+            R = (R * 1)     # 최종 R은 2를 곱한다. [0 ~ 1.4] * 1 -> [0 ~ 1.4]
             R = round(R, 5)
 
             # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
             done_counter = 0
-            if self.distance_reward < 0:
-                R = -1.0  # 목표 실패!!
-                done_counter += 1
+            if self.Netbreak_condition != 1:
+                if self.distance_reward < 0:
+                    R = -14.0  # 목표 실패!! [max reward * 10]
+                    done_counter += 1
+            else:
+                if self.mismatch_reward < 0:
+                    R = -14.0  # 목표 실패!! [max reward * 10]
+                    done_counter += 1
             if self.Reactor_power < 0.01:
                 done_counter += 1
             if self.Time_tick >= when_100_per + 10000:
@@ -606,6 +610,9 @@ class A3Cagent(threading.Thread):
                 round(self.Tref/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
                 round(self.Tavg/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
                 round(self.Mwe_power/900, 5),                 # 0 ~ 900 -> 0 ~ 1.0
+                round(self.mis_hi_bound/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
+                round(self.mis_low_bound/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
+                round(self.Netbreak_condition, 5),                 # 0 ~ 1 -> 0 ~ 1.0
 
                 #round(self.Reactor_power, 5), round(self.get_up_ref_power, 5), round(self.get_down_ref_power, 5),
                 #self.get_current_ref_power, self.get_up_ref_power,
@@ -643,6 +650,8 @@ class A3Cagent(threading.Thread):
             self.save_state['S'] = self.db.train_DB['Step']
             self.save_state['UP_D'] = self.get_up_ref_power
             self.save_state['DOWN_D'] = self.get_down_ref_power
+            self.save_state['UP_T_D'] = self.mis_hi_bound
+            self.save_state['DOWN_T_D'] = self.mis_low_bound
             for state_val in range(len(self.state)):
                 self.save_state[f'{state_val}'] = self.state[state_val]
             return done, R
@@ -688,7 +697,7 @@ class A3Cagent(threading.Thread):
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
         if self.Mwe_power >= 2:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 1])  # Makeup
+            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.1])  # Makeup
         else:
             self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
@@ -714,7 +723,7 @@ class A3Cagent(threading.Thread):
             else: self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
             # Turbine Load Rate
-            if self.load_rate <= 3: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+            if self.load_rate <= 1: self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
             else: self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
 
         def range_fun(st, end, goal):
