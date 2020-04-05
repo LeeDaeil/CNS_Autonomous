@@ -516,7 +516,7 @@ class A3Cagent(threading.Thread):
             self.mis_hi_bound = self.Tref + 10
             self.mis_low_bound = self.Tref - 10
 
-            if self.Netbreak_condition == 1: # ON
+            if self.Mwe_power > 1: # ON
                 self.mis_hi_to_cur_dis = self.mis_hi_bound - self.Tavg
                 self.mis_low_to_cur_dis = self.Tavg - self.mis_low_bound
                 self.mismatch_reward = min(self.mis_hi_bound, self.mis_low_bound)
@@ -539,7 +539,7 @@ class A3Cagent(threading.Thread):
 
                 # 기대되는 보상 [0 ~ 0.04]
                 # 범위를 벗어나는 경우 R_이 음의 값을 가진다. 이때는 보상을 제공하지 않는다.
-                if self.Netbreak_condition != 1:
+                if self.Mwe_power < 1:
                     if self.distance_reward <= 0:
                         R_ = 0
                     else:
@@ -573,7 +573,7 @@ class A3Cagent(threading.Thread):
 
             # 종료 조건 계산 - 종료 조건은 여러개가 될 수 있으므로, 종료 카운터를 만들어 0이상이면 종료되도록 한다.
             done_counter = 0
-            if self.Netbreak_condition != 1:
+            if self.Mwe_power < 1:
                 if self.distance_reward < 0:
                     R = -14.0  # 목표 실패!! [max reward * 10]
                     done_counter += 1
