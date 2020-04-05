@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=15, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -513,9 +513,10 @@ class A3Cagent(threading.Thread):
             # Tref/Tavg의 편차는 반드시 지켜야하는 조건이나, 초기 Net break에서 지켜지지 않음으로 지키는 경우 보상을 많이줌.
 
             # Mismatch에 대한 보상은 Netbreak가 된 이후 부터 계산됨.
+            self.mis_hi_bound = self.Tref + 10
+            self.mis_low_bound = self.Tref - 10
+
             if self.Netbreak_condition == 1: # ON
-                self.mis_hi_bound = self.Tref + 10
-                self.mis_low_bound = self.Tref - 10
                 self.mis_hi_to_cur_dis = self.mis_hi_bound - self.Tavg
                 self.mis_low_to_cur_dis = self.Tavg - self.mis_low_bound
                 self.mismatch_reward = min(self.mis_hi_bound, self.mis_low_bound)
@@ -923,7 +924,7 @@ class DB:
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
                          'T_Avg_q_max': 0, 'T_Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 10,
+                         'Up_t': 0, 'Up_t_end': 20,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
