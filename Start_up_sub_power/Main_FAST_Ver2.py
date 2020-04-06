@@ -26,7 +26,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5 import QtCore
 #
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_1_{get_file_time_path.month}_{get_file_time_path.day}_' \
+MAKE_FILE_PATH = f'./FAST/VER_2_{get_file_time_path.month}_{get_file_time_path.day}_' \
                  f'{get_file_time_path.hour}_' \
                  f'{get_file_time_path.minute}_' \
                  f'{get_file_time_path.second}_'
@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=15, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=11, output_pa=4, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -422,6 +422,7 @@ class A3Cagent(threading.Thread):
         #
         self.boron_conc = self.CNS.mem['KBCDO16']['Val']
         self.make_up_tank = self.CNS.mem['EDEWT']['Val']
+        self.boron_tank = self.CNS.mem['EBOAC']['Val']
         #
         self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
         self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']            # Turbine ac condition
@@ -462,7 +463,7 @@ class A3Cagent(threading.Thread):
             # - 60분 * 300 Tick/분 = 0.03
             # - 1 Tick = (0.06)/(60*300) = 3.33e-6
 
-            # 시간당 6.00퍼 증가
+            # 시간당 3.00퍼 증가
             increse_pow_per = 0.03
             one_tick = increse_pow_per/(60*300)
             self.get_current_ref_power = self.Time_tick * one_tick + 0.02
@@ -519,7 +520,7 @@ class A3Cagent(threading.Thread):
             if self.Mwe_power > 1: # ON
                 self.mis_hi_to_cur_dis = self.mis_hi_bound - self.Tavg
                 self.mis_low_to_cur_dis = self.Tavg - self.mis_low_bound
-                self.mismatch_reward = min(self.mis_hi_bound, self.mis_low_bound)
+                self.mismatch_reward = min(self.mis_hi_to_cur_dis, self.mis_low_to_cur_dis)
             else: #OFF
                 self.mismatch_reward = 0
 
@@ -604,10 +605,6 @@ class A3Cagent(threading.Thread):
                 round(self.distance_down_current*100/4, 5),     # 0.00 ~ 0.04 -> 0.0 ~ 1.0
                 round(self.get_up_ref_power, 5),                # 0.00 ~ 1.02
                 round(self.get_down_ref_power, 5),              # 0.00 ~ 0.98
-                round(self.rod_pos[0]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
-                round(self.rod_pos[1]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
-                round(self.rod_pos[2]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
-                round(self.rod_pos[3]/225, 5),            # 0 ~ 225 -> 0 ~ 1.0
                 round(self.Tref/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
                 round(self.Tavg/310, 5),                 # 0 ~ 310 -> 0 ~ 1.0
                 round(self.Mwe_power/900, 5),                 # 0 ~ 900 -> 0 ~ 1.0
@@ -641,7 +638,7 @@ class A3Cagent(threading.Thread):
                                                                          'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                          'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
                                                                          'FANGLE',
-                                                                         'EDEWT'
+                                                                         'EDEWT', 'EBOAC'
                                                                          ]}
             self.save_state['TOT_ROD'] = self.CNS.mem['KBCDO10']['Val'] + \
                                          self.CNS.mem['KBCDO9']['Val'] + \
@@ -693,14 +690,15 @@ class A3Cagent(threading.Thread):
         # 주급수 및 CVCS 자동
         if self.charging_valve_state == 1:
             self.send_action_append(['KSWO100'], [0])
-        if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
-            self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
+        if self.Reactor_power >= 0.20:
+            if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
+                self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
 
         # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
-        if self.Mwe_power >= 2:
-            self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.1])  # Makeup
-        else:
-            self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
+        # if self.Mwe_power >= 2:
+        #     self.send_action_append(['KSWO77', 'WDEWT'], [1, 0.1])  # Makeup
+        # else:
+        #     self.send_action_append(['KSWO76', 'WDEWT'], [1, 0])  # Makeup
 
         # 절차서 구성 순서로 진행
         # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
@@ -776,10 +774,26 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
             self.send_action_append(['KSWO192'], [1])
 
-        # 9) 제어봉 조작 신호를 보내기
-        if action == 0: self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
-        elif action == 1: self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
-        elif action == 2: self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
+        # 9) 제어봉 조작 신호 및 보론 조작 신호를 보내기
+        self.send_action_append(['KSWO74'], [1])
+        if action == 0:
+            # UP ROD
+            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [1, 0, 0, 0])
+        elif action == 1:
+            # BORON
+            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 1, 0])
+        elif action == 2:
+            # MAKE_up
+            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 0, 10])
+        elif action == 3:
+            # NO Action
+            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 0, 0])
+
+        # 10) 혹시...
+        if self.make_up_tank <= 100:
+            self.send_action_append(['EDEWT'], [10000])
+        if self.boron_tank <= 100:
+            self.send_action_append(['EBOAC'], [10000])
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -808,7 +822,7 @@ class A3Cagent(threading.Thread):
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
             self.save_operation_point = {}
-            self.CNS.init_cns(initial_nub=17)
+            self.CNS.init_cns(initial_nub=7)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             # sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
@@ -864,6 +878,7 @@ class A3Cagent(threading.Thread):
                     self.save_state['P_A_1'] = Action_probability[0][0]
                     self.save_state['P_A_2'] = Action_probability[0][1]
                     self.save_state['P_A_3'] = Action_probability[0][2]
+                    self.save_state['P_A_4'] = Action_probability[0][3]
                     self.save_state['time'] = self.db.train_DB['Step']*self.cns_speed
                     self.db.save_state(self.save_state)
 
@@ -959,7 +974,7 @@ class DB:
     def add_train_DB(self, S, R, A):
         self.train_DB['S'].append(S)
         self.train_DB['Reward'].append(R)
-        Temp_R_A = np.zeros(3)
+        Temp_R_A = np.zeros(4)
         Temp_R_A[A] = 1
         self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
