@@ -78,7 +78,7 @@ class MainModel:
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [10, 10, 10]):
+        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [2, 0, 0]):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -688,8 +688,16 @@ class A3Cagent(threading.Thread):
         self.val = []
 
         # 주급수 및 CVCS 자동
-        if self.charging_valve_state == 1:
-            self.send_action_append(['KSWO100'], [0])
+        # if self.charging_valve_state == 1:
+        #     self.send_action_append(['KSWO100'], [0])
+
+        if 40 <= self.pzr_level < 75:
+            self.send_action_append(['KSWO101', 'KSWO102'], [0, 0]) # stay
+        elif self.pzr_level < 40:
+            self.send_action_append(['KSWO101', 'KSWO102'], [0, 1]) # up
+        else:
+            self.send_action_append(['KSWO101', 'KSWO102'], [1, 0]) # down
+
         if self.Reactor_power >= 0.20:
             if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
                 self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
@@ -775,19 +783,22 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO192'], [1])
 
         # 9) 제어봉 조작 신호 및 보론 조작 신호를 보내기
-        self.send_action_append(['KSWO74'], [1])
         if action == 0:
             # UP ROD
-            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [1, 0, 0, 0])
+            self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])
+            self.send_action_append(['KSWO75', 'KSWO76', 'KSWO77'], [0, 1, 0])  # Auto
         elif action == 1:
             # BORON
-            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 1, 0])
+            self.send_action_append(['KSWO75', 'KSWO76', 'KSWO77'], [1, 0, 0])  # Boron
+            self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])
         elif action == 2:
             # MAKE_up
-            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 0, 10])
+            self.send_action_append(['KSWO75', 'KSWO76', 'KSWO77'], [0, 0, 1])  # Alt DIR
+            self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])
         elif action == 3:
             # NO Action
-            self.send_action_append(['KSWO33', 'KSWO32', 'WBOAC', 'WDEWT'], [0, 0, 0, 0])
+            self.send_action_append(['KSWO75', 'KSWO76', 'KSWO77'], [0, 1, 0])  # Auto
+            self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])
 
         # 10) 혹시...
         if self.make_up_tank <= 100:
