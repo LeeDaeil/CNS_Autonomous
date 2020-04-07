@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=4, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -276,6 +276,8 @@ class A3Cagent(threading.Thread):
         self.COND_INIT_END_TIME = 0
         self.COND_ALL_ROD_OUT = False
         self.COND_NET_BRK = False
+        self.COND_AFTER = False
+        self.COND_AFTER_TIME = 0
 
         done_, R_ = self.update_parameter(A=0)
 
@@ -404,6 +406,33 @@ class A3Cagent(threading.Thread):
             self.R_T_distance = min(self.Op_T_hi_distance, self.Op_T_low_distance)
             if self.R_distance <= 0:
                 self.R_T_distance = 0
+        elif self.COND_AFTER:
+            # Goal 출력 유지.
+
+            # Get Op bound
+            increse_pow_per = 0.03  # 시간당 0.03 -> 3% 증가
+            one_tick = increse_pow_per / (60 * 300)  # 300Tick = 1분 -> 60 * 300 = 1시간
+            # 1Tick 당 증가해야할 Power 계산
+            update_tick = self.COND_AFTER_TIME - self.COND_INIT_END_TIME  # 현재 - All rod out 해온 운전 시간 빼기
+            self.Op_ref_power = update_tick * one_tick + 0.02  # 0.020 ~ 1.000
+            self.Op_hi_bound = self.Op_ref_power + 0.02  # 0.040 ~ 1.020
+            self.Op_low_bound = self.Op_ref_power - 0.02  # 0.000 ~ 0.980
+            self.Op_ref_temp = self.Tref  #
+            self.Op_T_hi_bound = self.Tref + 10
+            self.Op_T_low_bound = self.Tref - 10
+            # Get Op distance from current power & temp
+            self.Op_hi_distance = self.Op_hi_bound - self.Reactor_power
+            self.Op_low_distance = self.Reactor_power - self.Op_low_bound
+            self.Op_T_hi_distance = self.Op_T_hi_bound - self.Tavg
+            self.Op_T_low_distance = self.Tavg - self.Op_T_low_bound
+            # Get Fin distance reward
+            self.R_distance = min(self.Op_hi_distance, self.Op_low_distance)
+            if self.R_distance <= 0:
+                self.R_distance = 0
+
+            self.R_T_distance = min(self.Op_T_hi_distance, self.Op_T_low_distance)
+            if self.R_distance <= 0:
+                self.R_T_distance = 0
         else:
             print('ERROR Reward Calculation STEP!')
 
@@ -424,7 +453,7 @@ class A3Cagent(threading.Thread):
             if self.Tavg == 0:
                 R = 0
             R = round(R, 5)
-        elif self.COND_NET_BRK:
+        elif self.COND_NET_BRK or self.COND_AFTER:
             R = 0
             R += self.R_distance                    # 0 ~ 0.02
             # self.R_T_distance : [0 ~ 10]
@@ -460,6 +489,19 @@ class A3Cagent(threading.Thread):
                 if self.R_T_distance < 9:
                     R += - 0.1
                     done_counter += 1
+        elif self.COND_AFTER:
+            if self.Reactor_power < 0.30:
+                if self.R_distance == 0:
+                    R += - 0.1
+                    done_counter += 1
+            else:
+                if self.R_T_distance < 9:
+                    R += - 0.1
+                    done_counter += 1
+
+            if self.COND_AFTER_TIME + 30000 <= self.Time_tick:
+                R += 1
+                done_counter += 1
         else:
             print('ERROR END-Point STEP!')
 
@@ -470,6 +512,7 @@ class A3Cagent(threading.Thread):
                 self.COND_INIT = False                      # Change COND !!
                 self.COND_ALL_ROD_OUT = True                #
                 self.COND_NET_BRK = False                   #
+                self.COND_AFTER = False
                 self.COND_INIT_END_TIME = self.Time_tick    # Save current tick!
         elif self.COND_ALL_ROD_OUT:
             # Cond Check
@@ -477,14 +520,18 @@ class A3Cagent(threading.Thread):
                 self.COND_INIT = False                      # Change COND !!
                 self.COND_ALL_ROD_OUT = False               #
                 self.COND_NET_BRK = True                    #
+                self.COND_AFTER = False
                 # self.COND_INIT_END_TIME = self.Time_tick    # Save current tick!
         elif self.COND_NET_BRK:
             # Cond Check
-            if self.Mwe_power >= 1:  # 전기 출력 발생
+            if self.Reactor_power >= 0.98:  # 목표 도달
                 self.COND_INIT = False  # Change COND !!
                 self.COND_ALL_ROD_OUT = False  #
-                self.COND_NET_BRK = True  #
-                # self.COND_INIT_END_TIME = self.Time_tick    # Save current tick!
+                self.COND_NET_BRK = False  #
+                self.COND_AFTER = True
+                self.COND_AFTER_TIME = self.Time_tick    # Save current tick!
+        elif self.COND_AFTER:
+            pass
         else:
             print('ERROR COND Check')
 
@@ -675,7 +722,7 @@ class A3Cagent(threading.Thread):
                 self.send_action_append(['EBOAC'], [100])               # INJECT BORN
             else:
                 print('ERROR ACT COND_INIT')
-        elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK:
+        elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK or self.COND_AFTER:
             if action == 0:     # stay pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])   # BOR on / ALTDIL off
                 self.send_action_append(['WDEWT'], [5])                 # Set-Make-up Valve
@@ -743,6 +790,8 @@ class A3Cagent(threading.Thread):
             self.COND_INIT_END_TIME = 0
             self.COND_ALL_ROD_OUT = False
             self.COND_NET_BRK = False
+            self.COND_AFTER = False
+            self.COND_AFTER_TIME = 0
 
             #
             self.one_agents_episode = episode
