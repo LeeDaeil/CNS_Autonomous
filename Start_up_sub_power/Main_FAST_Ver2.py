@@ -31,7 +31,7 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
                     level=logging.INFO)
 #------------------------------------------------------------------
 episode = 0             # Global EP
-MANUAL = True
+MANUAL = False
 
 class MainModel:
     def __init__(self):
@@ -43,8 +43,11 @@ class MainModel:
         self.build_info = {
             'IP_list': ['192.168.0.9', '192.168.0.7', '192.168.0.4'],
             'PORT_list': [7100, 7200, 7300],
-            'Nub': [1, 0, 0],
         }
+        if MANUAL:
+            self.build_info['Nub'] = [1, 0, 0]
+        else:
+            self.build_info['Nub'] = [10, 10, 10]
 
     def run(self):
         worker = self.build_A3C(build_info=self.build_info)
@@ -53,24 +56,26 @@ class MainModel:
             sleep(1)
         print('All agent start done')
 
-        window_ = show_window(worker)
-        window_.start()
-
         count = 1
-        while True:
-            sleep(5)
-            # 살아 있는지 보여줌
-            workers_step = ''
-            temp = []
-            for i in worker:
-                workers_step += '{:3d} '.format(i.db.train_DB['Step'])
-                temp.append(i.db.train_DB['Step'])
-            print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
-            # 모델 save
-            if count == 60:
-                self.main_net.save_model('ROD')
-                count %= 60
-            count += 1
+        if MANUAL:
+            window_ = show_window(worker)
+            window_.start()
+            pass
+        else:
+            while True:
+                sleep(5)
+                # 살아 있는지 보여줌
+                workers_step = ''
+                temp = []
+                for i in worker:
+                    workers_step += '{:3d} '.format(i.db.train_DB['Step'])
+                    temp.append(i.db.train_DB['Step'])
+                print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
+                # 모델 save
+                if count == 60:
+                    self.main_net.save_model('ROD')
+                    count %= 60
+                count += 1
 
     def build_A3C(self, build_info):
         # return: 선언된 worker들을 반환함.
@@ -705,7 +710,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO192'], [1])
 
         # 9) 제어봉 조작 신호
-        if divmod(self.Time_tick, 1000)[1] == 0:
+        if divmod(self.Time_tick, 600)[1] == 0:
             self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # UP ROD CONTROL
         else:
             self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # NO ROD CONTROL
@@ -716,10 +721,9 @@ class A3Cagent(threading.Thread):
             if action == 0:  # stay pow
                 pass
             elif action == 1:  # increase pow
-                self.send_action_append(['EBOAC'], [10])   # MAKE-Up
+                self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # UP ROD CONTROL
             elif action == 2:  # decrease pow
-                self.send_action_append(['EBOAC'], [5])  # MAKE-Up
-
+                self.send_action_append(['EBOAC'], [50])  # MAKE-Up
         elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK or self.COND_AFTER:
             if action == 0:  # stay pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR on / ALTDIL off
@@ -740,6 +744,7 @@ class A3Cagent(threading.Thread):
 
 
         # 최종 파라메터 전송
+        print(self.para)
         self.CNS._send_control_signal(self.para, self.val)
 
     def train_network(self):
@@ -825,7 +830,8 @@ class A3Cagent(threading.Thread):
 
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
                     if MANUAL:
-                        Action_net = input("Slected ACT:")
+                        Action_net = int(input(f"[{self.db.train_DB['Step']}-{self.Time_tick}]Slected ACT:"))
+                        self.send_action(action=Action_net)
                     else:
                         self.send_action(action=Action_net)
 

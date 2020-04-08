@@ -17,6 +17,10 @@ class CNS:
             self.resv_sock.bind((self.Remote_ip, self.Remote_port))
             # Send Socket
             self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # SIZE BUFFER
+            self.size_buffer_mem = 1008
+            # SEND TICK
+            self.want_tick = 300
 
         if True:
             # memory
@@ -38,7 +42,7 @@ class CNS:
         return shared_mem
 
     def update_mem(self):
-        data, _ = self.resv_sock.recvfrom(44388)
+        data, _ = self.resv_sock.recvfrom(self.size_buffer_mem)
         data = data[8:]
         # print(len(data)) data의 8바이트를 제외한 나머지 버퍼의 크기
         for i in range(0, len(data), 20):
@@ -109,7 +113,7 @@ class CNS:
         #     sig.append(1)
         para.append('KFZRUN')
         # sig.append(3)
-        sig.append(300)     # 150 - 100 -> 50 tick 20 sec
+        sig.append(self.want_tick+100)     # 400 - 100 -> 300 tick 20 sec
         return self._send_control_signal(para, sig)
 
     def init_cns(self, initial_nub):
@@ -130,7 +134,7 @@ class CNS:
             # sleep(1)
 
     def run_freeze_CNS(self):
-        old_cont = self.mem['KCNTOMS']['Val'] + 200
+        old_cont = self.mem['KCNTOMS']['Val'] + self.want_tick
         self.run_cns()
         while True:
             self.update_mem()
