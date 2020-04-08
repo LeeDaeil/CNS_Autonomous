@@ -41,7 +41,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=15)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -147,7 +147,7 @@ class MainNet:
         elif net_type == 'CNN' or net_type == 'LSTM' or net_type == 'CLSTM':
             state = Input(batch_shape=(None, time_leg, in_pa))
             if net_type == 'CNN':
-                shared = Conv1D(filters=10, kernel_size=3, strides=1, padding='same')(state)
+                shared = Conv1D(filters=15, kernel_size=3, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
                 shared = Flatten()(shared)
                 shared = Dense(64)(shared)
@@ -160,7 +160,7 @@ class MainNet:
                 shared = Dense(64)(shared)
 
             elif net_type == 'CLSTM':
-                shared = Conv1D(filters=10, kernel_size=5, strides=1, padding='same')(state)
+                shared = Conv1D(filters=15, kernel_size=5, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
                 shared = LSTM(12)(shared)
                 shared = Dense(24)(shared)
@@ -336,8 +336,8 @@ class A3Cagent(threading.Thread):
 
             # Get Op bound
             self.Op_ref_power = 0.020                                   # 0.020 ~ 0.020
-            self.Op_hi_bound = 0.022                                    # 0.022 ~ 0.022
-            self.Op_low_bound = 0.018                                   # 0.018 ~ 0.018
+            self.Op_hi_bound = 0.030                                    # 0.030 ~ 0.030
+            self.Op_low_bound = 0.010                                   # 0.010 ~ 0.010
             self.Op_ref_temp = 291.7                                    #
             self.Op_T_hi_bound = 291.7 + 10
             self.Op_T_low_bound = 291.7 - 10
@@ -706,43 +706,40 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
             self.send_action_append(['KSWO192'], [1])
 
+        # 9) 제어봉 조작 신호
+        if divmod(self.Time_tick, 1000)[1] == 0:
+            self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # UP ROD CONTROL
+        else:
+            self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # NO ROD CONTROL
+
         # 9) 제어봉 조작 신호 및 보론 조작 신호를 보내기
         if self.COND_INIT:
-            if action == 0:     # stay pow
-                self.send_action_append(['KSWO75'], [1])                # BOR
-                self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])   # NO ROD CONTROL
-                self.send_action_append(['EBOAC'], [0])  # NO INJECT BORN
-            elif action == 1:   # increase pow
-                self.send_action_append(['KSWO75'], [1])                # BOR
-                self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])   # UP ROD CONTROL
-                self.send_action_append(['EBOAC'], [0])                 # NO INJECT BORN
-            elif action == 2:   # decrease pow
-                self.send_action_append(['KSWO75'], [1])                # BOR
-                self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])   # NO ROD CONTROL
-                self.send_action_append(['EBOAC'], [100])               # INJECT BORN
-            else:
-                print('ERROR ACT COND_INIT')
+            self.send_action_append(['KSWO75'], [1])
+            if action == 0:  # stay pow
+                pass
+            elif action == 1:  # increase pow
+                self.send_action_append(['EBOAC'], [10])   # MAKE-Up
+            elif action == 2:  # decrease pow
+                self.send_action_append(['EBOAC'], [5])  # MAKE-Up
+
         elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK or self.COND_AFTER:
-            if action == 0:     # stay pow
-                self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])   # BOR on / ALTDIL off
-                self.send_action_append(['WDEWT'], [5])                 # Set-Make-up Valve
-                self.send_action_append(['EBOAC'], [0])                 # NO INJECT BORN
-            elif action == 1:   # increase pow
-                self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])   # BOR off / ALTDIL on
-                self.send_action_append(['WDEWT'], [5])                 # Set-Make-up Valve
-                self.send_action_append(['EBOAC'], [0])                 # NO INJECT BORN
-            elif action == 2:   # decrease pow
-                self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])   # BOR on / ALTDIL off
-                self.send_action_append(['WDEWT'], [5])                 # Set-Make-up Valve
-                self.send_action_append(['EBOAC'], [10])                 # INJECT BORN
+            if action == 0:  # stay pow
+                self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR on / ALTDIL off
+                self.send_action_append(['WBOAC','WDEWT'], [5, 5])  # Set-Make-up Valve
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 0])  # NO INJECT BORN
+            elif action == 1:  # increase pow
+                self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])  # BOR off / ALTDIL on
+                self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 50])   # MAKE-Up
+            elif action == 2:  # decrease pow
+                self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR off / ALTDIL on
+                self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
+                self.send_action_append(['EBOAC', 'EDEWT'], [10, 0])   # BORN
             else:
                 print('ERROR ACT')
         else:
             print('ERROR CONTROL PART!!')
 
-        # 10) 혹시...
-        if self.make_up_tank <= 100:
-            self.send_action_append(['EDEWT'], [10000])
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -771,7 +768,7 @@ class A3Cagent(threading.Thread):
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
             self.save_operation_point = {}
-            self.CNS.init_cns(initial_nub=7)
+            self.CNS.init_cns(initial_nub=17)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             # sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
