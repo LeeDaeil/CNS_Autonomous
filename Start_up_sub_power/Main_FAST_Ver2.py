@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 from time import sleep
 from random import randrange
-import matplotlib.pyplot as plt
+
 import os
 import shutil
 import logging
@@ -19,11 +19,7 @@ import logging.handlers
 #------------------------------------------------------------------
 from Start_up_sub_power.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
-import sys
-from PyQt5.QtWidgets import QApplication, QDialog
-from Start_up_sub_power.SHOW_GUI import Ui_Dialog as SHOW_GUI_WIN
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from PyQt5 import QtCore
+from Start_up_sub_power.FAST_UI import show_window
 #
 get_file_time_path = datetime.datetime.now()
 MAKE_FILE_PATH = f'./FAST/VER_2_{get_file_time_path.month}_{get_file_time_path.day}_' \
@@ -35,7 +31,7 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
                     level=logging.INFO)
 #------------------------------------------------------------------
 episode = 0             # Global EP
-
+MANUAL = True
 
 class MainModel:
     def __init__(self):
@@ -44,19 +40,21 @@ class MainModel:
         self.main_net = MainNet(net_type='CLSTM', input_pa=12, output_pa=3, time_leg=15)
         #self.main_net.load_model('ROD')
 
+        self.build_info = {
+            'IP_list': ['192.168.0.9', '192.168.0.7', '192.168.0.4'],
+            'PORT_list': [7100, 7200, 7300],
+            'Nub': [1, 0, 0],
+        }
+
     def run(self):
-        worker = self.build_A3C()
+        worker = self.build_A3C(build_info=self.build_info)
         for __ in worker:
             __.start()
             sleep(1)
         print('All agent start done')
 
-        # window_ = show_window(worker)
-        # window_.start()
-        #
-        # app = QApplication(sys.argv)
-        # w = Myform(worker)
-        # sys.exit(app.exec_())
+        window_ = show_window(worker)
+        window_.start()
 
         count = 1
         while True:
@@ -74,11 +72,11 @@ class MainModel:
                 count %= 60
             count += 1
 
-    def build_A3C(self):
+    def build_A3C(self, build_info):
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [10, 10, 10]):
+        for cnsip, com_port, max_iter in zip(build_info['IP_list'], build_info['PORT_list'], build_info['Nub']):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -826,7 +824,10 @@ class A3Cagent(threading.Thread):
                     self.db.train_DB['Avg_max_step'] += 1
 
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
-                    self.send_action(action=Action_net)
+                    if MANUAL:
+                        Action_net = input("Slected ACT:")
+                    else:
+                        self.send_action(action=Action_net)
 
                     # 2.2 제어 정보와, 상태에 대한 정보를 저장한다.
                     self.save_state['Act'] = Action_net
