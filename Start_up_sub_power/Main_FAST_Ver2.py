@@ -430,12 +430,12 @@ class A3Cagent(threading.Thread):
             self.Op_T_low_distance = self.Tavg - self.Op_T_low_bound
             # Get Fin distance reward
             self.R_distance = min(self.Op_hi_distance, self.Op_low_distance)
-            if self.R_distance <= 0:
-                self.R_distance = 0
+            # if self.R_distance <= 0:
+            #     self.R_distance = 0
 
             self.R_T_distance = min(self.Op_T_hi_distance, self.Op_T_low_distance)
-            if self.R_distance <= 0:
-                self.R_T_distance = 0
+            # if self.R_distance <= 0:
+            #     self.R_T_distance = 0
         else:
             print('ERROR Reward Calculation STEP!')
 
@@ -475,12 +475,15 @@ class A3Cagent(threading.Thread):
 
         # 종료 조건 계산
         done_counter = 0
+        if self.rod_pos[0] == 0:
+            done_counter += 1
+
         if self.COND_INIT:
-            if self.R_distance == 0:
+            if self.R_distance <= 0:
                 R += - 0.1
                 done_counter += 1
         elif self.COND_ALL_ROD_OUT:
-            if self.R_distance == 0:
+            if self.R_distance <= 0:
                 R += - 0.1
                 done_counter += 1
         elif self.COND_NET_BRK:
@@ -665,7 +668,10 @@ class A3Cagent(threading.Thread):
                 if self.load_set < goal:
                     self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                 else:
-                    self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+                    if self.Mwe_power > goal:
+                        self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                    else:
+                        self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
         range_fun(st=0.05, end=0.10, goal=50)
         range_fun(st=0.10, end=0.15, goal=125)
@@ -686,11 +692,6 @@ class A3Cagent(threading.Thread):
         range_fun(st=0.85, end=0.90, goal=800)
         range_fun(st=0.90, end=0.95, goal=825)
         range_fun(st=0.95, end=0.100, goal=900)
-
-        if self.Reactor_power > self.load_set:
-            self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
-        else:
-            self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
 
         # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
         if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
