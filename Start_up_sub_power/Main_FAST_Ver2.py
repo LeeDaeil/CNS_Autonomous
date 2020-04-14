@@ -365,8 +365,10 @@ class A3Cagent(threading.Thread):
                                                                         # 1Tick 당 증가해야할 Power 계산
             update_tick = self.Time_tick - self.COND_INIT_END_TIME      # 현재 - All rod out 해온 운전 시간 빼기
             self.Op_ref_power = update_tick * one_tick + 0.02           # 0.020 ~ 1.000
-            self.Op_hi_bound = self.Op_ref_power + 0.02                 # 0.040 ~ 1.020
-            self.Op_low_bound = self.Op_ref_power - 0.02                # 0.000 ~ 0.980
+            support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
+            support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
+            self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
+            self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
             self.Op_ref_temp = 291.7                                    #
             self.Op_T_hi_bound = 291.7 + 10
             self.Op_T_low_bound = 291.7 - 10
@@ -391,8 +393,10 @@ class A3Cagent(threading.Thread):
                                                                     # 1Tick 당 증가해야할 Power 계산
             update_tick = self.Time_tick - self.COND_INIT_END_TIME  # 현재 - All rod out 해온 운전 시간 빼기
             self.Op_ref_power = update_tick * one_tick + 0.02       # 0.020 ~ 1.000
-            self.Op_hi_bound = self.Op_ref_power + 0.02             # 0.040 ~ 1.020
-            self.Op_low_bound = self.Op_ref_power - 0.02            # 0.000 ~ 0.980
+            support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
+            support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
+            self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
+            self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
             self.Op_ref_temp = self.Tref                            #
             self.Op_T_hi_bound = self.Tref + 10
             self.Op_T_low_bound = self.Tref - 10
@@ -460,12 +464,13 @@ class A3Cagent(threading.Thread):
             R = 0
             R += self.R_distance                    # 0 ~ 0.02
             # self.R_T_distance : [0 ~ 10]
-            if self.R_T_distance >= 9:              # +- 1도 이내
-                R_ = 1 - (10 - self.R_T_distance)   # 0 ~ 1
-                R_ = R_ / 100                       # 0 ~ 0.01
-            else:
-                R_ = 0                              # +- 1도 넘음
-            R += R_*2                               # 0 ~ 0.02 + 0 ~ 0.02
+            # if self.R_T_distance >= 0:              # +- 1도 이내
+            #     #R_ = 1 - (10 - self.R_T_distance)   # 0 ~ 1
+            R_ = self.R_T_distance              # 0 ~ 10
+            R_ = R_ / 100                       # 0 ~ 0.01
+            # else:
+            #     R_ = -0.001                              # +- 1도 넘음
+            R += R_                               # 0 ~ 0.02 + 0 ~ 0.02
             # Nan 값 방지.
             if self.Tavg == 0:
                 R = 0
@@ -487,24 +492,19 @@ class A3Cagent(threading.Thread):
                 R += - 0.1
                 done_counter += 1
         elif self.COND_NET_BRK:
-            if self.Reactor_power < 0.30:
-                if self.R_distance <= -0.02:
-                    R += - 0.1
-                    done_counter += 1
-            else:
-                if self.R_T_distance < 9:
-                    R += - 0.1
-                    done_counter += 1
+            if self.R_distance <= 0:
+                R += - 0.1
+                done_counter += 1
+            if self.R_T_distance <= 0:
+                R += - 0.1
+                done_counter += 1
         elif self.COND_AFTER:
-            if self.Reactor_power < 0.30:
-                if self.R_distance <= -0.02:
-                    R += - 0.1
-                    done_counter += 1
-            else:
-                if self.R_T_distance < 9:
-                    R += - 0.1
-                    done_counter += 1
-
+            if self.R_distance <= 0:
+                R += - 0.1
+                done_counter += 1
+            if self.R_T_distance <= 0:
+                R += - 0.1
+                done_counter += 1
             if self.COND_AFTER_TIME + 30000 <= self.Time_tick:
                 R += 1
                 done_counter += 1
@@ -668,7 +668,7 @@ class A3Cagent(threading.Thread):
                 if self.load_set < goal:
                     self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                 else:
-                    if self.Mwe_power > goal:
+                    if self.Mwe_power + 2 > goal:
                         self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                     else:
                         self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
@@ -716,8 +716,11 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO192'], [1])
 
         # 9) 제어봉 조작 신호
-        if divmod(self.Time_tick, 600)[1] == 0:
-            self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # UP ROD CONTROL
+        if divmod(self.Time_tick, 700)[1] == 0:
+            if self.rod_pos[3] > 221:
+                self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # NO ROD CONTROL
+            else:
+                self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # UP ROD CONTROL
         else:
             self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # NO ROD CONTROL
 
@@ -738,16 +741,17 @@ class A3Cagent(threading.Thread):
             elif action == 1:  # increase pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])  # BOR off / ALTDIL on
                 self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
-                self.send_action_append(['EBOAC', 'EDEWT'], [0, 70])   # MAKE-Up
+                # self.send_action_append(['EBOAC', 'EDEWT'], [0, 70])   # MAKE-Up
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 150])   # MAKE-Up
             elif action == 2:  # decrease pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR off / ALTDIL on
                 self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
-                self.send_action_append(['EBOAC', 'EDEWT'], [10, 0])   # BORN
+                # self.send_action_append(['EBOAC', 'EDEWT'], [10, 0])   # BORN
+                self.send_action_append(['EBOAC', 'EDEWT'], [15, 0])   # BORN
             else:
                 print('ERROR ACT')
         else:
             print('ERROR CONTROL PART!!')
-
 
         # 최종 파라메터 전송
         # print(self.para)
@@ -772,12 +776,13 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 1  # x 배속
+        self.cns_speed = 2  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
             self.save_operation_point = {}
-            self.CNS.init_cns(initial_nub=17)
+            # self.CNS.init_cns(initial_nub=17)
+            self.CNS.init_cns(initial_nub=20)
             # self.CNS._send_malfunction_signal(12, 10001, mal_time)
             # sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])

@@ -20,7 +20,7 @@ class CNS:
             # SIZE BUFFER
             self.size_buffer_mem = 1008
             # SEND TICK
-            self.want_tick = 400
+            self.want_tick = 700
 
         if True:
             # memory
