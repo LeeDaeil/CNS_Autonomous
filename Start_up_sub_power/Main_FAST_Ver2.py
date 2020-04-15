@@ -466,8 +466,8 @@ class A3Cagent(threading.Thread):
             # self.R_T_distance : [0 ~ 10]
             # if self.R_T_distance >= 0:              # +- 1도 이내
             #     #R_ = 1 - (10 - self.R_T_distance)   # 0 ~ 1
-            R_ = self.R_T_distance              # 0 ~ 10
-            R_ = R_ / 100                       # 0 ~ 0.01
+            R_ += self.R_T_distance              # 0 ~ 10
+            R_ += R_ / 100                       # 0 ~ 0.01
             # else:
             #     R_ = -0.001                              # +- 1도 넘음
             R += R_                               # 0 ~ 0.02 + 0 ~ 0.02
