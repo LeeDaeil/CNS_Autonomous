@@ -259,7 +259,7 @@ class A3Cagent(threading.Thread):
             # logger
             self.logger = logging.getLogger('{}'.format(self.name))
             self.logger.setLevel(logging.INFO)
-            self.logger.addHandler(logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, self.name)))
+            self.logger.addHandler(logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, episode)))
 
             # 보상이나 상태를 저장하는 부분
             self.db = DB()
@@ -279,10 +279,16 @@ class A3Cagent(threading.Thread):
         self.COND_INIT_END_TIME = 0
         self.COND_ALL_ROD_OUT = False
         self.COND_NET_BRK = False
+        self.COND_NET_BRK_DIS = 0
         self.COND_AFTER = False
         self.COND_AFTER_TIME = 0
 
         done_, R_ = self.update_parameter(A=0)
+
+    def Log(self, txt):
+        out_txt = f'[{datetime.datetime.now()}][{self.one_agents_episode:4}]'
+        out_txt += txt
+        self.logger.info(out_txt)
 
     def update_parameter(self, A, only_val_up=False):
         '''
@@ -367,6 +373,11 @@ class A3Cagent(threading.Thread):
             self.Op_ref_power = update_tick * one_tick + 0.02           # 0.020 ~ 1.000
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
+
+            if abs(self.Op_ref_power - support_up) >= 0.005:
+                support_up = self.Op_ref_power + 0.005
+                support_down = self.Op_ref_power - 0.005
+
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
             self.Op_ref_temp = 291.7                                    #
@@ -395,6 +406,11 @@ class A3Cagent(threading.Thread):
             self.Op_ref_power = update_tick * one_tick + 0.02       # 0.020 ~ 1.000
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
+
+            if abs(self.Op_ref_power - support_up) >= 0.005:
+                support_up = self.Op_ref_power + 0.005
+                support_down = self.Op_ref_power - 0.005
+
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
             self.Op_ref_temp = self.Tref                            #
@@ -446,68 +462,53 @@ class A3Cagent(threading.Thread):
         # 보상 계산
         #   [OUTPUT]
         #   - R
-        if self.COND_INIT:
+        if self.COND_INIT or self.COND_ALL_ROD_OUT:
             R = 0
             R += self.R_distance                    # 0 ~ 0.02
-            # Nan 값 방지.
-            if self.Tavg == 0:
-                R = 0
-            R = round(R, 5)
-        elif self.COND_ALL_ROD_OUT:
-            R = 0
-            R += self.R_distance                    # 0 ~ 0.02
-            # Nan 값 방지.
-            if self.Tavg == 0:
-                R = 0
-            R = round(R, 5)
         elif self.COND_NET_BRK or self.COND_AFTER:
             R = 0
             R += self.R_distance                    # 0 ~ 0.02
             # self.R_T_distance : [0 ~ 10]
             # if self.R_T_distance >= 0:              # +- 1도 이내
             #     #R_ = 1 - (10 - self.R_T_distance)   # 0 ~ 1
-            R_ += self.R_T_distance              # 0 ~ 10
-            R_ += R_ / 100                       # 0 ~ 0.01
+            R_ = self.R_T_distance              # 0 ~ 10
+            R_ = R_ / 100                       # 0 ~ 0.01
             # else:
             #     R_ = -0.001                              # +- 1도 넘음
             R += R_                               # 0 ~ 0.02 + 0 ~ 0.02
-            # Nan 값 방지.
-            if self.Tavg == 0:
-                R = 0
-            R = round(R, 5)
         else:
             print('ERROR FIN Reward STEP!')
 
+        # Nan 값 방지.
+        if self.Tavg == 0:
+            R = 0
+        R = round(R, 5)
+
         # 종료 조건 계산
         done_counter = 0
+        done_cause = ''
         if self.rod_pos[0] == 0:
             done_counter += 1
-
-        if self.COND_INIT:
+            done_cause += '_Reactor Trip_'
+        if self.COND_INIT or self.COND_ALL_ROD_OUT:
             if self.R_distance <= 0:
                 R += - 0.1
                 done_counter += 1
-        elif self.COND_ALL_ROD_OUT:
+                done_cause += f'_OutPdis{self.R_distance}_'
+        elif self.COND_NET_BRK or self.COND_AFTER:
             if self.R_distance <= 0:
                 R += - 0.1
                 done_counter += 1
-        elif self.COND_NET_BRK:
-            if self.R_distance <= 0:
-                R += - 0.1
-                done_counter += 1
+                done_cause += f'_OutPdis{self.R_distance}_'
             if self.R_T_distance <= 0:
                 R += - 0.1
                 done_counter += 1
-        elif self.COND_AFTER:
-            if self.R_distance <= 0:
-                R += - 0.1
-                done_counter += 1
-            if self.R_T_distance <= 0:
-                R += - 0.1
-                done_counter += 1
-            if self.COND_AFTER_TIME + 30000 <= self.Time_tick:
-                R += 1
-                done_counter += 1
+                done_cause += f'_OutTdis{self.R_T_distance}_'
+            if self.COND_AFTER:
+                if self.COND_AFTER_TIME + 30000 <= self.Time_tick:
+                    R += 1
+                    done_counter += 1
+                    done_cause += '_SUCCESS_'
         else:
             print('ERROR END-Point STEP!')
 
@@ -549,8 +550,10 @@ class A3Cagent(threading.Thread):
                 done = False
 
         # 최종 Net_input 기입
-        self.logger.info(f'[{datetime.datetime.now()}][{self.one_agents_episode:4}-{R:.5f}-{self.R_distance:.5f}-'
-                         f'{self.R_T_distance}-{R}-{self.Time_tick}]')
+        self.Log(txt=f'[Done-{done_counter}][{done_cause}]')
+        self.Log(txt=f'[{self.COND_INIT}, {self.COND_ALL_ROD_OUT}, {self.COND_NET_BRK}, {self.COND_AFTER}]')
+        self.Log(txt=f'[{self.COND_INIT_END_TIME}, {self.COND_AFTER_TIME}, {self.COND_NET_BRK_DIS}]')
+        self.Log(txt=f'[{R:.5f}-{self.R_distance:.5f}-{self.R_T_distance:.5f}-{self.Time_tick:7}]')
 
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
@@ -736,16 +739,16 @@ class A3Cagent(threading.Thread):
         elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK or self.COND_AFTER:
             if action == 0:  # stay pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR on / ALTDIL off
-                self.send_action_append(['WBOAC','WDEWT'], [5, 5])  # Set-Make-up Valve
+                self.send_action_append(['WBOAC','WDEWT'], [8, 8])  # Set-Make-up Valve
                 self.send_action_append(['EBOAC', 'EDEWT'], [0, 0])  # NO INJECT BORN
             elif action == 1:  # increase pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])  # BOR off / ALTDIL on
-                self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
+                self.send_action_append(['WBOAC','WDEWT'], [8, 8])     # Valve POS
                 # self.send_action_append(['EBOAC', 'EDEWT'], [0, 70])   # MAKE-Up
-                self.send_action_append(['EBOAC', 'EDEWT'], [0, 150])   # MAKE-Up
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 200])   # MAKE-Up
             elif action == 2:  # decrease pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR off / ALTDIL on
-                self.send_action_append(['WBOAC','WDEWT'], [5, 5])     # Valve POS
+                self.send_action_append(['WBOAC','WDEWT'], [8, 8])     # Valve POS
                 # self.send_action_append(['EBOAC', 'EDEWT'], [10, 0])   # BORN
                 self.send_action_append(['EBOAC', 'EDEWT'], [15, 0])   # BORN
             else:
@@ -756,6 +759,7 @@ class A3Cagent(threading.Thread):
         # 최종 파라메터 전송
         # print(self.para)
         self.CNS._send_control_signal(self.para, self.val)
+        self.Log(txt=f'SEND ACT\n{self.para}\n{self.val}')
 
     def train_network(self):
         def discount_reward(rewards):
@@ -801,6 +805,7 @@ class A3Cagent(threading.Thread):
             self.COND_INIT_END_TIME = 0
             self.COND_ALL_ROD_OUT = False
             self.COND_NET_BRK = False
+            self.COND_NET_BRK_DIS = 0
             self.COND_AFTER = False
             self.COND_AFTER_TIME = 0
 
