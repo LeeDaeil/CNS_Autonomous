@@ -813,9 +813,8 @@ class A3Cagent(threading.Thread):
             # logger
             self.logger = logging.getLogger('{}'.format(self.name))
             self.logger.setLevel(logging.INFO)
-            self.logger.addHandler(
-                logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, self.one_agents_episode)))
-
+            self.logger_hand = logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, self.one_agents_episode))
+            self.logger.addHandler(self.logger_hand)
             self.logger.info(f'[{datetime.datetime.now()}] Start ep')
             while True:
                 self.run_cns(iter_cns)
@@ -909,6 +908,8 @@ class A3Cagent(threading.Thread):
                     start_or_initial_cns(mal_time=mal_time)
                     self.logger.info(f'[{datetime.datetime.now()}] Episode_done - {start_ep_time}~'
                                      f'{datetime.datetime.now()}')
+                    # 핸드러 리셋
+                    self.logger.removeHandler(self.logger.handlers[0])
                     break
 
 
