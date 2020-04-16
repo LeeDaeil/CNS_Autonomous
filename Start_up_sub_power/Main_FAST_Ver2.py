@@ -256,11 +256,6 @@ class A3Cagent(threading.Thread):
             self.sess = Sess
             [self.summary_op, self.summary_placeholders, self.update_ops, self.summary_writer] = Summary_ops
 
-            # logger
-            self.logger = logging.getLogger('{}'.format(self.name))
-            self.logger.setLevel(logging.INFO)
-            self.logger.addHandler(logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, episode)))
-
             # 보상이나 상태를 저장하는 부분
             self.db = DB()
             self.db.initial_train_DB()
@@ -283,7 +278,7 @@ class A3Cagent(threading.Thread):
         self.COND_AFTER = False
         self.COND_AFTER_TIME = 0
 
-        done_, R_ = self.update_parameter(A=0)
+        # done_, R_ = self.update_parameter(A=0)
 
     def Log(self, txt):
         out_txt = f'[{datetime.datetime.now()}][{self.one_agents_episode:4}]'
@@ -374,9 +369,9 @@ class A3Cagent(threading.Thread):
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
 
-            if abs(self.Op_ref_power - support_up) >= 0.005:
-                support_up = self.Op_ref_power + 0.005
-                support_down = self.Op_ref_power - 0.005
+            if abs(self.Op_ref_power - support_up) >= 0.05:
+                support_up = self.Op_ref_power + 0.05
+                support_down = self.Op_ref_power - 0.05
 
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
@@ -407,9 +402,9 @@ class A3Cagent(threading.Thread):
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
 
-            if abs(self.Op_ref_power - support_up) >= 0.005:
-                support_up = self.Op_ref_power + 0.005
-                support_down = self.Op_ref_power - 0.005
+            if abs(self.Op_ref_power - support_up) >= 0.05:
+                support_up = self.Op_ref_power + 0.05
+                support_down = self.Op_ref_power - 0.05
 
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
@@ -719,7 +714,7 @@ class A3Cagent(threading.Thread):
             self.send_action_append(['KSWO192'], [1])
 
         # 9) 제어봉 조작 신호
-        if divmod(self.Time_tick, 700)[1] == 0:
+        if divmod(self.Time_tick, 400)[1] == 0:
             if self.rod_pos[3] > 221:
                 self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # NO ROD CONTROL
             else:
@@ -811,7 +806,16 @@ class A3Cagent(threading.Thread):
 
             #
             self.one_agents_episode = episode
+            episode += 1
+
             start_ep_time = datetime.datetime.now()
+
+            # logger
+            self.logger = logging.getLogger('{}'.format(self.name))
+            self.logger.setLevel(logging.INFO)
+            self.logger.addHandler(
+                logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, self.one_agents_episode)))
+
             self.logger.info(f'[{datetime.datetime.now()}] Start ep')
             while True:
                 self.run_cns(iter_cns)
@@ -880,7 +884,6 @@ class A3Cagent(threading.Thread):
                 if done:
                     self.logger.info(f'[{datetime.datetime.now()}] Training Done - {start_ep_time}~'
                                      f'{datetime.datetime.now()}')
-                    episode += 1
                     # tensorboard update
                     stats = [self.db.train_DB['TotR'],
                              self.db.train_DB['Avg_q_max'] / self.db.train_DB['Avg_max_step'],
