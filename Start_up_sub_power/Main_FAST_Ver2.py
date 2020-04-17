@@ -278,12 +278,15 @@ class A3Cagent(threading.Thread):
         self.COND_AFTER = False
         self.COND_AFTER_TIME = 0
 
-        # done_, R_ = self.update_parameter(A=0)
+        done_, R_ = self.update_parameter(A=0)
 
     def Log(self, txt):
         out_txt = f'[{datetime.datetime.now()}][{self.one_agents_episode:4}]'
         out_txt += txt
-        self.logger.info(out_txt)
+        try:
+            self.logger.info(out_txt)
+        except:
+            pass
 
     def update_parameter(self, A, only_val_up=False):
         '''
@@ -369,9 +372,9 @@ class A3Cagent(threading.Thread):
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
 
-            if abs(self.Op_ref_power - support_up) >= 0.05:
-                support_up = self.Op_ref_power + 0.05
-                support_down = self.Op_ref_power - 0.05
+            # if abs(self.Op_ref_power - support_up) >= 0.05:
+            #     support_up = self.Op_ref_power + 0.05
+            #     support_down = self.Op_ref_power - 0.05
 
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
@@ -402,9 +405,9 @@ class A3Cagent(threading.Thread):
             support_up = update_tick * one_tick * 1.2 + 0.02           # 0.020 ~ 1.000
             support_down = update_tick * one_tick * 0.8 + 0.02           # 0.020 ~ 1.000
 
-            if abs(self.Op_ref_power - support_up) >= 0.05:
-                support_up = self.Op_ref_power + 0.05
-                support_down = self.Op_ref_power - 0.05
+            # if abs(self.Op_ref_power - support_up) >= 0.05:
+            #     support_up = self.Op_ref_power + 0.05
+            #     support_down = self.Op_ref_power - 0.05
 
             self.Op_hi_bound = support_up + 0.02                 # 0.040 ~ 1.020
             self.Op_low_bound = support_down - 0.02                # 0.000 ~ 0.980
@@ -433,8 +436,8 @@ class A3Cagent(threading.Thread):
             # 1Tick 당 증가해야할 Power 계산
             update_tick = self.COND_AFTER_TIME - self.COND_INIT_END_TIME  # 현재 - All rod out 해온 운전 시간 빼기
             self.Op_ref_power = update_tick * one_tick + 0.02  # 0.020 ~ 1.000
-            self.Op_hi_bound = self.Op_ref_power + 0.02 # 0.040 ~ 1.020
-            self.Op_low_bound = self.Op_ref_power - 0.02  # 0.000 ~ 0.980
+            self.Op_hi_bound = 0.99 + 0.02 # 0.040 ~ 1.020
+            self.Op_low_bound = 0.99 - 0.02  # 0.000 ~ 0.980
             self.Op_ref_temp = self.Tref  #
             self.Op_T_hi_bound = self.Tref + 10
             self.Op_T_low_bound = self.Tref - 10
@@ -775,7 +778,7 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 2  # x 배속
+        self.cns_speed = 5  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
@@ -816,6 +819,7 @@ class A3Cagent(threading.Thread):
             self.logger_hand = logging.FileHandler('{}/log/each_log/{}.log'.format(MAKE_FILE_PATH, self.one_agents_episode))
             self.logger.addHandler(self.logger_hand)
             self.logger.info(f'[{datetime.datetime.now()}] Start ep')
+
             while True:
                 self.run_cns(iter_cns)
                 done, R = self.update_parameter(A=0)
