@@ -737,18 +737,18 @@ class A3Cagent(threading.Thread):
         elif self.COND_ALL_ROD_OUT or self.COND_NET_BRK or self.COND_AFTER:
             if action == 0:  # stay pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR on / ALTDIL off
-                self.send_action_append(['WBOAC','WDEWT'], [8, 8])  # Set-Make-up Valve
+                self.send_action_append(['WBOAC','WDEWT'], [1, 8])  # Set-Make-up Valve
                 self.send_action_append(['EBOAC', 'EDEWT'], [0, 0])  # NO INJECT BORN
             elif action == 1:  # increase pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])  # BOR off / ALTDIL on
-                self.send_action_append(['WBOAC','WDEWT'], [8, 8])     # Valve POS
+                self.send_action_append(['WBOAC','WDEWT'], [1, 8])     # Valve POS
                 # self.send_action_append(['EBOAC', 'EDEWT'], [0, 70])   # MAKE-Up
-                self.send_action_append(['EBOAC', 'EDEWT'], [0, 200])   # MAKE-Up
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 400])   # MAKE-Up
             elif action == 2:  # decrease pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR off / ALTDIL on
-                self.send_action_append(['WBOAC','WDEWT'], [8, 8])     # Valve POS
+                self.send_action_append(['WBOAC','WDEWT'], [1, 8])     # Valve POS
                 # self.send_action_append(['EBOAC', 'EDEWT'], [10, 0])   # BORN
-                self.send_action_append(['EBOAC', 'EDEWT'], [15, 0])   # BORN
+                self.send_action_append(['EBOAC', 'EDEWT'], [5, 0])   # BORN
             else:
                 print('ERROR ACT')
         else:
@@ -778,7 +778,7 @@ class A3Cagent(threading.Thread):
 
     def run(self):
         global episode
-        self.cns_speed = 5  # x 배속
+        self.cns_speed = 1  # x 배속
 
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
