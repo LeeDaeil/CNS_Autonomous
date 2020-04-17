@@ -364,7 +364,7 @@ class A3Cagent(threading.Thread):
             # Goal 시간 당 1% 씩 출력 증가
 
             # Get Op bound
-            increse_pow_per = 0.03                                      # 시간당 0.03 -> 3% 증가
+            increse_pow_per = 0.01                                      # 시간당 0.03 -> 3% 증가
             one_tick = increse_pow_per / (60 * 300)                     # 300Tick = 1분 -> 60 * 300 = 1시간
                                                                         # 1Tick 당 증가해야할 Power 계산
             update_tick = self.Time_tick - self.COND_INIT_END_TIME      # 현재 - All rod out 해온 운전 시간 빼기
@@ -397,7 +397,7 @@ class A3Cagent(threading.Thread):
             # Goal 시간 당 1% 씩 출력 증가 + Tre/ave 보상 제공
 
             # Get Op bound
-            increse_pow_per = 0.03                                  # 시간당 0.03 -> 3% 증가
+            increse_pow_per = 0.01                                  # 시간당 0.03 -> 3% 증가
             one_tick = increse_pow_per / (60 * 300)                 # 300Tick = 1분 -> 60 * 300 = 1시간
                                                                     # 1Tick 당 증가해야할 Power 계산
             update_tick = self.Time_tick - self.COND_INIT_END_TIME  # 현재 - All rod out 해온 운전 시간 빼기
@@ -431,7 +431,7 @@ class A3Cagent(threading.Thread):
             # Goal 출력 유지.
 
             # Get Op bound
-            increse_pow_per = 0.03  # 시간당 0.03 -> 3% 증가
+            increse_pow_per = 0.01  # 시간당 0.03 -> 3% 증가
             one_tick = increse_pow_per / (60 * 300)  # 300Tick = 1분 -> 60 * 300 = 1시간
             # 1Tick 당 증가해야할 Power 계산
             update_tick = self.COND_AFTER_TIME - self.COND_INIT_END_TIME  # 현재 - All rod out 해온 운전 시간 빼기
@@ -485,6 +485,8 @@ class A3Cagent(threading.Thread):
         # 종료 조건 계산
         done_counter = 0
         done_cause = ''
+        if self.Reactor_power <= 0.005: # 0.5퍼
+            done_cause += f'_Reactor low power{self.Reactor_power}_'
         if self.rod_pos[0] == 0:
             done_counter += 1
             done_cause += '_Reactor Trip_'
@@ -704,16 +706,19 @@ class A3Cagent(threading.Thread):
         if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
             self.send_action_append(['KSWO205'], [1])
         # 5) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
-        if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
+        if self.Reactor_power >= 0.20 and self.Mwe_power >= 1 and self.cond_pump_2 == 0:
             self.send_action_append(['KSWO205'], [1])
         # 6) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
-        if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+        # if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+        if self.Reactor_power >= 0.40 and self.main_feed_pump_2 == 0:
             self.send_action_append(['KSWO193'], [1])
         # 7) 출력 50% 이상 및 전기 출력이 475Mwe
-        if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+        # if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+        if self.Reactor_power >= 0.50 and self.cond_pump_3 == 0:
             self.send_action_append(['KSWO206'], [1])
         # 8) 출력 80% 이상 및 전기 출력이 765Mwe
-        if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
+        # if self.Reactor_power >= 0.80 and self.Mwe_power >= 765 and self.main_feed_pump_3 == 0:
+        if self.Reactor_power >= 0.80 and self.main_feed_pump_3 == 0:
             self.send_action_append(['KSWO192'], [1])
 
         # 9) 제어봉 조작 신호
@@ -743,7 +748,7 @@ class A3Cagent(threading.Thread):
                 self.send_action_append(['KSWO75', 'KSWO77'], [0, 1])  # BOR off / ALTDIL on
                 self.send_action_append(['WBOAC','WDEWT'], [1, 8])     # Valve POS
                 # self.send_action_append(['EBOAC', 'EDEWT'], [0, 70])   # MAKE-Up
-                self.send_action_append(['EBOAC', 'EDEWT'], [0, 400])   # MAKE-Up
+                self.send_action_append(['EBOAC', 'EDEWT'], [0, 200])   # MAKE-Up
             elif action == 2:  # decrease pow
                 self.send_action_append(['KSWO75', 'KSWO77'], [1, 0])  # BOR off / ALTDIL on
                 self.send_action_append(['WBOAC','WDEWT'], [1, 8])     # Valve POS
