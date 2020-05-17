@@ -30,7 +30,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
                 'VCT_half': {'key': '-', 'v': 0},
             },
             'DB': {
-                'Act': [], 'Test_val': []
+                'Act': [], 'Test_val': [], 'Test_2': [],
             }
         }
         # copy
