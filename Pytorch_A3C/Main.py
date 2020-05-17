@@ -6,7 +6,7 @@ import time
 import datetime
 
 import pandas as pd
-from copy import copy
+import copy
 from collections import deque
 
 
@@ -15,7 +15,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [1, 0, 0]
+        self.CNS_NUMBERS = [3, 0, 0]
 
         self.DB_dict = {
             'Buf': {
@@ -38,7 +38,6 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         # copy
         for _ in self.DB_dict['Net_S'].keys():
             self.DB_dict['DB'][_] = []
-        self.init_DB_dict = copy(self.DB_dict)
 
         self.Act_D = 3
         self.State_D = len(self.DB_dict['Net_S'].keys())
@@ -73,7 +72,8 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
 
     def init_save_db(self):            # 저장용 변수 초기화
         self.dump_save_val()
-        self.DB_dict = self.init_DB_dict
+        for _ in self.DB_dict['DB'].keys():
+            self.DB_dict['DB'][_].clear()
         return 0
 
     # 버퍼
@@ -115,6 +115,7 @@ class Worker(mp.Process):
                 # input-> action -> act_val : 입력 넣고 네트워크에서 나온 값 int로 치환
                 _input_state = torch.FloatTensor(set_s).view(1, self.W_info.State_t, self.W_info.State_D)
                 a, prob_a = self.L_net.choose_action_fin(_input_state)
+                print(a, prob_a)
 
                 # 액션을 보내기 및 저장
                 self.send_action(action=a)
@@ -191,8 +192,9 @@ class Worker(mp.Process):
             buffer_v_target.append(v_s_)
         buffer_v_target.reverse()
 
-        loss = lnet.loss_fun(torch.FloatTensor(bs), torch.FloatTensor(ba), v_s_)
-        # print("LOSS", loss)
+        loss = lnet.loss_fun(torch.FloatTensor(bs), torch.FloatTensor(ba),
+                             torch.FloatTensor(buffer_v_target).view(len(bs), 1))
+        print("LOSS", loss)
         opt.zero_grad()
         loss.backward()
         for lp, gp in zip(lnet.parameters(), gnet.parameters()):

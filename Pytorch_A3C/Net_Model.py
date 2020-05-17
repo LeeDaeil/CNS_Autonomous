@@ -97,13 +97,13 @@ class Agent_network(nn.Module):
         # s: torch.Tensor [batch, time, val]
         sample_action = self.choose_action_val(s)
         # 샘플린된 값에서 action을 정수로 변환
-        return sample_action.max(dim=1)[1].item(), sample_action.tolist()[0]
+        return sample_action.argmax(dim=1)[0].item(), sample_action.tolist()
 
     def loss_fun(self, s, a, r_t):
         # s: torch.Tensor [batch, time, val]
         # a: torch.Tensor [batch, val]
         # r: torch.Tensor [batch, val]
-        print(np.shape(s), np.shape(a))
+        print(s.shape, a.shape, r_t.shape)
         self.train()
 
         mu, sigma, values = self.forward(s)
