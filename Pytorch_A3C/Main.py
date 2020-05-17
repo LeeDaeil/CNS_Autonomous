@@ -4,7 +4,8 @@ import torch
 import torch.multiprocessing as mp
 import time
 import datetime
-import numpy as np
+
+import pandas as pd
 from copy import copy
 from collections import deque
 
@@ -14,13 +15,13 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [2, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.DB_dict = {
             'Buf': {
                 'S': [], 'R': [], 'A': []
             },
-            'Act': 0,
+            'Act': 0, 'Reward': 0,
             'Net_S': {
                 'Time': {'key': 'KCNTOMS', 'v': 0},
                 'Temp_ref': {'key': 'UAVLEGM', 'v': 0},
@@ -30,7 +31,8 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
                 'VCT_half': {'key': '-', 'v': 0},
             },
             'DB': {
-                'Act': [], 'Test_val': [], 'Test_2': [],
+                'Act': [], 'Reward': [], 'Test_val': [],
+                # + 'Net_s'
             }
         }
         # copy
@@ -44,28 +46,33 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         #
 
     def make_s(self, mem):      # 네트워크 입력 변수의 리스트에 상응하는 S 반환
-        # 1) mem 에서 업데이트
+        # 1) mem 에서 업데이트 및 저장
         for val in self.DB_dict['Net_S'].keys():
-            if val in mem.keys():
+            if self.DB_dict['Net_S'][val]['key'] in mem.keys():
                 self.DB_dict['Net_S'][val]['v'] = mem[self.DB_dict['Net_S'][val]['key']]['Val']
 
-        # 2) Overwrite
+        # 2) Overwrite 및 변수 가공
         self.DB_dict['Net_S']['VCT_half']['v'] = self.DB_dict['Net_S']['VCT_pressure']['v']/2
 
         # 3) Save DB
-        self.DB_dict['DB']['Act'].append(self.DB_dict['DB']['Act'])
+        self.DB_dict['DB']['Act'].append(self.DB_dict['Act'])
+        self.DB_dict['DB']['Reward'].append(self.DB_dict['Reward'])
+        self.DB_dict['DB']['Test_val'].append(mem['KCNTOMS']['Val'])
+        for val in self.DB_dict['Net_S'].keys():
+            self.DB_dict['DB'][val].append(self.DB_dict['Net_S'][val]['v'])
 
         return [self.DB_dict['Net_S'][_]['v'] for _ in self.DB_dict['Net_S'].keys()]
 
     # SAVE 모듈
-    def add_act_save_val(self, act):    # 제어 변수 저장
-        self.DB_dict['Act'] = act
-        return 0
+    def save_val(self, para, val):
+        self.DB_dict[para] = val
 
     def dump_save_val(self):            # 저장된 데이터 CSV 저장
-        pass
+        temp = pd.DataFrame(self.DB_dict['DB'])
+        temp.to_csv('Test_1.csv')
 
-    def init_save_val(self):            # 저장용 변수 초기화
+    def init_save_db(self):            # 저장용 변수 초기화
+        self.dump_save_val()
         self.DB_dict = self.init_DB_dict
         return 0
 
@@ -111,7 +118,7 @@ class Worker(mp.Process):
 
                 # 액션을 보내기 및 저장
                 self.send_action(action=a)
-                self.W_info.add_act_save_val(act=a)
+                self.W_info.save_val('Act', a)
 
                 # 1회 Run
                 self.CNS.run_freeze_CNS()
@@ -120,6 +127,7 @@ class Worker(mp.Process):
 
                 # 평가
                 done, r = self.estimate_state()
+                self.W_info.save_val('Reward', r)
 
                 # 값 저장후 각 버퍼의 길이 리스트 반환
                 [Leg_s, Leg_r, Leg_a] = self.W_info.append_buf(s=set_s, r=r, a=prob_a)
@@ -130,12 +138,14 @@ class Worker(mp.Process):
 
                 set_s.append(self.W_info.make_s(self.CNS.mem))  # S 만들고 저장
 
-                if Leg_s >= 5:
+                if Leg_s >= 5 or done:
                     print('Train!')
                     self.push_and_pull(self.G_opt, self.L_net, self.G_net, done, set_s, self.W_info.DB_dict['Buf'])
-                    buffer_s, buffer_a, buffer_r = [], [], []
+                    self.W_info.init_buf()
 
                     if done:
+                        self.W_info.init_save_db()
+                        print('DONE - DB initial')
                         break
                 #
 
