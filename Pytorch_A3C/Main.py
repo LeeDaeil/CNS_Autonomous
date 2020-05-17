@@ -115,7 +115,6 @@ class Worker(mp.Process):
                 # input-> action -> act_val : 입력 넣고 네트워크에서 나온 값 int로 치환
                 _input_state = torch.FloatTensor(set_s).view(1, self.W_info.State_t, self.W_info.State_D)
                 a, prob_a = self.L_net.choose_action_fin(_input_state)
-                print(a, prob_a)
 
                 # 액션을 보내기 및 저장
                 self.send_action(action=a)

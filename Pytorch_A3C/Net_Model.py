@@ -103,7 +103,7 @@ class Agent_network(nn.Module):
         # s: torch.Tensor [batch, time, val]
         # a: torch.Tensor [batch, val]
         # r: torch.Tensor [batch, val]
-        print(s.shape, a.shape, r_t.shape)
+        # print(s.shape, a.shape, r_t.shape)
         self.train()
 
         mu, sigma, values = self.forward(s)
