@@ -15,7 +15,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [3, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.DB_dict = {
             'Buf': {
