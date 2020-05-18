@@ -112,7 +112,7 @@ class Agent_network(nn.Module):
         # s: torch.Tensor [batch, time, val]
         sample_action, get_comp_dis, comp_act = self.choose_action_val(s)
         # 샘플린된 값에서 action을 정수로 변환
-        return sample_action.argmax(dim=1)[0].item(), sample_action.tolist(), comp_act, get_comp_dis
+        return sample_action.argmax(dim=1)[0].item(), sample_action.tolist(), comp_act, get_comp_dis.tolist()
 
     def loss_fun(self, s, a, c_a, r_t):
         # s: torch.Tensor [batch, time, val]
@@ -137,9 +137,7 @@ class Agent_network(nn.Module):
         comp_entropy = 0.5 + 0.5 * math.log(2 * math.pi) + torch.log(comp_dis_m.scale)
         comp_exp_v = comp_log_prob * td.detach() + 0.005 * comp_entropy
         c_a_loss = -comp_exp_v
-
-        print("LOSS", c_loss, a_loss, c_a_loss)
-
+        # print("LOSS", c_loss.mean() + a_loss.mean() + c_a_loss.mean())
         return c_loss.mean() + a_loss.mean() + c_a_loss.mean()
 
     # ===========================================================

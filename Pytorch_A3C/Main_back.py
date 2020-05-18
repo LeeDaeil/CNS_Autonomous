@@ -1,30 +1,28 @@
-from Pytorch_A3C.Net_Model import Agent_network
+from Pytorch_A3C.Net_Model_Back import Agent_network
 from Pytorch_A3C.CNS_UDP_FAST import CNS
 import torch
 import torch.multiprocessing as mp
 import time
+import datetime
 
 import pandas as pd
+import copy
 from collections import deque
 import numpy as np
+
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [5, 0, 0]
-
-        self.L_net_name = 'TEMP'
-        self.Act_D = 3
-        self.Comp_D = 8
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.DB_dict = {
             'Buf': {
-                'S': [], 'R': [], 'A': [], 'CA': []
+                'S': [], 'R': [], 'A': []
             },
-            'Act': 0, 'Act_p': [0 for _ in range(self.Act_D)], 'Comp': 0,
-            'Comp_p': [0 for _ in range(self.Comp_D)], 'Reward': 0,
+            'Act': 0, 'Reward': 0,
             'Net_S': {
                 'Time': {'key': 'KCNTOMS', 'v': 0},
                 'Temp_ref': {'key': 'UAVLEGM', 'v': 0},
@@ -34,7 +32,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
                 'VCT_half': {'key': '-', 'v': 0},
             },
             'DB': {
-                'Act': [], 'Act_p': [], 'Comp': [], 'Comp_p': [], 'Reward': [], 'Test_val': [],
+                'Act': [], 'Reward': [], 'Test_val': [],
                 # + 'Net_s'
             }
         }
@@ -42,6 +40,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         for _ in self.DB_dict['Net_S'].keys():
             self.DB_dict['DB'][_] = []
 
+        self.Act_D = 3
         self.State_D = len(self.DB_dict['Net_S'].keys())
         self.State_t = 12
         #
@@ -50,16 +49,13 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         # 1) mem 에서 업데이트 및 저장
         for val in self.DB_dict['Net_S'].keys():
             if self.DB_dict['Net_S'][val]['key'] in mem.keys():
-                self.DB_dict['Net_S'][val]['v'] = mem[self.DB_dict['Net_S'][val]['key']]['Val']/100
+                self.DB_dict['Net_S'][val]['v'] = mem[self.DB_dict['Net_S'][val]['key']]['Val']
 
         # 2) Overwrite 및 변수 가공
         self.DB_dict['Net_S']['VCT_half']['v'] = self.DB_dict['Net_S']['VCT_pressure']['v']/2
 
         # 3) Save DB
         self.DB_dict['DB']['Act'].append(self.DB_dict['Act'])
-        self.DB_dict['DB']['Act_p'].append(self.DB_dict['Act_p'])
-        self.DB_dict['DB']['Comp'].append(self.DB_dict['Comp'])
-        self.DB_dict['DB']['Comp_p'].append(self.DB_dict['Comp_p'])
         self.DB_dict['DB']['Reward'].append(self.DB_dict['Reward'])
         self.DB_dict['DB']['Test_val'].append(mem['KCNTOMS']['Val'])
         for val in self.DB_dict['Net_S'].keys():
@@ -73,29 +69,23 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
 
     def dump_save_val(self):            # 저장된 데이터 CSV 저장
         temp = pd.DataFrame(self.DB_dict['DB'])
-        temp.to_csv(f'{self.L_net_name}.csv')
+        temp.to_csv('Test_1.csv')
 
     def init_save_db(self):            # 저장용 변수 초기화
         self.dump_save_val()
         for _ in self.DB_dict['DB'].keys():
             self.DB_dict['DB'][_].clear()
-        self.DB_dict['Act'] = 0
-        self.DB_dict['Act_p'] = [0 for _ in range(self.Act_D)]
-        self.DB_dict['Reward'] = 0
-        self.DB_dict['Comp'] = 0
-        self.DB_dict['Comp_p'] = [0 for _ in range(self.Comp_D)]
         return 0
 
     # 버퍼
     def init_buf(self):                 # 버퍼용 변수 초기화
-        self.DB_dict['Buf'] = {'S': [], 'R': [], 'A': [], 'CA': []}
+        self.DB_dict['Buf'] = {'S': [], 'R': [], 'A': []}
         return 0
 
-    def append_buf(self, s, r, a, ca): # 값 저장후 각 버퍼의 길이 반환
+    def append_buf(self, s, r, a): # 값 저장후 각 버퍼의 길이 반환
         self.DB_dict['Buf']['S'].append(s)
         self.DB_dict['Buf']['R'].append(r)
         self.DB_dict['Buf']['A'].append(a)
-        self.DB_dict['Buf']['CA'].append(ca)
         return [len(self.DB_dict['Buf'][key]) for key in self.DB_dict['Buf'].keys()]
 
 
@@ -105,10 +95,8 @@ class Worker(mp.Process):
         super(Worker, self).__init__()
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
         self.W_info = Work_info()
-        self.W_info.L_net_name = L_net_name
         self.L_net = Agent_network(agent_name=L_net_name, state_dim=self.W_info.State_D,
-                                   state_time=self.W_info.State_t, action_dim=self.W_info.Act_D,
-                                   comp_dim=self.W_info.Comp_D)
+                                   state_time=self.W_info.State_t, action_dim=self.W_info.Act_D)
         self.G_net, self.G_opt = G_net, G_OPT
         self.Shared_info = Shared_info
 
@@ -121,51 +109,44 @@ class Worker(mp.Process):
             for i in range(self.W_info.State_t):
                 self.CNS.run_freeze_CNS()
                 # [M] monitoring part
-                # self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
-                self.Shared_info.value = ep_r
+                self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
                 set_s.append(self.W_info.make_s(self.CNS.mem))  # S 만들고 저장
 
             for i in range(1000):
                 # input-> action -> act_val : 입력 넣고 네트워크에서 나온 값 int로 치환
                 _input_state = torch.FloatTensor(set_s).view(1, self.W_info.State_t, self.W_info.State_D)
-                a, prob_a, ca, prob_ca = self.L_net.choose_action_fin(_input_state)
+                a, prob_a = self.L_net.choose_action_fin(_input_state)
 
                 # 액션을 보내기 및 저장
                 self.send_action(action=a)
                 self.W_info.save_val('Act', a)
-                self.W_info.save_val('Act_p', prob_a[0])
-                self.W_info.save_val('Comp', ca)
-                self.W_info.save_val('Comp_p', prob_ca[0])
 
                 # 1회 Run
                 self.CNS.run_freeze_CNS()
                 # [M] monitoring part
-                # self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
+                self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
 
                 # 평가
-                done, r = self.estimate_state(a, ca)
-                ep_r += int(r*100)
-                self.Shared_info.value = ep_r
-
+                done, r = self.estimate_state()
                 self.W_info.save_val('Reward', r)
 
                 # 값 저장후 각 버퍼의 길이 리스트 반환
-                [Leg_s, Leg_r, Leg_a, Leg_ca] = self.W_info.append_buf(s=set_s, r=r, a=prob_a, ca=prob_ca)
+                [Leg_s, Leg_r, Leg_a] = self.W_info.append_buf(s=set_s, r=r, a=prob_a)
 
                 if self.CNS.mem['KCNTOMS']['Val'] > 120:
-                    # print('DONE')
+                    print('DONE')
                     done = True
 
                 set_s.append(self.W_info.make_s(self.CNS.mem))  # S 만들고 저장
 
                 if Leg_s >= 5 or done:
-                    # print('Train!')
+                    print('Train!')
                     self.push_and_pull(self.G_opt, self.L_net, self.G_net, done, set_s, self.W_info.DB_dict['Buf'])
                     self.W_info.init_buf()
 
                     if done:
                         self.W_info.init_save_db()
-                        # print('DONE - DB initial')
+                        print('DONE - DB initial')
                         break
                 #
 
@@ -189,32 +170,21 @@ class Worker(mp.Process):
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
-    def estimate_state(self, a, ca):
+    def estimate_state(self):
         done = False
         r = self.CNS.mem['QPROREL']['Val']
 
-        if ca == 3:
-            if a == 0:
-                r = 0.1
-            else:
-                r = 0.05
-        else:
-            r = 0
-
-        if r == 0:
-            done = True
-
+        print(r)
         return done, r
 
     def push_and_pull(self, opt, lnet, gnet, done, s_, buf):
-        bs, ba, br, bca = buf['S'], buf['A'], buf['R'], buf['CA']
+        bs, ba, br = buf['S'], buf['A'], buf['R']
         gamma = 0.001
         if done:
             v_s_ = 0.0      # terminal
         else:
-            # 2 -> value
             v_s_ = lnet.forward(torch.FloatTensor(s_).view(1, self.W_info.State_t,
-                                                           self.W_info.State_D))[2].data.numpy()[0, 0]
+                                                           self.W_info.State_D))[-1].data.numpy()[0, 0]
 
         buffer_v_target = []
         for r in br[::-1]:
@@ -222,7 +192,10 @@ class Worker(mp.Process):
             buffer_v_target.append(v_s_)
         buffer_v_target.reverse()
 
-        loss = lnet.loss_fun(torch.FloatTensor(bs), torch.FloatTensor(ba), torch.FloatTensor(bca),
+        print(buffer_v_target)
+        print(np.shape(bs), np.shape(ba), np.shape(buffer_v_target))
+
+        loss = lnet.loss_fun(torch.FloatTensor(bs), torch.FloatTensor(ba),
                              torch.FloatTensor(buffer_v_target).view(len(bs), 1))
         print("LOSS", loss)
         opt.zero_grad()
@@ -247,8 +220,7 @@ class Shared_OPT(torch.optim.Adam):
 if __name__ == '__main__':
     W_info = Work_info()
     GlobalNet = Agent_network(agent_name="Main", state_dim=W_info.State_D,
-                              state_time=W_info.State_t, action_dim=W_info.Act_D,
-                              comp_dim=W_info.Comp_D)
+                              state_time=W_info.State_t, action_dim=W_info.Act_D)
     GlobalNet.share_memory()
     Opt = Shared_OPT(GlobalNet.parameters())
 
