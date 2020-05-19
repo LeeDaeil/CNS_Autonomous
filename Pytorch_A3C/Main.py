@@ -17,7 +17,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
 
         self.L_net_name = 'TEMP'
         self.Act_D = 3
-        self.Comp_D = 8
+        self.Comp_D = 3
 
         self.DB_dict = {
             'Buf': {
@@ -26,12 +26,15 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
             'Act': 0, 'Act_p': [0 for _ in range(self.Act_D)], 'Comp': 0,
             'Comp_p': [0 for _ in range(self.Comp_D)], 'Reward': 0,
             'Net_S': {
+                # phy
                 'Time': {'key': 'KCNTOMS', 'v': 0},
-                'Temp_ref': {'key': 'UAVLEGM', 'v': 0},
-                'Temp_avg': {'key': 'UAVLEGS', 'v': 0},
-                'VCT_level': {'key': 'ZINST63', 'v': 0},
-                'VCT_pressure': {'key': 'ZVCT', 'v': 0},
-                'VCT_half': {'key': '-', 'v': 0},
+                'Critical': {'key': 'CRETIV', 'v': 0},
+                'MWe_power': {'key': 'ZINST124', 'v': 0},
+
+                # comp
+                'Char_pump_2': {'key': 'KLAMPO70', 'v': 0},
+                'BHV22': {'key': 'BHV22', 'v': 0},
+                'RHR_pump': {'key': 'KLAMPO55', 'v': 0},
             },
             'DB': {
                 'Act': [], 'Act_p': [], 'Comp': [], 'Comp_p': [], 'Reward': [], 'Test_val': [],
@@ -53,7 +56,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
                 self.DB_dict['Net_S'][val]['v'] = mem[self.DB_dict['Net_S'][val]['key']]['Val']/100
 
         # 2) Overwrite 및 변수 가공
-        self.DB_dict['Net_S']['VCT_half']['v'] = self.DB_dict['Net_S']['VCT_pressure']['v']/2
+        self.DB_dict['Net_S']['MWe_power']['v'] = self.DB_dict['Net_S']['MWe_power']['v']/1000
 
         # 3) Save DB
         self.DB_dict['DB']['Act'].append(self.DB_dict['Act'])
@@ -114,15 +117,19 @@ class Worker(mp.Process):
 
     def run(self):
         while True:
-            self.CNS.init_cns(initial_nub=17)
+            self.CNS.init_cns(initial_nub=1)
+            time.sleep(1)
+            self.CNS._send_malfunction_signal(12, 100100, 15)
+            time.sleep(1)
             ep_r = 0
+            ep_loss = []
             set_s = deque(maxlen=self.W_info.State_t)
 
             for i in range(self.W_info.State_t):
                 self.CNS.run_freeze_CNS()
                 # [M] monitoring part
-                # self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
-                self.Shared_info.value = ep_r
+                self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
+                # self.Shared_info.value = ep_r
                 set_s.append(self.W_info.make_s(self.CNS.mem))  # S 만들고 저장
 
             for i in range(1000):
@@ -131,7 +138,7 @@ class Worker(mp.Process):
                 a, prob_a, ca, prob_ca = self.L_net.choose_action_fin(_input_state)
 
                 # 액션을 보내기 및 저장
-                self.send_action(action=a)
+                self.send_action(comp=ca, action=a)
                 self.W_info.save_val('Act', a)
                 self.W_info.save_val('Act_p', prob_a[0])
                 self.W_info.save_val('Comp', ca)
@@ -140,19 +147,19 @@ class Worker(mp.Process):
                 # 1회 Run
                 self.CNS.run_freeze_CNS()
                 # [M] monitoring part
-                # self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
+                self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
 
                 # 평가
                 done, r = self.estimate_state(a, ca)
-                ep_r += int(r*100)
-                self.Shared_info.value = ep_r
+                # ep_r += int(r*100)
+                # self.Shared_info.value = ep_r
 
                 self.W_info.save_val('Reward', r)
 
                 # 값 저장후 각 버퍼의 길이 리스트 반환
                 [Leg_s, Leg_r, Leg_a, Leg_ca] = self.W_info.append_buf(s=set_s, r=r, a=prob_a, ca=prob_ca)
 
-                if self.CNS.mem['KCNTOMS']['Val'] > 120:
+                if self.CNS.mem['KCNTOMS']['Val'] > 300:
                     # print('DONE')
                     done = True
 
@@ -160,10 +167,13 @@ class Worker(mp.Process):
 
                 if Leg_s >= 5 or done:
                     # print('Train!')
-                    self.push_and_pull(self.G_opt, self.L_net, self.G_net, done, set_s, self.W_info.DB_dict['Buf'])
+                    loss_ = self.push_and_pull(self.G_opt, self.L_net, self.G_net,
+                                               done, set_s, self.W_info.DB_dict['Buf'])
+                    ep_loss.append(loss_)
                     self.W_info.init_buf()
 
                     if done:
+                        print(sum(self.W_info.DB_dict['DB']['Reward']), '|', sum(ep_loss)/len(ep_loss))
                         self.W_info.init_save_db()
                         # print('DONE - DB initial')
                         break
@@ -174,35 +184,92 @@ class Worker(mp.Process):
             self.para.append(pa[_])
             self.val.append(va[_])
 
-    def send_action(self, action):
+    def send_action(self, comp, action):
         # 전송될 변수와 값 저장하는 리스트
         self.para = []
         self.val = []
 
-        if action == 0:
-            self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
-        elif action == 1:
-            self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
-        elif action == 2:
-            self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
+        def comp_act_updown(action, up, down):
+            if action == 0:
+                 self.send_action_append([up, down], [0, 0])  # Stay
+            elif action == 1:
+                 self.send_action_append([up, down], [1, 0])  # Out
+            elif action == 2:
+                 self.send_action_append([up, down], [0, 1])  # In
+
+        def comp_act_onoff(action, para):
+            if action == 0:
+                 pass
+            elif action == 1:
+                 self.send_action_append([para], [1])  # On
+            elif action == 2:
+                 self.send_action_append([para], [0])  # Off
+
+        if comp == 0: comp_act_onoff(action, 'KSWO70')      # charging
+        if comp == 1: comp_act_onoff(action, 'KSWO81')      # HV22
+        if comp == 2: comp_act_onoff(action, 'KSWO53')      # HV22
+
+
+
+
+        # if action == 0:
+        #     self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
+        # elif action == 1:
+        #     self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
+        # elif action == 2:
+        #     self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
     def estimate_state(self, a, ca):
-        done = False
-        r = self.CNS.mem['QPROREL']['Val']
-
-        if ca == 3:
-            if a == 0:
-                r = 0.1
+        # Safety function 1: = reactivity_control
+        Reactivity_control = [0, 0, 0]
+        if True:
+            # 1) Reactivity
+            if self.CNS.mem['CRETIV']['Val'] < 0:
+                Reactivity_control[0] = 1
             else:
-                r = 0.05
-        else:
-            r = 0
+                Reactivity_control[0] = 0
+            # 2) Stabilize or reduce reactor power
+            if 0 <= self.CNS.mem['QPROREL']['Val'] < 0.02:
+                Reactivity_control[1] += 0.5
+            else:
+                Reactivity_control[1] += 0
+            if self.CNS.mem['ZINST124']['Val'] < 1:
+                Reactivity_control[1] += 0.5
+            else:
+                Reactivity_control[1] += 0
+            # 3) Boration addition rate
+            if True:
+                # 3-1) Charging Line Flow
+                if self.CNS.mem['KLAMPO70']['Val'] == 1 and self.CNS.mem['BHV22']['Val'] == 1:
+                    Reactivity_control[2] += 0.5
+                else:
+                    Reactivity_control[2] += 0
+                # 3-2) IRWST->HV8->RHR->HV603 Flow
+                if self.CNS.mem['KLAMPO55']['Val'] == 1 and self.CNS.mem['ZRWST']['Val'] > 0 \
+                        and self.CNS.mem['BHV8']['Val'] == 1 and self.CNS.mem['BHV603']['Val'] >= 1:
+                    Reactivity_control[2] += 0.5
+                else:
+                    Reactivity_control[2] += 0
 
-        if r == 0:
-            done = True
+
+        done = False
+        r = sum(Reactivity_control)
+        # print(Reactivity_control, r)
+        # r = self.CNS.mem['QPROREL']['Val']
+
+        # if ca == 3:
+        #     if a == 0:
+        #         r = 0.1
+        #     else:
+        #         r = 0.05
+        # else:
+        #     r = 0
+        #
+        # if r == 0:
+        #     done = True
 
         return done, r
 
@@ -224,13 +291,14 @@ class Worker(mp.Process):
 
         loss = lnet.loss_fun(torch.FloatTensor(bs), torch.FloatTensor(ba), torch.FloatTensor(bca),
                              torch.FloatTensor(buffer_v_target).view(len(bs), 1))
-        print("LOSS", loss)
+        # print("LOSS", loss)
         opt.zero_grad()
         loss.backward()
         for lp, gp in zip(lnet.parameters(), gnet.parameters()):
             gp._grad = lp._grad
         opt.step()
         lnet.load_state_dict(gnet.state_dict())
+        return loss.item()
 
 
 class Shared_OPT(torch.optim.Adam):

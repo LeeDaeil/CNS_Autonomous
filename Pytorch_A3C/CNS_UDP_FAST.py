@@ -18,7 +18,7 @@ class CNS:
             # Send Socket
             self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             # SIZE BUFFER
-            self.size_buffer_mem = 1008
+            self.size_buffer_mem = 2008
             # SEND TICK
             self.want_tick = 5
 
@@ -150,7 +150,7 @@ class CNS:
 
 
 if __name__ == '__main__':
-    module = CNS('192.168.0.4', 7301, '192.168.0.10', 7301)
+    module = CNS('Main', '192.168.0.9', 7101, '192.168.0.10', 7101)
     module.init_cns(1)
     print(module.mem['KFZRUN']['Val'], module.mem['KCNTOMS']['Val'])
     module._send_malfunction_signal(12, 100100, 10)
