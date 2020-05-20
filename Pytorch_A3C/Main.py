@@ -125,6 +125,7 @@ class Worker(mp.Process):
             ep_r = 0
             ep_loss = []
             self.Shared_info_iter.value += 1
+            Shared_info_ep_local = self.Shared_info_iter.value
             set_s = deque(maxlen=self.W_info.State_t)
 
             for i in range(self.W_info.State_t):
@@ -161,10 +162,6 @@ class Worker(mp.Process):
                 # 값 저장후 각 버퍼의 길이 리스트 반환
                 [Leg_s, Leg_r, Leg_a, Leg_ca] = self.W_info.append_buf(s=set_s, r=r, a=prob_a, ca=prob_ca)
 
-                if self.CNS.mem['KCNTOMS']['Val'] > 100:
-                    # print('DONE')
-                    done = True
-
                 set_s.append(self.W_info.make_s(self.CNS.mem))  # S 만들고 저장
 
                 if Leg_s >= 5 or done:
@@ -175,7 +172,7 @@ class Worker(mp.Process):
                     self.W_info.init_buf()
 
                     if done:
-                        print(self.Shared_info_iter.value, '|', suc, sum(self.W_info.DB_dict['DB']['Reward']),
+                        print(Shared_info_ep_local, '|', suc, sum(self.W_info.DB_dict['DB']['Reward']),
                               '|', sum(ep_loss)/len(ep_loss))
                         self.W_info.init_save_db()
                         # print('DONE - DB initial')
@@ -278,6 +275,12 @@ class Worker(mp.Process):
             r = r/20 + 0.5
         else:
             r = r/20
+
+        if self.CNS.mem['KCNTOMS']['Val'] > 120:
+            # print('DONE')
+            done = True
+            r = -1
+
         return done, r, success
 
     def push_and_pull(self, opt, lnet, gnet, done, s_, buf):

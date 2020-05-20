@@ -29,19 +29,19 @@ class Agent_network(nn.Module):
         if state_time != 0:
             self.a_1 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
             self.a_2 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
-            self.a_3 = nn.LSTM(input_size=state_dim, hidden_size=3, num_layers=1)
+            self.a_3 = nn.LSTM(input_size=state_dim, hidden_size=20, num_layers=1)
 
             # print(self.a_3.all_weights)
-            self.comp_m = nn.Linear(in_features=3, out_features=comp_dim)
-            self.comp_s = nn.Linear(in_features=3, out_features=comp_dim)
+            self.comp_m = nn.Linear(in_features=20, out_features=comp_dim)
+            self.comp_s = nn.Linear(in_features=20, out_features=comp_dim)
 
-            self.a_m = nn.Linear(in_features=3+comp_dim, out_features=action_dim)
-            self.a_s = nn.Linear(in_features=3+comp_dim, out_features=action_dim)
+            self.a_m = nn.Linear(in_features=20+comp_dim, out_features=action_dim)
+            self.a_s = nn.Linear(in_features=20+comp_dim, out_features=action_dim)
 
-            self.c_1 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
-            self.c_2 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
-            self.c_3 = nn.LSTM(input_size=state_dim, hidden_size=3, num_layers=1)
-            self.c_v = nn.Linear(in_features=3, out_features=1)
+            # self.c_1 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
+            # self.c_2 = nn.Conv1d(in_channels=state_dim, out_channels=state_dim, kernel_size=2, stride=1)
+            # self.c_3 = nn.LSTM(input_size=state_dim, hidden_size=3, num_layers=1)
+            self.c_v = nn.Linear(in_features=20, out_features=1)
         else:
             self.a_1 = nn.Linear(state_dim, 2)
             self.a_m = nn.Linear(2, action_dim)
@@ -64,11 +64,11 @@ class Agent_network(nn.Module):
             # LSTM
             out = out.transpose(1, 2)
             out = self.a_3(out)
-            out = out[0][:, -1, :]
+            L_out = out[0][:, -1, :]
 
             # Linear mu, sigma
-            comp_mu = self.comp_m(out)
-            comp_sigma = F.softplus(self.comp_s(out)) + 0.001
+            comp_mu = self.comp_m(L_out)
+            comp_sigma = F.softplus(self.comp_s(L_out)) + 0.001
 
             # get comp
             # 이 단계에서 무슨 기기를 선택할 것인지 선택 후 아래로 낙수 시킴.
@@ -76,23 +76,24 @@ class Agent_network(nn.Module):
             get_comp_dis = get_comp_dis.sample()
             comp_act = get_comp_dis.argmax(dim=1)[0].item()
 
-            out = torch.cat((out, get_comp_dis), dim=1)
+            out = torch.cat((L_out, get_comp_dis), dim=1)
 
             mu = self.a_m(out)
             sigma = F.softplus(self.a_s(out)) + 0.001
 
             # Critic ========================================
             # Conv1d
-            out = F.max_pool1d(self.c_1(x), 2)
-            out = F.max_pool1d(self.c_2(out), 2)
+            # out = F.max_pool1d(self.c_1(x), 2)
+            # out = F.max_pool1d(self.c_2(out), 2)
 
             # LSTM
-            out = out.transpose(1, 2)
-            out = self.c_3(out)
-            out = out[0][:, -1, :]
+            # out = out.transpose(1, 2)
+            # out = self.c_3(out)
+            # out = out[0][:, -1, :]
 
             # Linear value
-            value = self.c_v(out)
+            # value = self.c_v(out)
+            value = self.c_v(L_out)
 
         else:
             a = self.a_1(x)
