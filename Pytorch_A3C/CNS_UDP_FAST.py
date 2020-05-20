@@ -66,7 +66,7 @@ class CNS:
         buffer = b'\x00' * 4008
         temp_data = b''
 
-        # make temp_data to send CNS
+        # make temp_data to send CNS #
         for i in range(shape(para)[0]):
             pid_temp = b'\x00' * 12
             pid_temp = bytes(para[i], 'ascii') + pid_temp[len(para[i]):]  # pid + \x00 ..

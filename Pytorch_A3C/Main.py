@@ -113,7 +113,8 @@ class Worker(mp.Process):
                                    state_time=self.W_info.State_t, action_dim=self.W_info.Act_D,
                                    comp_dim=self.W_info.Comp_D)
         self.G_net, self.G_opt = G_net, G_OPT
-        self.Shared_info = Shared_info
+        self.Shared_info = Shared_info[0]
+        self.Shared_info_iter = Shared_info[1]
 
     def run(self):
         while True:
@@ -123,6 +124,7 @@ class Worker(mp.Process):
             time.sleep(1)
             ep_r = 0
             ep_loss = []
+            self.Shared_info_iter.value += 1
             set_s = deque(maxlen=self.W_info.State_t)
 
             for i in range(self.W_info.State_t):
@@ -150,7 +152,7 @@ class Worker(mp.Process):
                 self.Shared_info.value = self.CNS.mem['KCNTOMS']['Val']
 
                 # 평가
-                done, r = self.estimate_state(a, ca)
+                done, r, suc = self.estimate_state(a, ca)
                 # ep_r += int(r*100)
                 # self.Shared_info.value = ep_r
 
@@ -159,7 +161,7 @@ class Worker(mp.Process):
                 # 값 저장후 각 버퍼의 길이 리스트 반환
                 [Leg_s, Leg_r, Leg_a, Leg_ca] = self.W_info.append_buf(s=set_s, r=r, a=prob_a, ca=prob_ca)
 
-                if self.CNS.mem['KCNTOMS']['Val'] > 300:
+                if self.CNS.mem['KCNTOMS']['Val'] > 100:
                     # print('DONE')
                     done = True
 
@@ -173,7 +175,8 @@ class Worker(mp.Process):
                     self.W_info.init_buf()
 
                     if done:
-                        print(sum(self.W_info.DB_dict['DB']['Reward']), '|', sum(ep_loss)/len(ep_loss))
+                        print(self.Shared_info_iter.value, '|', suc, sum(self.W_info.DB_dict['DB']['Reward']),
+                              '|', sum(ep_loss)/len(ep_loss))
                         self.W_info.init_save_db()
                         # print('DONE - DB initial')
                         break
@@ -208,9 +211,6 @@ class Worker(mp.Process):
         if comp == 0: comp_act_onoff(action, 'KSWO70')      # charging
         if comp == 1: comp_act_onoff(action, 'KSWO81')      # HV22
         if comp == 2: comp_act_onoff(action, 'KSWO53')      # HV22
-
-
-
 
         # if action == 0:
         #     self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
@@ -254,7 +254,6 @@ class Worker(mp.Process):
                 else:
                     Reactivity_control[2] += 0
 
-
         done = False
         r = sum(Reactivity_control)
         # print(Reactivity_control, r)
@@ -271,7 +270,15 @@ class Worker(mp.Process):
         # if r == 0:
         #     done = True
 
-        return done, r
+        success = False
+
+        if r == 2.5:
+            done = True
+            success = True
+            r = r/20 + 0.5
+        else:
+            r = r/20
+        return done, r, success
 
     def push_and_pull(self, opt, lnet, gnet, done, s_, buf):
         bs, ba, br, bca = buf['S'], buf['A'], buf['R'], buf['CA']
@@ -321,6 +328,7 @@ if __name__ == '__main__':
     Opt = Shared_OPT(GlobalNet.parameters())
 
     Shared_info, Shared_info_iter = [], 0
+    Shared_info_ep = mp.Value('i', 0)
 
     workers = []
     for cnsip, com_port, max_iter in zip(W_info.CNS_IP_LIST,
@@ -331,7 +339,7 @@ if __name__ == '__main__':
                 Shared_info.append(mp.Value('i', 0))
                 workers.append(Worker(Remote_ip=W_info.CURNET_COM_IP, Remote_port=com_port + i,
                                       CNS_ip=cnsip, CNS_port=com_port + i,
-                                      Shared_info=Shared_info[Shared_info_iter],
+                                      Shared_info=(Shared_info[Shared_info_iter], Shared_info_ep),
                                       G_net=GlobalNet, G_OPT=Opt, L_net_name=f"L_net_{i}"
                                       )
                                )
