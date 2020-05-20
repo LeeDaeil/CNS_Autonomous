@@ -125,7 +125,7 @@ class Agent_network(nn.Module):
 
         mu, sigma, values, comp_mu, comp_sigma, get_comp_dis, comp_act = self.forward(s)
         td = r_t - values
-        c_loss = td.pow(2)
+        c_loss = td.detach().pow(2)
 
         m = self.distribution(mu, sigma)
         log_prob = m.log_prob(a)

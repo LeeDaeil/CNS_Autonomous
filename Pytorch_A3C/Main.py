@@ -115,6 +115,8 @@ class Worker(mp.Process):
         self.G_net, self.G_opt = G_net, G_OPT
         self.Shared_info = Shared_info[0]
         self.Shared_info_iter = Shared_info[1]
+        self.Shared_info_win = Shared_info[2]
+        self.Shared_info_loss = Shared_info[3]
 
     def run(self):
         while True:
@@ -172,7 +174,16 @@ class Worker(mp.Process):
                     self.W_info.init_buf()
 
                     if done:
-                        print(Shared_info_ep_local, '|', suc, sum(self.W_info.DB_dict['DB']['Reward']),
+
+                        if suc: # True
+                            self.Shared_info_win.value += 1
+                        else:
+                            self.Shared_info_loss.value += 1
+
+                        print('|', self.Shared_info_win.value, '/', self.Shared_info_loss.value,
+                              '|', (self.Shared_info_win.value / (self.Shared_info_win.value + self.Shared_info_loss.value))*100,
+                              '|', Shared_info_ep_local,
+                              '|', suc, sum(self.W_info.DB_dict['DB']['Reward']),
                               '|', sum(ep_loss)/len(ep_loss))
                         self.W_info.init_save_db()
                         # print('DONE - DB initial')
@@ -279,6 +290,7 @@ class Worker(mp.Process):
         if self.CNS.mem['KCNTOMS']['Val'] > 120:
             # print('DONE')
             done = True
+            success = False
             r = -1
 
         return done, r, success
@@ -332,6 +344,8 @@ if __name__ == '__main__':
 
     Shared_info, Shared_info_iter = [], 0
     Shared_info_ep = mp.Value('i', 0)
+    Shared_info_win = mp.Value('i', 0)
+    Shared_info_loss = mp.Value('i', 0)
 
     workers = []
     for cnsip, com_port, max_iter in zip(W_info.CNS_IP_LIST,
@@ -342,7 +356,8 @@ if __name__ == '__main__':
                 Shared_info.append(mp.Value('i', 0))
                 workers.append(Worker(Remote_ip=W_info.CURNET_COM_IP, Remote_port=com_port + i,
                                       CNS_ip=cnsip, CNS_port=com_port + i,
-                                      Shared_info=(Shared_info[Shared_info_iter], Shared_info_ep),
+                                      Shared_info=(Shared_info[Shared_info_iter], Shared_info_ep,
+                                                   Shared_info_win, Shared_info_loss),
                                       G_net=GlobalNet, G_OPT=Opt, L_net_name=f"L_net_{i}"
                                       )
                                )
