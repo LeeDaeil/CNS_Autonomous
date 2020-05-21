@@ -138,6 +138,7 @@ class Agent_network(nn.Module):
         comp_entropy = 0.5 + 0.5 * math.log(2 * math.pi) + torch.log(comp_dis_m.scale)
         comp_exp_v = comp_log_prob * td.detach() + 0.005 * comp_entropy
         c_a_loss = -comp_exp_v
+
         # print("LOSS", c_loss.mean() + a_loss.mean() + c_a_loss.mean())
         return c_loss.mean() + a_loss.mean() + c_a_loss.mean()
 
