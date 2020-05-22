@@ -151,8 +151,6 @@ class Worker(mp.Process):
                 self.W_info.save_val('Comp', ca)
                 self.W_info.save_val('Comp_p', prob_ca[0])
 
-                print(a, ca)
-
                 # 1회 Run
                 self.CNS.run_freeze_CNS()
                 # [M] monitoring part

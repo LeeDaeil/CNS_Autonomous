@@ -68,6 +68,7 @@ class Agent_network(nn.Module):
 
             # Linear mu, sigma
             comp_mu = self.comp_m(L_out)
+            # comp_mu = F.relu(comp_mu)
             comp_sigma = F.softplus(self.comp_s(L_out)) + 0.001
 
             # get comp
@@ -79,6 +80,7 @@ class Agent_network(nn.Module):
             out = torch.cat((L_out, get_comp_dis), dim=1)
 
             mu = self.a_m(out)
+            # mu = F.relu(mu)
             sigma = F.softplus(self.a_s(out)) + 0.001
 
             # Critic ========================================
