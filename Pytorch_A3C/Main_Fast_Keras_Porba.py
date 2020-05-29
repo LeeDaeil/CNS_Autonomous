@@ -27,6 +27,8 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
 #------------------------------------------------------------------
 episode = 0             # Global EP
 Parameters_noise = True
+GAE = False
+MULTTACT = True
 
 class MainModel:
     def __init__(self):
@@ -88,7 +90,12 @@ class MainModel:
         tf.summary.scalar('Total_Reward/Episode', episode_total_reward)
         tf.summary.scalar('Average_Max_Prob/Episode', episode_avg_max_q)
         tf.summary.scalar('Duration/Episode', episode_duration)
-        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration]
+        if MULTTACT:
+            episode_loss = tf.Variable(0.)
+            tf.summary.scalar('Duration/Loss', episode_loss)
+            summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_loss]
+        else:
+            summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration]
         summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
         updata_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
         summary_op = tf.summary.merge_all()
@@ -119,6 +126,7 @@ class MainNet:
         self.actor, self.critic, self.fully = self.build_model(net_type=self.net_type, in_pa=self.input_pa,
                                                                ou_pa=self.output_pa, time_leg=self.time_leg)
         self.optimizer = [self.actor_optimizer(), self.critic_optimizer()]
+
 
     def build_model(self, net_type='DNN', in_pa=1, ou_pa=1, time_leg=1):
         # 8 16 32 64 128 256 512 1024 2048
@@ -151,7 +159,10 @@ class MainNet:
         # Common output network
         # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
         actor_hidden = Dense(24, activation='sigmoid', kernel_initializer='glorot_uniform')(shared)
-        action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
+        if MULTTACT:
+            action_prob = Dense(ou_pa, activation='tanh', kernel_initializer='glorot_uniform')(actor_hidden)
+        else:
+            action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
 
         # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
         value_hidden = Dense(12, activation='sigmoid', kernel_initializer='he_uniform')(shared)
@@ -269,8 +280,10 @@ class A3Cagent(threading.Thread):
         self.end_time = 0
 
         self.one_agents_episode = 0
-
-        done_, R_, Succes_ = self.update_parameter(A=0)
+        if MULTTACT:
+            done_, R_, Succes_ = self.update_parameter(A=[0, 0, 0])
+        else:
+            done_, R_, Succes_ = self.update_parameter(A=0)
 
     def update_parameter(self, A):
         '''
@@ -359,13 +372,25 @@ class A3Cagent(threading.Thread):
             self.CNS.run_freeze_CNS()
 
     def predict_action(self, actor, input_window):
+        # predict_result : (1, acts)
         predict_result = actor.predict([[input_window]])
         policy = predict_result[0]
-        try:
-            action = np.random.choice(np.shape(policy)[0], 1, p=policy)[0]
-        except:
-            print(policy)
-            sleep(10000)
+        if MULTTACT:
+            numb_act = len(policy)
+            action = []
+            for p in policy:
+                if p > 0.5:
+                    action.append(1)
+                elif -0.5 < p <= 0.5:
+                    action.append(0)
+                else:
+                    action.append(-1)
+        else:
+            try:
+                action = np.random.choice(np.shape(policy)[0], 1, p=policy)[0]
+            except:
+                print(policy)
+                sleep(10000)
         return action, predict_result
 
     def send_action_append(self, pa, va):
@@ -377,23 +402,32 @@ class A3Cagent(threading.Thread):
         # 전송될 변수와 값 저장하는 리스트
         self.para = []
         self.val = []
-
-        if action == 0: self.send_action_append(['KSWO70'], [0])  # Stay
-        elif action == 1: self.send_action_append(['KSWO70'], [1])  # Stay
-        elif action == 2: pass
-        elif action == 3: self.send_action_append(['KSWO81'], [0])  # Stay
-        elif action == 4: self.send_action_append(['KSWO81'], [1])  # Stay
-        elif action == 5: pass
-        elif action == 6: self.send_action_append(['KSWO53'], [0])  # Stay
-        elif action == 7: self.send_action_append(['KSWO53'], [1])  # Stay
-        elif action == 8: pass
+        if MULTTACT:
+            # action = (1, act_dim)
+            for a, t_pa in zip(action, ['KSWO70', 'KSWO81', 'KSWO53']):
+                if a == 1:
+                    self.send_action_append([t_pa], [0])  # Stay
+                elif a == 0:
+                    pass
+                else:
+                    self.send_action_append([t_pa], [1])  # Stay
+        else:
+            if action == 0: self.send_action_append(['KSWO70'], [0])  # Stay
+            elif action == 1: self.send_action_append(['KSWO70'], [1])  # Stay
+            elif action == 2: pass
+            elif action == 3: self.send_action_append(['KSWO81'], [0])  # Stay
+            elif action == 4: self.send_action_append(['KSWO81'], [1])  # Stay
+            elif action == 5: pass
+            elif action == 6: self.send_action_append(['KSWO53'], [0])  # Stay
+            elif action == 7: self.send_action_append(['KSWO53'], [1])  # Stay
+            elif action == 8: pass
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
 
     def train_network(self):
         Parameters_noise = True
-        GAE = False
+        # GAE = False
         if GAE:
             # Generalized advantage estimation 구현
             Dis_reward = []
@@ -451,7 +485,10 @@ class A3Cagent(threading.Thread):
             self.logger.info(f'[{datetime.datetime.now()}] Start ep')
             while True:
                 self.run_cns(iter_cns)
-                done, R, Success = self.update_parameter(A=2)
+                if MULTTACT:
+                    done, R, Success = self.update_parameter(A=[0, 0, 0])
+                else:
+                    done, R, Success = self.update_parameter(A=2)
                 self.db.add_now_state(Now_S=self.state)
                 # if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
                 #     # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
@@ -461,7 +498,10 @@ class A3Cagent(threading.Thread):
                     break
 
                 # 2.2 제어 정보와, 상태에 대한 정보를 저장한다. - 제어 이전의 데이터 세이브
-                self.save_state['Act'] = 2
+                if MULTTACT:
+                    self.save_state['Act'] = [0, 0, 0]
+                else:
+                    self.save_state['Act'] = 2
                 self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
                 self.db.save_state(self.save_state)
 
@@ -475,7 +515,10 @@ class A3Cagent(threading.Thread):
 
                     # 기본적으로 아래와 같이 상태를 추출하면 (time_length, input_para_nub) 형태로 나옴.
                     Action_net, Action_probability = self.predict_action(self.main_net.actor, old_state)
+                    if MULTTACT:
+                        self.db.train_DB['Loss'] += 0
                     self.db.train_DB['Avg_q_max'] += np.max(Action_probability)
+
                     self.db.train_DB['Avg_max_step'] += 1
 
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
@@ -509,9 +552,14 @@ class A3Cagent(threading.Thread):
                                      f'{datetime.datetime.now()}')
                     episode += 1
                     # tensorboard update
-                    stats = [self.db.train_DB['TotR'],
-                             self.db.train_DB['Avg_q_max'] / self.db.train_DB['Avg_max_step'],
-                             self.db.train_DB['Step']]
+                    if MULTTACT:
+                        stats = [self.db.train_DB['TotR'],
+                                 self.db.train_DB['Avg_q_max'] / self.db.train_DB['Avg_max_step'],
+                                 self.db.train_DB['Step'], self.db.train_DB['Loss']/self.db.train_DB['Step']]
+                    else:
+                        stats = [self.db.train_DB['TotR'],
+                                 self.db.train_DB['Avg_q_max'] / self.db.train_DB['Avg_max_step'],
+                                 self.db.train_DB['Step']]
                     for i in range(len(stats)):
                         self.sess.run(self.update_ops[i], feed_dict={self.summary_placeholders[i]: float(stats[i])})
                     summary_str = self.sess.run(self.summary_op)
@@ -541,7 +589,7 @@ class DB:
                          'Tur_R': [], 'Tur_A': [],
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
-                         'T_Avg_q_max': 0, 'T_Avg_max_step': 0,
+                         'T_Avg_q_max': 0, 'T_Avg_max_step': 0, 'Loss': 0,
                          'Up_t': 0, 'Up_t_end': 10,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
@@ -562,7 +610,7 @@ class DB:
     def initial_train_DB(self):
         self.train_DB = {'Now_S': [], 'S': [], 'Reward': [], 'Act': [],
                          'TotR': 0, 'Step': 0,
-                         'Avg_q_max': 0, 'Avg_max_step': 0,
+                         'Avg_q_max': 0, 'Avg_max_step': 0, 'Loss': 0,
                          'Up_t': 0, 'Up_t_end': 60,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
