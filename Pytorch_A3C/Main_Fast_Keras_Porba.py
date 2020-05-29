@@ -26,7 +26,7 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
                     level=logging.INFO)
 #------------------------------------------------------------------
 episode = 0             # Global EP
-
+Parameters_noise = True
 
 class MainModel:
     def __init__(self):
@@ -204,6 +204,20 @@ class MainNet:
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
+
+    def update_random_w(self):
+        # add noise in network
+        pass
+        # if Parameters_noise: # top value
+        #     mu_w, sigma_w = 0, 0.1
+        #     all_layers_w = self.fully.get_weights()
+        #     all_new_layers_w = []
+        #     for layer_w in all_layers_w:
+        #         layer_new_w = layer_w + np.random.normal(mu_w, sigma_w, size=np.shape(layer_w))
+        #         all_new_layers_w.append(layer_new_w)
+        #     self.fully.trainable = False
+        #     self.fully.set_weights(all_new_layers_w)
+        #     self.fully.trainable = True
 
     def save_model(self, name):
         self.actor.save_weights("{}/Model/{}_A3C_actor.h5".format(MAKE_FILE_PATH, name))
@@ -408,15 +422,7 @@ class A3Cagent(threading.Thread):
         self.main_net.optimizer[0]([self.db.train_DB['S'], self.db.train_DB['Act'], Advantages])
         self.main_net.optimizer[1]([self.db.train_DB['S'], Dis_reward])
 
-        # add noise in network
-        if Parameters_noise:
-            mu_w, sigma_w = 0, 0.1
-            all_layers_w = self.main_net.fully.get_weights()
-            all_new_layers_w = []
-            for layer_w in all_layers_w:
-                layer_new_w = layer_w + np.random.normal(mu_w, sigma_w, size=np.shape(layer_w))
-                all_new_layers_w.append(layer_new_w)
-            self.main_net.fully.set_weights(all_new_layers_w)
+        self.main_net.update_random_w()
 
         self.db.initial_each_trian_DB()
 

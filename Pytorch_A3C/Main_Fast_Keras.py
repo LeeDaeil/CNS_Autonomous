@@ -20,7 +20,7 @@ import logging.handlers
 from Pytorch_A3C.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
+MAKE_FILE_PATH = f'./FAST/VER_1_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
