@@ -47,7 +47,7 @@ class MainModel:
         if MANUAL:
             self.build_info['Nub'] = [1, 0, 0]
         else:
-            self.build_info['Nub'] = [10, 10, 10]
+            self.build_info['Nub'] = [1, 0, 0]
 
     def run(self):
         worker = self.build_A3C(build_info=self.build_info)
