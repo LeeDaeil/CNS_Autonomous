@@ -17,7 +17,7 @@ import shutil
 import logging
 import logging.handlers
 #------------------------------------------------------------------
-from Pytorch_A3C.CNS_UDP_FAST import CNS
+from Load_follwing_A3C.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
 get_file_time_path = datetime.datetime.now()
 MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
@@ -28,7 +28,7 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
 episode = 0             # Global EP
 Parameters_noise = True
 GAE = False
-MULTTACT = True
+MULTTACT = False
 
 class MainModel:
     def __init__(self):
@@ -37,7 +37,7 @@ class MainModel:
         if MULTTACT:
             self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=9, time_leg=10)
+            self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=9, time_leg=10)
         #self.main_net.load_model('ROD')
 
     def run(self):
@@ -308,7 +308,7 @@ class A3Cagent(threading.Thread):
 
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Time_tick, self.Critical,self.MWe_power,self.Char_pump_2,self.BHV22,self.RHR_pump
+            self.Time_tick, self.Critical, self.MWe_power,self.Char_pump_2,self.BHV22,self.RHR_pump
             ]
 
         self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
@@ -376,6 +376,7 @@ class A3Cagent(threading.Thread):
             done = True
             success = False
             r = -1
+
         self.save_state['R'] = r
 
         return done, r, success
@@ -493,8 +494,8 @@ class A3Cagent(threading.Thread):
             self.save_operation_point = {}
             self.CNS.init_cns(initial_nub=1)
             sleep(1)
-            self.CNS._send_malfunction_signal(12, 100100, 18)
-            sleep(1)
+            # self.CNS._send_malfunction_signal(12, 100100, 18)
+            # sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
 
         iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
@@ -590,8 +591,9 @@ class A3Cagent(threading.Thread):
                     self.summary_writer.add_summary(summary_str, episode)
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
-                    # if self.db.train_DB['Step'] > -1:
-                    #     self.db.draw_img(current_ep=episode)
+
+                    if self.db.train_DB['Step'] > -1:
+                        self.db.draw_img(current_ep=episode)
 
                     self.save_tick = deque([0, 0], maxlen=2)
                     self.save_st = deque([False, False], maxlen=2)
