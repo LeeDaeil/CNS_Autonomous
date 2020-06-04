@@ -20,7 +20,10 @@ import logging.handlers
 from Load_follwing_A3C.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_0_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
+MAKE_FILE_PATH = f'./FAST/VER_3_{get_file_time_path.month}_{get_file_time_path.day}_' \
+                 f'{get_file_time_path.hour}_' \
+                 f'{get_file_time_path.minute}_' \
+                 f'{get_file_time_path.second}_'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
@@ -28,7 +31,8 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
 episode = 0             # Global EP
 Parameters_noise = True
 GAE = False
-MULTTACT = False
+MULTTACT = True
+MANUAL = False
 
 class MainModel:
     def __init__(self):
@@ -37,37 +41,51 @@ class MainModel:
         if MULTTACT:
             self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=9, time_leg=10)
+            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=9, time_leg=10)
         #self.main_net.load_model('ROD')
 
+        self.build_info = {
+            'IP_list': ['192.168.0.9', '192.168.0.7', '192.168.0.4'],
+            'PORT_list': [7100, 7200, 7300],
+        }
+        if MANUAL:
+            self.build_info['Nub'] = [1, 0, 0]
+        else:
+            self.build_info['Nub'] = [10, 10, 10]
+
     def run(self):
-        worker = self.build_A3C()
+        worker = self.build_A3C(build_info=self.build_info)
         for __ in worker:
             __.start()
             sleep(1)
         print('All agent start done')
 
         count = 1
-        while True:
-            sleep(5)
-            # 살아 있는지 보여줌
-            workers_step = ''
-            temp = []
-            for i in worker:
-                workers_step += '{:3d} '.format(i.db.train_DB['Step'])
-                temp.append(i.db.train_DB['Step'])
-            print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
-            # 모델 save
-            if count == 60:
-                self.main_net.save_model('ROD')
-                count %= 60
-            count += 1
+        if MANUAL:
+            window_ = show_window(worker)
+            window_.start()
+            pass
+        else:
+            while True:
+                sleep(1)
+                # 살아 있는지 보여줌
+                workers_step = ''
+                temp = []
+                for i in worker:
+                    workers_step += '{:3d} '.format(i.db.train_DB['Step'])
+                    temp.append(i.db.train_DB['Step'])
+                print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
+                # 모델 save
+                if count == 60:
+                    self.main_net.save_model('ROD')
+                    count %= 60
+                count += 1
 
-    def build_A3C(self):
+    def build_A3C(self, build_info):
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [5, 0, 0]):
+        for cnsip, com_port, max_iter in zip(build_info['IP_list'], build_info['PORT_list'], build_info['Nub']):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -202,7 +220,8 @@ class MainNet:
         actor_loss = loss + 0.01*entropy
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
+        # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -215,7 +234,8 @@ class MainNet:
         loss = K.mean(K.square(discounted_reward - value))
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.0001)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
+        # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
@@ -376,7 +396,6 @@ class A3Cagent(threading.Thread):
             done = True
             success = False
             r = -1
-
         self.save_state['R'] = r
 
         return done, r, success
@@ -547,7 +566,11 @@ class A3Cagent(threading.Thread):
                     self.db.train_DB['Avg_max_step'] += 1
 
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
-                    self.send_action(action=Action_net)
+                    if MANUAL:
+                        Action_net = int(input(f"[{self.db.train_DB['Step']}-{self.Time_tick}]Slected ACT:"))
+                        self.send_action(action=Action_net)
+                    else:
+                        self.send_action(action=Action_net)
 
                     # 2.2 제어 정보와, 상태에 대한 정보를 저장한다.
                     self.save_state['Act'] = Action_net
