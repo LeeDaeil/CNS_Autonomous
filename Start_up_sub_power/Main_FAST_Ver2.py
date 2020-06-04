@@ -516,7 +516,7 @@ class A3Cagent(threading.Thread):
                     R += 1
                     done_counter += 1
                     done_cause += '_SUCCESS_'
-            if self.Time_tick >= 320000:
+            if self.Time_tick >= 285000:
                 R += 1
                 done_counter += 1
                 done_cause += '_SUCCESS_Find_NET_'
