@@ -37,7 +37,7 @@ class MainModel:
     def __init__(self):
         self._make_folder()
         self._make_tensorboaed()
-        self.main_net = MainNet(net_type='LSTM', input_pa=8, output_pa=3, time_leg=10)
+        self.main_net = MainNet(net_type='LSTM', input_pa=8, output_pa=3, time_leg=15)
         #self.main_net.load_model('ROD')
 
         self.build_info = {
@@ -157,11 +157,14 @@ class MainNet:
                 shared = Dense(70)(shared)
 
             elif net_type == 'LSTM':
-                shared = LSTM(12, return_sequences=True, activation='softsign')(state)
-                shared = LSTM(12, activation='softsign')(shared)
+                shared = LSTM(16, activation='softsign')(state)
+                # shared = LSTM(64, return_sequences=True, activation='softsign')(shared)
+                # shared = LSTM(64, activation='softsign')(shared)
+                # shared = LSTM(12, return_sequences=True, activation='softsign')(shared)
+                # shared = LSTM(12, activation='softsign')(shared)
 
                 # shared = LSTM(64)(shared)
-                shared = Dense(64)(shared)
+                shared = Dense(128)(shared)
 
             elif net_type == 'CLSTM':
                 shared = Conv1D(filters=15, kernel_size=5, strides=1, padding='same')(state)
@@ -172,12 +175,12 @@ class MainNet:
         # ----------------------------------------------------------------------------------------------------
         # Common output network
         # actor_hidden = Dense(64, activation='relu', kernel_initializer='glorot_uniform')(shared)
-        actor_hidden = Dense(24, activation='sigmoid', kernel_initializer='glorot_uniform')(shared)
-        action_prob = Dense(ou_pa, activation='softmax', kernel_initializer='glorot_uniform')(actor_hidden)
+        actor_hidden = Dense(256, activation='sigmoid')(shared)
+        action_prob = Dense(ou_pa, activation='softmax')(actor_hidden)
 
         # value_hidden = Dense(32, activation='relu', kernel_initializer='he_uniform')(shared)
-        value_hidden = Dense(12, activation='sigmoid', kernel_initializer='he_uniform')(shared)
-        state_value = Dense(1, activation='linear', kernel_initializer='he_uniform')(value_hidden)
+        value_hidden = Dense(256, activation='sigmoid')(shared)
+        state_value = Dense(1, activation='linear')(value_hidden)
 
         actor = Model(inputs=state, outputs=action_prob)
         critic = Model(inputs=state, outputs=state_value)
@@ -208,7 +211,7 @@ class MainNet:
 
         # optimizer = Adam(lr=0.01)
         # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
-        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -221,7 +224,7 @@ class MainNet:
         loss = K.mean(K.square(discounted_reward - value))
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.01)
         # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
@@ -499,7 +502,7 @@ class A3Cagent(threading.Thread):
                 done_counter += 1
                 done_cause += f'_OutPdis{self.R_distance}_'
             if self.Time_tick >= 285000:
-                R += 0.05
+                # R += 0.05
                 done_counter += 1
                 done_cause += '_SUCCESS_Find_NET_'
         elif self.COND_NET_BRK or self.COND_AFTER:
@@ -517,7 +520,7 @@ class A3Cagent(threading.Thread):
                     done_counter += 1
                     done_cause += '_SUCCESS_'
             if self.Time_tick >= 285000:
-                R += 1
+                # R += 1
                 done_counter += 1
                 done_cause += '_SUCCESS_Find_NET_'
 
@@ -570,15 +573,15 @@ class A3Cagent(threading.Thread):
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
             round(self.Reactor_power, 5),                   # 0.02 ~ 1.00
-            round(self.Op_hi_distance*100/2, 5),            # 0.00 ~ 0.02 -> 0.0 ~ 1.0
-            round(self.Op_low_distance*100/2, 5),           # 0.00 ~ 0.02 -> 0.0 ~ 1.0
+            round(self.Op_hi_distance*10/2, 5),            # 0.00 ~ 0.02 -> 0.0 ~ 1.0
+            round(self.Op_low_distance*10/2, 5),           # 0.00 ~ 0.02 -> 0.0 ~ 1.0
             # round(self.Op_hi_bound, 5),                     # 0.00 ~ 1.02
             # round(self.Op_low_bound, 5),                    # 0.00 ~ 0.98
             round(self.Tref/310, 5),                        # 0 ~ 310 -> 0 ~ 1.0
             round(self.Tavg/310, 5),                        # 0 ~ 310 -> 0 ~ 1.0
             round(self.Mwe_power/900, 5),                   # 0 ~ 900 -> 0 ~ 1.0
-            round(self.Op_T_hi_bound/310, 5),               # 0 ~ 310 -> 0 ~ 1.0
-            round(self.Op_T_low_bound/310, 5),              # 0 ~ 310 -> 0 ~ 1.0
+            round(self.Op_T_hi_bound/610, 5),               # 0 ~ 310 -> 0 ~ 1.0
+            round(self.Op_T_low_bound/610, 5),              # 0 ~ 310 -> 0 ~ 1.0
             # round(self.Op_T_hi_distance/10, 5),             # 0 ~ 10 -> 0 ~ 1.0
             # round(self.Op_T_low_distance/10, 5),            # 0 ~ 10 -> 0 ~ 1.0
         ]
@@ -631,6 +634,7 @@ class A3Cagent(threading.Thread):
         try:
             action = np.random.choice(np.shape(policy)[0], 1, p=policy)[0]
         except:
+            print("ERROR from NET!!")
             print(policy)
             sleep(10000)
         return action, predict_result
@@ -828,7 +832,7 @@ class A3Cagent(threading.Thread):
         start_or_initial_cns(mal_time=mal_time)
 
         # 훈련 시작하는 부분
-        while episode < 1000:
+        while episode < 3000:
             # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
 
             # NEW_VER_2 Initial COND
@@ -957,7 +961,8 @@ class DB:
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
                          'T_Avg_q_max': 0, 'T_Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 20,
+                         # 'Up_t': 0, 'Up_t_end': 20,
+                         'Up_t': 0, 'Up_t_end': 5,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
@@ -978,7 +983,7 @@ class DB:
         self.train_DB = {'Now_S': [], 'S': [], 'Reward': [], 'Act': [],
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
-                         'Up_t': 0, 'Up_t_end': 20,
+                         'Up_t': 0, 'Up_t_end': 5,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
