@@ -5,6 +5,7 @@ from torch import nn, optim, tensor
 class PPOModel(nn.Module):
     def __init__(self, nub_para, time_leg):
         super(PPOModel, self).__init__()
+        self.val = 0
         # ==============================================================================================================
         # +1 Tick 예측 모델
         # ==============================================================================================================
@@ -40,7 +41,6 @@ class PPOModel(nn.Module):
         self.FC3_1 = nn.Linear(64, 3)
         self.FC3_2 = nn.Linear(64, 3)
         self.FC4 = nn.Linear(64, 1)
-
 
     def CommonPredictNet(self, x_py, x_comp):
         # Physical
