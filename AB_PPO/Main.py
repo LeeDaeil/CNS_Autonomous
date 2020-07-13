@@ -5,27 +5,40 @@ from AB_PPO.Net_Model_Torch import PPOModel
 from AB_PPO.CNS_UDP_FAST import CNS
 
 import time
+import copy
+from collections import deque
 import pandas as pd
 
 learning_rate = 0.0002
-update_interval = 5
 gamma = 0.98
 max_train_ep = 1800
 max_test_ep = 2000
+
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [1, 0, 0]
+        self.CNS_NUMBERS = [5, 0, 0]
 
         self.TimeLeg = 10
+
+        self.UpdateIterval = 5
+
+    def WInfoWarp(self):
+        Info = {
+            'Iter': 0
+        }
+        print('초기 Info Share mem로 선언')
+        return Info
+
 
 class Agent(mp.Process):
     def __init__(self, GlobalNet, MEM, CNS_ip, CNS_port, Remote_ip, Remote_port):
         mp.Process.__init__(self)
         # Network info
+        self.GlobalNet = GlobalNet
         self.LocalNet = PPOModel(nub_para=2, time_leg=10)
         self.LocalNet.load_state_dict(GlobalNet.state_dict())
         self.optimizer = optim.Adam(GlobalNet.parameters(), lr=learning_rate)
@@ -33,16 +46,9 @@ class Agent(mp.Process):
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
         # SharedMem
         self.mem = MEM
+        self.LocalMem = copy.deepcopy(self.mem)
         # Work info
         self.W = Work_info()
-
-    def run(self):
-        while True:
-            self.CNS.init_cns(initial_nub=1)
-            time.sleep(1)
-            self.CNS._send_malfunction_signal(12, 100100, 15)
-            time.sleep(1)
-
 
     # ==============================================================================================================
     # 제어 신호 보내는 파트
@@ -60,6 +66,112 @@ class Agent(mp.Process):
         self.CNS._send_control_signal(self.para, self.val)
     #
     # ==============================================================================================================
+    # 입력 출력 값 생성
+    def InitialStateSet(self):
+        self.PhyPara = ['ZINST58', 'ZINST63']
+        self.PhyState = {_:deque(maxlen=self.W.TimeLeg) for _ in self.PhyPara}
+
+        self.COMPPara = ['BFV122', 'BPV145']
+        self.COMPState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.COMPPara}
+
+    def MakeStateSet(self):
+        # 값을 쌓음
+        [self.PhyState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.PhyPara]
+        [self.COMPState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.COMPPara]
+        # Tensor로 전환
+        self.S_Py = torch.tensor([self.PhyState[key] for key in self.PhyPara])
+        self.S_Py = self.S_Py.reshape(1, self.S_Py.shape[0], self.S_Py.shape[1])
+        self.S_Comp = torch.tensor([self.COMPState[key] for key in self.COMPPara])
+        self.S_Comp = self.S_Comp.reshape(1, self.S_Comp.shape[0], self.S_Comp.shape[1])
+
+    def PreProcessing(self, para, val):
+        if para == 'ZINST58': val = val/1000      # 가압기 압력
+        if para == 'ZINST63': val = val/100       # 가압기 수위
+        return val
+
+    # ==============================================================================================================
+
+    def run(self):
+        while True:
+            self.CNS.init_cns(initial_nub=1)
+            time.sleep(1)
+            self.CNS._send_malfunction_signal(12, 100100, 15)
+            time.sleep(1)
+
+            # Get iter
+            self.CurrentIter = self.mem['Iter']
+            self.mem['Iter'] += 1
+            print(self.CurrentIter)
+
+            # Initial
+            done = False
+            self.InitialStateSet()
+
+            while not done:
+                for t in range(self.W.TimeLeg):
+                    self.CNS.run_freeze_CNS()
+                    self.MakeStateSet()
+                for __ in range(5):
+                    spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
+                    # Sampling
+                    for t in range(5):
+                        PreVal = self.LocalNet.GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                        PreVal = PreVal.tolist()[0] # (1, 2)-> (2. )
+
+                        spy_lst.append(self.S_Py.tolist()[0]) # (1, 2, 10) -list> (2, 10)
+                        scomp_lst.append(self.S_Comp.tolist()[0]) # (1, 2, 10) -list> (2, 10)
+                        a_lst.append(PreVal)    # (2, )
+
+                        self.CNS.run_freeze_CNS()
+                        self.MakeStateSet()
+
+                        r = PreVal[0] - self.PreProcessing('ZINST58', self.CNS.mem['ZINST58']['Val'])
+                        r += PreVal[1] - self.PreProcessing('ZINST63', self.CNS.mem['ZINST63']['Val'])
+
+                        r_lst.append(r)
+                        print(self.CurrentIter, PreVal, r)
+
+                    # Train!
+                    print('Train!!!')
+                    # GAE
+                    spy_fin = self.S_Py         # (1, 2, 10)
+                    scomp_fin = self.S_Comp     # (1, 2, 10)
+
+                    R = 0.0 if done else self.LocalNet.GetPredictCrticOut(spy_fin, scomp_fin).item()
+
+                    td_target_lst = []
+                    for reward in r_lst[::-1]:
+                        R = gamma * R + reward
+                        td_target_lst.append([R])
+                    td_target_lst.reverse()
+
+                    # Batch 만들기
+                    spy_batch = torch.tensor(spy_lst, dtype=torch.float)
+                    scomp_batch = torch.tensor(scomp_lst, dtype=torch.float)
+                    a_batch = torch.tensor(a_lst, dtype=torch.float)
+                    td_target = torch.tensor(td_target_lst)
+
+                    value = self.LocalNet.GetPredictCrticOut(spy_batch, scomp_batch)
+                    advantage = td_target - value
+
+                    PreVal = self.LocalNet.GetPredictActorOut(x_py=spy_batch, x_comp=scomp_batch)
+
+                    loss = -torch.log(PreVal) * advantage.detach() + \
+                           nn.functional.smooth_l1_loss(self.LocalNet.GetPredictCrticOut(spy_batch, scomp_batch),
+                                                        td_target.detach())
+                    print(loss)
+
+                    self.optimizer.zero_grad()
+                    loss.mean().backward()
+                    for global_param, local_param in zip(self.GlobalNet.parameters(),
+                                                         self.LocalNet.parameters()):
+                        global_param._grad = local_param.grad
+                    self.optimizer.step()
+                    self.LocalNet.load_state_dict(self.GlobalNet.state_dict())
+
+                break
+            print('Done')
+
 if __name__ == '__main__':
     W_info = Work_info()
 
@@ -67,7 +179,7 @@ if __name__ == '__main__':
     global_model.share_memory()
 
     # Make shared mem
-    MEM = mp.Manager().dict({'Val': []})
+    MEM = mp.Manager().dict(W_info.WInfoWarp())
 
     workers = []
     for cnsip, com_port, max_iter in zip(W_info.CNS_IP_LIST, W_info.CNS_PORT_LIST, W_info.CNS_NUMBERS):

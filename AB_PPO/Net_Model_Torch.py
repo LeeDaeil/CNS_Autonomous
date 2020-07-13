@@ -63,9 +63,9 @@ class PPOModel(nn.Module):
         # 출력 변수 Clamp
         # ZINST58 0.2 ~ 0   /   156.21      [kg/cm^2    ][0]
         # ZINST63 0.1 ~ 0   /   55.13       [%          ][1]
-        upper_clamp = torch.tensor([0.2, 0.1])
-        lower_clamp = torch.tensor([0.0, 0.0])
-        x = torch.max(torch.min(x, upper_clamp), lower_clamp)
+        # upper_clamp = torch.tensor([0.2, 0.1])
+        # lower_clamp = torch.tensor([0.0, 0.0])
+        # x = torch.max(torch.min(x, upper_clamp), lower_clamp)
         return x
 
     def GetPredictCrticOut(self, x_py, x_comp):
@@ -116,9 +116,11 @@ if __name__ == '__main__':
 
     Test_db = tensor([[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]], dtype=torch.float)
-    print(Test_db.size())
+    print(Test_db.size()) # 2, 2, 10
 
     print(Model.GetPredictActorOut(x_py=Test_db/2, x_comp=Test_db/3))
+    out = Model.GetPredictActorOut(x_py=Test_db/2, x_comp=Test_db/3).tolist()
+    print(out)
     print(Model.GetPredictCrticOut(x_py=Test_db/2, x_comp=Test_db/3))
     print(Model.GetControlActorOut(x_py=Test_db/2, x_comp=Test_db/3))
     print('='*100)
@@ -128,7 +130,7 @@ if __name__ == '__main__':
                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
                       ], dtype=torch.float)
 
-    print(Test_db.size())
+    print(Test_db.size()) # 2, 2, 10
 
     print(Model.GetPredictActorOut(x_py=Test_db/2, x_comp=Test_db/3))
     print(Model.GetPredictCrticOut(x_py=Test_db/2, x_comp=Test_db/3))
