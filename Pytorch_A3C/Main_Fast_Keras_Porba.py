@@ -20,15 +20,19 @@ import logging.handlers
 from Pytorch_A3C.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_1_{get_file_time_path.month}_{get_file_time_path.day}_{get_file_time_path.minute}_{get_file_time_path.second}'
+MAKE_FILE_PATH = f'./FAST/VER_3_{get_file_time_path.month}_{get_file_time_path.day}_' \
+                 f'{get_file_time_path.hour}_' \
+                 f'{get_file_time_path.minute}_' \
+                 f'{get_file_time_path.second}_'
 os.mkdir(MAKE_FILE_PATH)
 logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.INFO)
 #------------------------------------------------------------------
 episode = 0             # Global EP
 Parameters_noise = True
-GAE = True
-MULTTACT = False
+GAE = False
+MULTTACT = True
+MANUAL = False
 
 class MainModel:
     def __init__(self):
@@ -37,37 +41,51 @@ class MainModel:
         if MULTTACT:
             self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=4, time_leg=10)
+            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=9, time_leg=10)
         #self.main_net.load_model('ROD')
 
+        self.build_info = {
+            'IP_list': ['192.168.0.9', '192.168.0.7', '192.168.0.4'],
+            'PORT_list': [7100, 7200, 7300],
+        }
+        if MANUAL:
+            self.build_info['Nub'] = [1, 0, 0]
+        else:
+            self.build_info['Nub'] = [10, 10, 10]
+
     def run(self):
-        worker = self.build_A3C()
+        worker = self.build_A3C(build_info=self.build_info)
         for __ in worker:
             __.start()
             sleep(1)
         print('All agent start done')
 
         count = 1
-        while True:
-            sleep(5)
-            # 살아 있는지 보여줌
-            workers_step = ''
-            temp = []
-            for i in worker:
-                workers_step += '{:3d} '.format(i.db.train_DB['Step'])
-                temp.append(i.db.train_DB['Step'])
-            print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
-            # 모델 save
-            if count == 60:
-                self.main_net.save_model('ROD')
-                count %= 60
-            count += 1
+        if MANUAL:
+            window_ = show_window(worker)
+            window_.start()
+            pass
+        else:
+            while True:
+                sleep(1)
+                # 살아 있는지 보여줌
+                workers_step = ''
+                temp = []
+                for i in worker:
+                    workers_step += '{:3d} '.format(i.db.train_DB['Step'])
+                    temp.append(i.db.train_DB['Step'])
+                print('[{}][max:{:3d}][{}]'.format(datetime.datetime.now(), max(temp), workers_step))
+                # 모델 save
+                if count == 60:
+                    self.main_net.save_model('ROD')
+                    count %= 60
+                count += 1
 
-    def build_A3C(self):
+    def build_A3C(self, build_info):
         # return: 선언된 worker들을 반환함.
         # 테스트 선택도 여기서 수정할 것
         worker = []
-        for cnsip, com_port, max_iter in zip(['192.168.0.9', '192.168.0.7', '192.168.0.4'], [7100, 7200, 7300], [10, 10, 10]):
+        for cnsip, com_port, max_iter in zip(build_info['IP_list'], build_info['PORT_list'], build_info['Nub']):
             if max_iter != 0:
                 for i in range(1, max_iter + 1):
                     worker.append(A3Cagent(Remote_ip='192.168.0.10', Remote_port=com_port + i,
@@ -154,8 +172,8 @@ class MainNet:
             elif net_type == 'CLSTM':
                 shared = Conv1D(filters=10, kernel_size=5, strides=1, padding='same')(state)
                 shared = MaxPooling1D(pool_size=3)(shared)
-                shared = LSTM(6)(shared)
-                # shared = Dense(10)(shared)
+                shared = LSTM(12)(shared)
+                shared = Dense(24)(shared)
 
         # ----------------------------------------------------------------------------------------------------
         # Common output network
@@ -202,7 +220,8 @@ class MainNet:
         actor_loss = loss + 0.01*entropy
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -215,7 +234,8 @@ class MainNet:
         loss = K.mean(K.square(discounted_reward - value))
 
         # optimizer = Adam(lr=0.01)
-        optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(lr=7e-4, rho=0.99, epsilon=0.001)
+        # optimizer = RMSprop(lr=2.5e-4, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
@@ -285,11 +305,11 @@ class A3Cagent(threading.Thread):
 
         self.one_agents_episode = 0
         if MULTTACT:
-            done_, R_, Succes_ = self.update_parameter(A=[0, 0, 0], mal_time=10)
+            done_, R_, Succes_ = self.update_parameter(A=[0, 0, 0])
         else:
-            done_, R_, Succes_ = self.update_parameter(A=2, mal_time=10)
+            done_, R_, Succes_ = self.update_parameter(A=0)
 
-    def update_parameter(self, A, mal_time):
+    def update_parameter(self, A):
         '''
         네트워크에 사용되는 input 및 output에 대한 정보를 세부적으로 작성할 것.
         '''
@@ -308,7 +328,7 @@ class A3Cagent(threading.Thread):
 
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Rx_Trip, abs(self.Critical/10), self.MWe_power, self.Char_pump_2, self.BHV22, self.RHR_pump
+            self.Time_tick, self.Critical,self.MWe_power,self.Char_pump_2,self.BHV22,self.RHR_pump
             ]
 
         self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
@@ -319,13 +339,10 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO55',  # charging vlave state
                                                                      'KLAMPO9',  # Rx trip
                                                                      ]}
-        for nub, val in zip(range(len(self.state)), self.state):
-            self.save_state[f'{nub}'] = val
-        self.save_state['MAL'] = mal_time*5
+
         # 보상
 
         Reactivity_control = [0, 0, 0]
-        c_t = self.CNS.mem['KCNTOMS']['Val']
         if True:
             # 1) Reactivity
             if self.CNS.mem['CRETIV']['Val'] < 0:
@@ -343,34 +360,42 @@ class A3Cagent(threading.Thread):
                 Reactivity_control[1] += 0
             # 3) Boration addition rate
             if True:
-                if mal_time*5 < c_t:
-                    # 3-1) Charging Line Flow
-                    if self.CNS.mem['KLAMPO70']['Val'] == 1 and self.CNS.mem['BHV22']['Val'] == 1:
-                        Reactivity_control[2] += 0.5
-                    else:
-                        Reactivity_control[2] += -0.5
-                    # 3-2) IRWST->HV8->RHR->HV603 Flow
-                    if self.CNS.mem['KLAMPO55']['Val'] == 1 and self.CNS.mem['ZRWST']['Val'] > 0 \
-                            and self.CNS.mem['BHV8']['Val'] == 1 and self.CNS.mem['BHV603']['Val'] >= 1:
-                        Reactivity_control[2] += 0.5
-                    else:
-                        Reactivity_control[2] += -0.5
+                # 3-1) Charging Line Flow
+                if self.CNS.mem['KLAMPO70']['Val'] == 1 and self.CNS.mem['BHV22']['Val'] == 1:
+                    Reactivity_control[2] += 0.5
                 else:
-                    if self.CNS.mem['KLAMPO70']['Val'] > 0:
-                        Reactivity_control[2] -= 0.5
-                    if self.CNS.mem['BHV22']['Val'] > 0:
-                        Reactivity_control[2] -= 0.5
-                    if self.CNS.mem['KLAMPO55']['Val'] > 0:
-                        Reactivity_control[2] -= 0.5
+                    Reactivity_control[2] += 0
+                # 3-2) IRWST->HV8->RHR->HV603 Flow
+                if self.CNS.mem['KLAMPO55']['Val'] == 1 and self.CNS.mem['ZRWST']['Val'] > 0 \
+                        and self.CNS.mem['BHV8']['Val'] == 1 and self.CNS.mem['BHV603']['Val'] >= 1:
+                    Reactivity_control[2] += 0.5
+                else:
+                    Reactivity_control[2] += 0
 
-
-        r = (Reactivity_control[0] + Reactivity_control[1] + Reactivity_control[2])/10
-        if c_t > 300 or r < 0:
-            done = True
-        else:
-            done = False
+        done = False
         success = False
+        r = sum(Reactivity_control)
 
+        if r == 2.5 and self.Rx_Trip == 1:
+            done = True
+            success = True
+            r = r / 20 + 0.5
+        else:
+            r = r / 20
+
+        if self.Rx_Trip == 0:
+            if self.BHV22 == 1 or self.Char_pump_2 == 1 or self.RHR_pump == 1:
+                done = True
+                success = False
+                r = -1
+            else:
+                pass
+
+        if self.CNS.mem['KCNTOMS']['Val'] > 140:
+            # print('DONE')
+            done = True
+            success = False
+            r = -1
         self.save_state['R'] = r
 
         return done, r, success
@@ -431,10 +456,15 @@ class A3Cagent(threading.Thread):
                 else:
                     self.send_action_append([t_pa], [1])  # Stay
         else:
-            if action == 0: pass
+            if action == 0: self.send_action_append(['KSWO70'], [0])  # Stay
             elif action == 1: self.send_action_append(['KSWO70'], [1])  # Stay
-            elif action == 2: self.send_action_append(['KSWO81'], [1])  # Stay
-            elif action == 3: self.send_action_append(['KSWO53'], [1])  # Stay
+            elif action == 2: pass
+            elif action == 3: self.send_action_append(['KSWO81'], [0])  # Stay
+            elif action == 4: self.send_action_append(['KSWO81'], [1])  # Stay
+            elif action == 5: pass
+            elif action == 6: self.send_action_append(['KSWO53'], [0])  # Stay
+            elif action == 7: self.send_action_append(['KSWO53'], [1])  # Stay
+            elif action == 8: pass
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -483,16 +513,16 @@ class A3Cagent(threading.Thread):
             self.save_operation_point = {}
             self.CNS.init_cns(initial_nub=1)
             sleep(1)
-            self.CNS._send_malfunction_signal(12, 100100, int(mal_time))
+            self.CNS._send_malfunction_signal(12, 100100, 18)
             sleep(1)
             # self.CNS._send_control_signal(['TDELTA'], [0.2*self.cns_speed])
 
         iter_cns = 1                    # 반복 - 몇 초마다 Action 을 전송 할 것인가?
-        mal_time = randrange(10, 20)    # 40 부터 60초 사이에 Mal function 발생
+        mal_time = randrange(40, 60)    # 40 부터 60초 사이에 Mal function 발생
         start_or_initial_cns(mal_time=mal_time)
 
         # 훈련 시작하는 부분
-        while episode < 10000:
+        while episode < 50000:
             # 1. input_time_length 까지 데이터 수집 및 Mal function 이후로 동작
             self.one_agents_episode = episode
             start_ep_time = datetime.datetime.now()
@@ -500,9 +530,9 @@ class A3Cagent(threading.Thread):
             while True:
                 self.run_cns(iter_cns)
                 if MULTTACT:
-                    done, R, Success = self.update_parameter(A=[0, 0, 0], mal_time=mal_time)
+                    done, R, Success = self.update_parameter(A=[0, 0, 0])
                 else:
-                    done, R, Success = self.update_parameter(A=0, mal_time=mal_time)
+                    done, R, Success = self.update_parameter(A=2)
                 self.db.add_now_state(Now_S=self.state)
                 # if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
                 #     # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
@@ -515,7 +545,7 @@ class A3Cagent(threading.Thread):
                 if MULTTACT:
                     self.save_state['Act'] = [0, 0, 0]
                 else:
-                    self.save_state['Act'] = 0
+                    self.save_state['Act'] = 2
                 self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
                 self.db.save_state(self.save_state)
 
@@ -536,7 +566,11 @@ class A3Cagent(threading.Thread):
                     self.db.train_DB['Avg_max_step'] += 1
 
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
-                    self.send_action(action=Action_net)
+                    if MANUAL:
+                        Action_net = int(input(f"[{self.db.train_DB['Step']}-{self.Time_tick}]Slected ACT:"))
+                        self.send_action(action=Action_net)
+                    else:
+                        self.send_action(action=Action_net)
 
                     # 2.2 제어 정보와, 상태에 대한 정보를 저장한다.
                     self.save_state['Act'] = Action_net
@@ -546,7 +580,7 @@ class A3Cagent(threading.Thread):
                     # 2.3 제어에 대하여 CNS 동작 시키고 현재 상태 업데이트한다.
                     self.run_cns(iter_cns)
                     # 2.4 새로운 상태를 업데이트 하고 상태 평가를 진행 한다.
-                    done, R, Succes = self.update_parameter(A=Action_net, mal_time=mal_time)
+                    done, R, Succes = self.update_parameter(A=Action_net)
                     self.db.add_now_state(Now_S=self.state) # self.state 가 업데이트 된 상태이다. New state
                     # 2.5 평가를 저장한다.
                     self.db.add_train_DB(S=old_state, R=R, A=Action_net)
@@ -581,7 +615,7 @@ class A3Cagent(threading.Thread):
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
                     # if self.db.train_DB['Step'] > -1:
-                    self.db.draw_img(current_ep=episode)
+                    #     self.db.draw_img(current_ep=episode)
 
                     self.save_tick = deque([0, 0], maxlen=2)
                     self.save_st = deque([False, False], maxlen=2)
@@ -590,7 +624,7 @@ class A3Cagent(threading.Thread):
                     self.hold_tick = 60 * 30  # 60 tick * 30분
                     self.end_time = 0
 
-                    mal_time = randrange(10, 20)  # 40 부터 60초 사이에 Mal function 발생
+                    mal_time = randrange(40, 60)  # 40 부터 60초 사이에 Mal function 발생
                     start_or_initial_cns(mal_time=mal_time)
                     self.logger.info(f'[{datetime.datetime.now()}] Episode_done - {start_ep_time}~'
                                      f'{datetime.datetime.now()}')
@@ -625,7 +659,7 @@ class DB:
         self.train_DB = {'Now_S': [], 'S': [], 'Reward': [], 'Act': [],
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0, 'Loss': 0,
-                         'Up_t': 0, 'Up_t_end': 10,
+                         'Up_t': 0, 'Up_t_end': 60,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
@@ -643,7 +677,7 @@ class DB:
         if MULTTACT:
             self.train_DB['Act'].append(A)
         else:
-            Temp_R_A = np.zeros(4)
+            Temp_R_A = np.zeros(9)
             Temp_R_A[A] = 1
             self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]
@@ -655,51 +689,51 @@ class DB:
         self.gp_db = self.gp_db.append(temp, ignore_index=True)
 
     def draw_img(self, current_ep):
-        # for _ in self.axs:
-        #     _.clear()
+        for _ in self.axs:
+            _.clear()
         #
-        # self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
-        # self.axs[0].legend(loc=2, fontsize=5)
-        # self.axs[0].set_ylabel('PZR pressure [%]')
-        # self.axs[0].grid()
-        # #
-        # self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
-        # self.axs[1].legend(loc=2, fontsize=5)
-        # self.axs[1].set_ylabel('PZR level')
-        # self.axs[1].grid()
-        # #
-        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
-        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
-        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
-        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
-        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_O'], 'g', label='DOWN_O', color='blue', lw=1)
-        # self.axs[2].legend(loc=2, fontsize=5)
-        # self.axs[2].set_ylabel('PZR level')
-        # self.axs[2].grid()
-        # #
-        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
-        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Reward')
-        # self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Reward')
-        # self.axs[3].legend(loc=2, fontsize=5)
-        # self.axs[3].set_ylabel('PZR level')
-        # self.axs[3].grid()
-        # #
-        # self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
-        # self.axs[4].legend(loc=2, fontsize=5)
-        # self.axs[4].set_ylabel('ROD pos')
-        # self.axs[4].grid()
+        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
+        self.axs[0].legend(loc=2, fontsize=5)
+        self.axs[0].set_ylabel('PZR pressure [%]')
+        self.axs[0].grid()
         #
-        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
-        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'g', label='Acc')
-        # self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'g', label='Real')
-        # self.axs[5].legend(loc=2, fontsize=5)
-        # self.axs[5].set_ylabel('Turbine Real')
-        # self.axs[5].grid()
+        self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
+        self.axs[1].legend(loc=2, fontsize=5)
+        self.axs[1].set_ylabel('PZR level')
+        self.axs[1].grid()
         #
-        # self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'g', label='PZR_temp')
-        # self.axs[6].legend(loc=2, fontsize=5)
-        # self.axs[6].set_ylabel('PZR temp')
-        # self.axs[6].grid()
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_O'], 'g', label='DOWN_O', color='blue', lw=1)
+        self.axs[2].legend(loc=2, fontsize=5)
+        self.axs[2].set_ylabel('PZR level')
+        self.axs[2].grid()
+        #
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Reward')
+        self.axs[3].legend(loc=2, fontsize=5)
+        self.axs[3].set_ylabel('PZR level')
+        self.axs[3].grid()
+        #
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
+        self.axs[4].legend(loc=2, fontsize=5)
+        self.axs[4].set_ylabel('ROD pos')
+        self.axs[4].grid()
+
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'g', label='Acc')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'g', label='Real')
+        self.axs[5].legend(loc=2, fontsize=5)
+        self.axs[5].set_ylabel('Turbine Real')
+        self.axs[5].grid()
+
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'g', label='PZR_temp')
+        self.axs[6].legend(loc=2, fontsize=5)
+        self.axs[6].set_ylabel('PZR temp')
+        self.axs[6].grid()
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         # self.axs[3].legend(loc=2, fontsize=5)
@@ -734,8 +768,8 @@ class DB:
         # self.axs[8].legend(loc=2, fontsize=5)
         # self.axs[8].grid()
 
-        # self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
-        #                  facecolor=None)
+        self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
+                         facecolor=None)
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 
 
