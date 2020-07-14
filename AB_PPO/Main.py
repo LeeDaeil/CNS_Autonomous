@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from torch import multiprocessing as mp
 from torch import nn, functional, optim
 from AB_PPO.Net_Model_Torch import PPOModel
@@ -9,6 +10,7 @@ import copy
 from collections import deque
 import pandas as pd
 
+# learning_rate = 0.0002
 learning_rate = 0.0002
 gamma = 0.98
 max_train_ep = 1800
@@ -75,18 +77,23 @@ class Agent(mp.Process):
         self.COMPState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.COMPPara}
 
     def MakeStateSet(self):
-        # 값을 쌓음
+        # 값을 쌓음 (return Dict)
         [self.PhyState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.PhyPara]
         [self.COMPState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.COMPPara]
+
         # Tensor로 전환
         self.S_Py = torch.tensor([self.PhyState[key] for key in self.PhyPara])
         self.S_Py = self.S_Py.reshape(1, self.S_Py.shape[0], self.S_Py.shape[1])
         self.S_Comp = torch.tensor([self.COMPState[key] for key in self.COMPPara])
         self.S_Comp = self.S_Comp.reshape(1, self.S_Comp.shape[0], self.S_Comp.shape[1])
 
+        # Old 1개 리스트
+        self.S_ONE_Py = [self.PhyState[key][-1] for key in self.PhyPara]
+        self.S_ONE_Comp = [self.COMPState[key][-1] for key in self.COMPPara]
+
     def PreProcessing(self, para, val):
-        if para == 'ZINST58': val = val/1000      # 가압기 압력
-        if para == 'ZINST63': val = val/100       # 가압기 수위
+        if para == 'ZINST58': val = round(val/1000, 7)      # 가압기 압력
+        if para == 'ZINST63': val = round(val/100, 7)       # 가압기 수위
         return val
 
     # ==============================================================================================================
@@ -95,8 +102,8 @@ class Agent(mp.Process):
         while True:
             self.CNS.init_cns(initial_nub=1)
             time.sleep(1)
-            self.CNS._send_malfunction_signal(12, 100100, 15)
-            time.sleep(1)
+            # self.CNS._send_malfunction_signal(12, 100100, 15)
+            # time.sleep(1)
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
@@ -111,7 +118,7 @@ class Agent(mp.Process):
                 for t in range(self.W.TimeLeg):
                     self.CNS.run_freeze_CNS()
                     self.MakeStateSet()
-                for __ in range(5):
+                for __ in range(15):
                     spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
                     # Sampling
                     for t in range(5):
@@ -122,17 +129,23 @@ class Agent(mp.Process):
                         scomp_lst.append(self.S_Comp.tolist()[0]) # (1, 2, 10) -list> (2, 10)
                         a_lst.append(PreVal)    # (2, )
 
+                        old_before = self.S_ONE_Py[0] + PreVal[0]
+
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
 
-                        r = PreVal[0] - self.PreProcessing('ZINST58', self.CNS.mem['ZINST58']['Val'])
-                        r += PreVal[1] - self.PreProcessing('ZINST63', self.CNS.mem['ZINST63']['Val'])
+                        if self.S_ONE_Py[0] - 0.0005 < old_before < self.S_ONE_Py[0] + 0.0005:
+                            r = 0.1
+                        elif self.S_ONE_Py[0] - 0.001 < old_before < self.S_ONE_Py[0] + 0.001:
+                            r = 0.05
+                        else:
+                            r = -0.1
 
                         r_lst.append(r)
-                        print(self.CurrentIter, PreVal, r)
+                        print(self.CurrentIter, PreVal, self.S_ONE_Py[0] - 0.0005, old_before, self.S_ONE_Py[0], self.S_ONE_Py[0] + 0.0005, r)
 
                     # Train!
-                    print('Train!!!')
+                    # print('Train!!!')
                     # GAE
                     spy_fin = self.S_Py         # (1, 2, 10)
                     scomp_fin = self.S_Comp     # (1, 2, 10)
@@ -159,7 +172,7 @@ class Agent(mp.Process):
                     loss = -torch.log(PreVal) * advantage.detach() + \
                            nn.functional.smooth_l1_loss(self.LocalNet.GetPredictCrticOut(spy_batch, scomp_batch),
                                                         td_target.detach())
-                    print(loss)
+                    # print(loss)
 
                     self.optimizer.zero_grad()
                     loss.mean().backward()
