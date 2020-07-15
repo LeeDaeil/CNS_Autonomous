@@ -134,15 +134,13 @@ class Agent(mp.Process):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
 
-                        if self.S_ONE_Py[0] - 0.0005 < old_before < self.S_ONE_Py[0] + 0.0005:
+                        if self.S_ONE_Py[0] - 0.0001 < old_before < self.S_ONE_Py[0] + 0.0001:
                             r = 0.1
-                        elif self.S_ONE_Py[0] - 0.001 < old_before < self.S_ONE_Py[0] + 0.001:
-                            r = 0.05
                         else:
                             r = -0.1
 
                         r_lst.append(r)
-                        print(self.CurrentIter, PreVal, self.S_ONE_Py[0] - 0.0005, old_before, self.S_ONE_Py[0], self.S_ONE_Py[0] + 0.0005, r)
+                        print(self.CurrentIter, PreVal, self.S_ONE_Py[0] - 0.0001, old_before, self.S_ONE_Py[0], self.S_ONE_Py[0] + 0.0001, r)
 
                     # Train!
                     # print('Train!!!')
@@ -172,7 +170,7 @@ class Agent(mp.Process):
                     loss = -torch.log(PreVal) * advantage.detach() + \
                            nn.functional.smooth_l1_loss(self.LocalNet.GetPredictCrticOut(spy_batch, scomp_batch),
                                                         td_target.detach())
-                    # print(loss)
+                    # Loss Display
 
                     self.optimizer.zero_grad()
                     loss.mean().backward()
