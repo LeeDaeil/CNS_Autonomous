@@ -6,41 +6,43 @@ class PPOModel(nn.Module):
     def __init__(self, nub_para, time_leg):
         super(PPOModel, self).__init__()
         self.val = 0
-        # ==============================================================================================================
-        # +1 Tick 예측 모델
-        # ==============================================================================================================
-        # Physical
-        self.Conv1 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        self.Conv2 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        # Component
-        self.Conv3 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        self.Conv4 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        # Tick Model Output
-        self.LSTM1 = nn.LSTM(16, 16, batch_first=True) # train 할때 batch 간 영향 미 고려
-        self.FC1 = nn.Linear(32, 1)
-        self.FC2 = nn.Linear(32, 1)
-        # ==============================================================================================================
-        # Comp 제어 모델
-        # ==============================================================================================================
-        # Physical
-        self.Conv5 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        self.Conv6 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        # Component
-        self.Conv7 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        self.Conv8 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
-                               kernel_size=3, stride=1)
-        # Tick Model Output
-        self.LSTM2 = nn.LSTM(13, 32, batch_first=True)  # train 할때 batch 간 영향 미 고려
-        self.FC3_1 = nn.Linear(64, 3)
-        self.FC3_2 = nn.Linear(64, 3)
-        self.FC4 = nn.Linear(64, 1)
+        if True:
+            # ==============================================================================================================
+            # +1 Tick 예측 모델
+            # ==============================================================================================================
+            # Physical
+            self.Conv1 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            self.Conv2 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            # Component
+            self.Conv3 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            self.Conv4 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            # Tick Model Output
+            self.LSTM1 = nn.LSTM(16, 16, batch_first=True) # train 할때 batch 간 영향 미 고려
+            self.FC1 = nn.Linear(32, 2)
+            self.FC2 = nn.Linear(32, 1)
+        if True:
+            # ==============================================================================================================
+            # Comp 제어 모델
+            # ==============================================================================================================
+            # Physical
+            self.Conv5 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            self.Conv6 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            # Component
+            self.Conv7 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            self.Conv8 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
+                                   kernel_size=3, stride=1)
+            # Tick Model Output
+            self.LSTM2 = nn.LSTM(13, 32, batch_first=True)  # train 할때 batch 간 영향 미 고려
+            self.FC3_1 = nn.Linear(64, 3)
+            self.FC3_2 = nn.Linear(64, 3)
+            self.FC4 = nn.Linear(64, 1)
 
     def CommonPredictNet(self, x_py, x_comp):
         # Physical
@@ -104,6 +106,7 @@ class PPOModel(nn.Module):
         x = self.CommonControlNet(x_py, x_comp)
         x = self.FC4(x)
         return x
+
 
 if __name__ == '__main__':
 

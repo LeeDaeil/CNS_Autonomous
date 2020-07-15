@@ -118,6 +118,7 @@ class Agent(mp.Process):
                 for t in range(self.W.TimeLeg):
                     self.CNS.run_freeze_CNS()
                     self.MakeStateSet()
+
                 for __ in range(15):
                     spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
                     # Sampling
@@ -129,18 +130,30 @@ class Agent(mp.Process):
                         scomp_lst.append(self.S_Comp.tolist()[0]) # (1, 2, 10) -list> (2, 10)
                         a_lst.append(PreVal)    # (2, )
 
-                        old_before = self.S_ONE_Py[0] + PreVal[0]
+
+                        old_before = {0: 0, 1: 0}
+                        for nub_val in range(0, 2):
+                            old_before[nub_val] = self.S_ONE_Py[nub_val] + PreVal[nub_val]
 
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
 
-                        if self.S_ONE_Py[0] - 0.0001 < old_before < self.S_ONE_Py[0] + 0.0001:
-                            r = 0.1
-                        else:
-                            r = -0.1
+                        r = {0: 0, 1: 0}
 
-                        r_lst.append(r)
-                        print(self.CurrentIter, PreVal, self.S_ONE_Py[0] - 0.0001, old_before, self.S_ONE_Py[0], self.S_ONE_Py[0] + 0.0001, r)
+                        for nub_val in range(0, 2):
+                            if self.S_ONE_Py[nub_val] - 0.0001 < old_before[nub_val] < self.S_ONE_Py[nub_val] + 0.0001:
+                                r[nub_val] = 0.1
+                            else:
+                                r[nub_val] = -0.1
+                        if r[0] == 0.1 and r[1] == 0.1:
+                            t_r = 0.1
+                        else:
+                            t_r = -0.1
+                        # t_r = r[0] + r[1]
+
+                        r_lst.append(t_r)
+                        print(self.CurrentIter, PreVal, self.S_ONE_Py[0] - 0.0001, old_before[0], self.S_ONE_Py[0], self.S_ONE_Py[0] + 0.0001, '|',
+                              self.S_ONE_Py[1] - 0.0001, old_before[1], self.S_ONE_Py[1], self.S_ONE_Py[1] + 0.0001, '|', r[0], r[1], t_r)
 
                     # Train!
                     # print('Train!!!')
