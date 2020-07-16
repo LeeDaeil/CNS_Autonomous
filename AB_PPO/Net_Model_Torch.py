@@ -38,6 +38,8 @@ class PPOModel(nn.Module):
                                    kernel_size=3, stride=1)
             self.Conv8 = nn.Conv1d(in_channels=nub_para, out_channels=nub_para,
                                    kernel_size=3, stride=1)
+            self.MAX_FOOL = nn.MaxPool1d(2, stride=1)
+
             # Tick Model Output
             self.LSTM2 = nn.LSTM(13, 32, batch_first=True)  # train 할때 batch 간 영향 미 고려
             self.FC3_1 = nn.Linear(64, 3)
@@ -47,7 +49,10 @@ class PPOModel(nn.Module):
     def CommonPredictNet(self, x_py, x_comp):
         # Physical
         # x_py = nn.functional.relu(self.Conv1(x_py))
-        x_py = nn.functional.relu(self.Conv2(x_py))
+        x_py = nn.functional.relu6(self.Conv2(x_py))
+        # print("A", x_py)
+        # x_py = self.MAX_FOOL(x_py)
+        print("A", x_py)
         # Component
         # x_comp = nn.functional.relu(self.Conv3(x_comp))
         x_comp = nn.functional.relu(self.Conv4(x_comp))
@@ -121,6 +126,7 @@ if __name__ == '__main__':
                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]], dtype=torch.float)
     print(Test_db.size()) # 2, 2, 10
 
+    print(Model.GetPredictActorOut(x_py=Test_db/10, x_comp=Test_db/10))
     print(Model.GetPredictActorOut(x_py=Test_db/2, x_comp=Test_db/3))
 
     out = Model.GetPredictActorOut(x_py=Test_db/2, x_comp=Test_db/3).tolist()
