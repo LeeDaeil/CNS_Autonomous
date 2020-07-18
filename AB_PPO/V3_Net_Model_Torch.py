@@ -2,6 +2,7 @@ import torch
 from torch import nn, optim, tensor
 from AB_PPO.COMMONTOOL import TOOL
 from numpy.random import random
+import random as ra
 
 LSTMMODE = False
 
@@ -12,7 +13,7 @@ class NETBOX:
     def __init__(self):
         self.NET = {
             0: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0]),
-            1: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0])
+            # 1: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0])
         }
         self.NubNET = len(self.NET)
 
@@ -61,7 +62,7 @@ class PPOModel(nn.Module):
         else:
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
-            self.FC2_A = nn.Linear(32, 1)
+            self.FC2_A = nn.Linear(32, 2)
             self.FC2_C = nn.Linear(32, 1)
 
     def _CommonPredictNet(self, x_py, x_comp):
@@ -94,7 +95,10 @@ class PPOModel(nn.Module):
         # x = nn.functional.hardtanh(self.FC2_A(x), self.ClipNetOut[0], self.ClipNetOut[1])
         # x = nn.functional.relu(self.FC2_A(x))
         # x = self.FC2_A(x)
-        x = nn.functional.leaky_relu(self.FC2_A(x))
+        # x = nn.functional.leaky_relu(self.FC2_A(x))
+        # TOOL.ALLP(x, comt='x_Act Before')
+        x = nn.functional.softmax(self.FC2_A(x), dim=1)
+        # x = nn.functional.log_softmax(self.FC2_A(x), dim=1)
         # TOOL.ALLP(x, comt='x_Act')
         return x
 
@@ -123,6 +127,8 @@ class PPOModel(nn.Module):
 
         self.GetPredictActorOut(x_py=PhyTemp, x_comp=CompTemp)
         self.GetPredictCrticOut(x_py=PhyTemp, x_comp=CompTemp)
+
+        # print(ra.randint(0, 10))
 
 
 if __name__ == '__main__':

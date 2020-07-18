@@ -1,11 +1,12 @@
 import torch
 import numpy as np
+import random as ran
 from torch import multiprocessing as mp
 from torch import nn, functional, optim
 
 from AB_PPO.CNS_UDP_FAST import CNS
 from AB_PPO.COMMONTOOL import TOOL
-from AB_PPO.V2_Net_Model_Torch import *
+from AB_PPO.V3_Net_Model_Torch import *
 
 import time
 import copy
@@ -100,10 +101,12 @@ class Agent(mp.Process):
     def run(self):
         while True:
             self.CNS.init_cns(initial_nub=1)
-            print('DONE initial')
             time.sleep(1)
-            # self.CNS._send_malfunction_signal(12, 100100, 15)
-            # time.sleep(1)
+
+            size, maltime = ran.randint(100, 600), ran.randint(3, 5) * 5
+            self.CNS._send_malfunction_signal(36, size, maltime)
+            time.sleep(1)
+            print(f'DONE initial {size}, {maltime}')
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
@@ -130,47 +133,46 @@ class Agent(mp.Process):
                         }
                         for nubNet in range(self.LocalNet.NubNET):
                             NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
-                            NetOut = NetOut.tolist()[0][0]  # (1, 1) -> (1, ) -> ()
+                            NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
+                            act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
+                            # TOOL.ALLP(act, 'act')
+                            NetOut = NetOut.tolist()[act]
+                            # TOOL.ALLP(NetOut, 'NetOut')
+
                             TimeDB['Netout'][nubNet] = NetOut
-                            a_dict[nubNet] = NetOut
+                            a_dict[nubNet].append([act])
 
                         spy_lst.append(self.S_Py.tolist()[0])  # (1, 2, 10) -list> (2, 10)
                         scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 2, 10) -list> (2, 10)
 
-                        old_before = {0: 0, 1: 0}
-                        for nubNet in range(self.LocalNet.NubNET):
-                            old_before[nubNet] = self.S_ONE_Py[nubNet] + TimeDB['Netout'][nubNet]
-
+                        # CNS + 1 Step
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
-
+                        # 보상 계산
                         r = {0: 0, 1: 0}
+                        for nubNet in range(self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
 
-                        for nub_val in range(0, 2):
-                            if self.S_ONE_Py[nub_val] - 0.0001 < old_before[nub_val] < self.S_ONE_Py[nub_val] + 0.0001:
-                                r[nub_val] = 1
+                            if self.CNS.mem['KCNTOMS']['Val'] < maltime:
+                                if act == 1:    # Malfunction
+                                    r[nubNet] = -1
+                                else:
+                                    r[nubNet] = 1
                             else:
-                                r[nub_val] = 0
-                        if r[0] == 0.1 and r[1] == 0.1:
-                            t_r = 0.1
-                        else:
-                            t_r = -0.1
-                        # t_r = r[0] + r[1]
-                        # r_lst.append(t_r)
+                                if act == 1:    # Malfunction
+                                    r[nubNet] = 1
+                                else:
+                                    r[nubNet] = -1
 
-                        for nubNet in range(self.LocalNet.NubNET):      # 보상 네트워크별로 저장
                             r_dict[nubNet].append(r[nubNet])
 
-                        print(self.CurrentIter, TimeDB['Netout'], self.S_ONE_Py[0] - 0.0001, old_before[0], self.S_ONE_Py[0],
-                              self.S_ONE_Py[0] + 0.0001, '|',
-                              self.S_ONE_Py[1] - 0.0001, old_before[1], self.S_ONE_Py[1], self.S_ONE_Py[1] + 0.0001,
-                              '|', r[0], r[1], t_r)
+                        print(self.CurrentIter, r[0], NetOut)
+
                     # ==================================================================================================
                     # Train
 
                     gamma = 0.98
-                    spy_fin = self.S_Py  # (1, 2, 10)
-                    scomp_fin = self.S_Comp  # (1, 2, 10)
+                    spy_fin = self.S_Py  # (1, 2, 10)    Last value
+                    scomp_fin = self.S_Comp  # (1, 2, 10)   Last value
                     spy_batch = torch.tensor(spy_lst, dtype=torch.float)
                     scomp_batch = torch.tensor(scomp_lst, dtype=torch.float)
 
@@ -189,7 +191,9 @@ class Agent(mp.Process):
 
                         PreVal = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
 
-                        loss = -torch.log(PreVal) * advantage.detach() + \
+                        Preval_a = PreVal.gather(1, torch.tensor(a_dict[nubNet]))
+
+                        loss = -torch.log(Preval_a) * advantage.detach() + \
                                nn.functional.smooth_l1_loss(self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch),
                                                             td_target.detach())
 
@@ -202,7 +206,8 @@ class Agent(mp.Process):
                         self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
 
                         # TOOL.ALLP(advantage.mean())
-                        print(self.CurrentIter, 'adv: ', advantage.mean().item(), 'loss: ', loss.mean().item())
+                        print(self.CurrentIter, 'AgentNub: ', nubNet,
+                              'adv: ', advantage.mean().item(), 'loss: ', loss.mean().item())
 
                 print('DONE EP')
                 break

@@ -52,7 +52,7 @@ class PPOModel(nn.Module):
         x_py = nn.functional.relu6(self.Conv2(x_py))
         # print("A", x_py)
         # x_py = self.MAX_FOOL(x_py)
-        print("A", x_py)
+        # print("A", x_py)
         # Component
         # x_comp = nn.functional.relu(self.Conv3(x_comp))
         x_comp = nn.functional.relu(self.Conv4(x_comp))
