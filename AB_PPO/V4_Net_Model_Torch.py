@@ -13,7 +13,7 @@ class NETBOX:
     def __init__(self):
         self.NET = {
             0: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0]),
-            # 1: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0])
+            1: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=1)
         }
         self.NubNET = len(self.NET)
 
@@ -35,7 +35,7 @@ class PPOModel(nn.Module):
     """
     Fun: 1개 네트워크 모델 구성하여 반환
     """
-    def __init__(self, name, NubPhyPara, NubComPara, NubTimeSeq, ClipNetOut):
+    def __init__(self, name, NubPhyPara, NubComPara, NubTimeSeq, ClipNetOut, ActCase=2):
         # 상속
         super(PPOModel, self).__init__()
         # 입력 정보
@@ -44,6 +44,7 @@ class PPOModel(nn.Module):
         self.NubComPara = NubComPara    # int
         self.NubTimeSeq = NubTimeSeq    # int
         self.ClipNetOut = ClipNetOut    # [Min float, Max float]
+        self.ActCase = ActCase
         # 모델 정보
 
         # Physical
@@ -62,7 +63,7 @@ class PPOModel(nn.Module):
         else:
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
-            self.FC2_A = nn.Linear(32, 2)
+            self.FC2_A = nn.Linear(32, self.ActCase)    # default 2 out
             self.FC2_C = nn.Linear(32, 1)
 
     def _CommonPredictNet(self, x_py, x_comp):

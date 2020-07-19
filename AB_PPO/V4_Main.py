@@ -19,7 +19,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [5, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.TimeLeg = 10
 
@@ -132,7 +132,7 @@ class Agent(mp.Process):
                     t_max = 5
                     for t in range(t_max):
                         TimeDB = {
-                            'Netout': {}, # 0: .. 1:..
+                            'Netout': {},   # 0: .. 1:..
                         }
                         for nubNet in range(self.LocalNet.NubNET):
                             NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
@@ -176,7 +176,15 @@ class Agent(mp.Process):
                             else:
                                 done_dict[nubNet].append(1)
 
-                        print(self.CurrentIter, r[0], NetOut)
+                        def dp_want_val(val, name):
+                            return f"{name}: {self.CNS.mem[val]['Val']:0.4f}"
+
+                        print(self.CurrentIter, r[0], f'\t{NetOut:0.4f}', dp_want_val('KCNTOMS', 'TIME'),
+                              dp_want_val('PVCT', 'VCT pressure'), dp_want_val('ZVCT', 'VCT level'),
+                              dp_want_val('UPRT', 'PRT temp'), dp_want_val('ZINST48', 'PRT pressure'),
+                              dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
+                              dp_want_val('BPV145', 'Let-down Valve pos'),
+                              )
 
                     # ==================================================================================================
                     # Train
@@ -239,9 +247,9 @@ class Agent(mp.Process):
                         self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
 
                         # TOOL.ALLP(advantage.mean())
-                        print(self.CurrentIter, 'AgentNub: ', nubNet,
-                              'adv: ', adv.mean().item(), 'loss: ', loss.mean().item(),
-                              '= - min_val(', min_val.mean().item(), ') + Smooth(', smooth_l1_loss.mean().item(), ')')
+                        # print(self.CurrentIter, 'AgentNub: ', nubNet,
+                        #       'adv: ', adv.mean().item(), 'loss: ', loss.mean().item(),
+                        #       '= - min_val(', min_val.mean().item(), ') + Smooth(', smooth_l1_loss.mean().item(), ')')
 
                 print('DONE EP')
                 break
