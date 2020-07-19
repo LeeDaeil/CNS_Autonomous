@@ -12,8 +12,8 @@ class NETBOX:
     """
     def __init__(self):
         self.NET = {
-            0: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0]),
-            1: PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=1)
+            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0]),
+            1: PPOModel(name="Progno1", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=1)
         }
         self.NubNET = len(self.NET)
 
@@ -63,11 +63,13 @@ class PPOModel(nn.Module):
         else:
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
-            self.FC2_A = nn.Linear(32, self.ActCase)    # default 2 out
-            self.FC2_C = nn.Linear(32, 1)
+            self.FC2_A = nn.Linear(8*(self.NubPhyPara + self.NubComPara), self.ActCase)    # default 2 out
+            self.FC2_C = nn.Linear(8*(self.NubPhyPara + self.NubComPara), 1)
 
     def _CommonPredictNet(self, x_py, x_comp):
+        # print(self.ModelName)
         # Physical
+        # TOOL.ALLP(x_py, comt='x_py')
         x_py = nn.functional.relu(self.PhyConV1(x_py))
         # x_py = nn.functional.max_pool1d(x_py, 3, 1)
         # TOOL.ALLP(x_py, comt='x_py')
@@ -87,7 +89,7 @@ class PPOModel(nn.Module):
             # TOOL.ALLP(x, comt='x_te')
         else:
             # x = x.reshape(x.shape[0], 24)
-            x = x.reshape(x.shape[0], 32)
+            x = x.reshape(x.shape[0], 8*(self.NubPhyPara + self.NubComPara))
         # TOOL.ALLP(x, comt='x_te')
         return x
 
@@ -98,7 +100,15 @@ class PPOModel(nn.Module):
         # x = self.FC2_A(x)
         # x = nn.functional.leaky_relu(self.FC2_A(x))
         # TOOL.ALLP(x, comt='x_Act Before')
-        x = nn.functional.softmax(self.FC2_A(x), dim=1)
+        if self.ModelName == "Progno1":
+            x = nn.functional.hardtanh(self.FC2_A(x), -1, 1)
+            x = x * 100
+            # TOOL.ALLP(x, comt='x_Act_before round')
+            x = x.round()
+            x = x / 100
+            # TOOL.ALLP(x, comt='x_Act_after round')
+        else:
+            x = nn.functional.softmax(self.FC2_A(x), dim=1)
         # x = nn.functional.log_softmax(self.FC2_A(x), dim=1)
         # TOOL.ALLP(x, comt='x_Act')
         return x
@@ -133,6 +143,7 @@ class PPOModel(nn.Module):
 
 
 if __name__ == '__main__':
-    TESTMODEL = PPOModel(name="TEST", NubPhyPara=2, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-0.2, 0.2])
-    TESTMODEL.TestOut(batchtest=False)
-    TESTMODEL.TestOut(batchtest=True)
+    for net_name in ["TEST", "Progno1"]:
+        TESTMODEL = PPOModel(name=net_name, NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-0.2, 0.2], ActCase=1)
+        TESTMODEL.TestOut(batchtest=False)
+        TESTMODEL.TestOut(batchtest=True)

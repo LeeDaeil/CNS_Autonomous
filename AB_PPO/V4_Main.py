@@ -6,7 +6,7 @@ from torch import nn, functional, optim
 
 from AB_PPO.CNS_UDP_FAST import CNS
 from AB_PPO.COMMONTOOL import TOOL
-from AB_PPO.V3_Net_Model_Torch import *
+from AB_PPO.V4_Net_Model_Torch import *
 
 import time
 import copy
@@ -19,7 +19,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [1, 0, 0]
+        self.CNS_NUMBERS = [5, 0, 0]
 
         self.TimeLeg = 10
 
@@ -70,8 +70,8 @@ class Agent(mp.Process):
     # ==============================================================================================================
     # 입력 출력 값 생성
     def InitialStateSet(self):
-        self.PhyPara = ['ZINST58', 'ZINST63']
-        self.PhyState = {_:deque(maxlen=self.W.TimeLeg) for _ in self.PhyPara}
+        self.PhyPara = ['ZINST58', 'ZINST63', 'ZVCT']
+        self.PhyState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.PhyPara}
 
         self.COMPPara = ['BFV122', 'BPV145']
         self.COMPState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.COMPPara}
@@ -94,6 +94,7 @@ class Agent(mp.Process):
     def PreProcessing(self, para, val):
         if para == 'ZINST58': val = round(val/1000, 7)      # 가압기 압력
         if para == 'ZINST63': val = round(val/100, 7)       # 가압기 수위
+        if para == 'ZVCT': val = round(val/100, 7)          # VCT 수위
         return val
 
     # ==============================================================================================================
@@ -125,44 +126,64 @@ class Agent(mp.Process):
                 for __ in range(15):
                     spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
                     a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                    a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
                     a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
                     r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
                     done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
                     # Sampling
                     t_max = 5
                     for t in range(t_max):
-                        TimeDB = {
-                            'Netout': {},   # 0: .. 1:..
-                        }
-                        for nubNet in range(self.LocalNet.NubNET):
+                        NetOut_dict = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                        for nubNet in range(0, self.LocalNet.NubNET):
+                            # TOOL.ALLP(self.S_Py, 'S_Py')
+                            # TOOL.ALLP(self.S_Comp, 'S_Comp')
                             NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
                             NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
-                            act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
-                            # TOOL.ALLP(act, 'act')
-                            NetOut = NetOut.tolist()[act]
-                            # TOOL.ALLP(NetOut, 'NetOut')
+                            # TOOL.ALLP(NetOut, 'Netout before Categorical')
 
-                            TimeDB['Netout'][nubNet] = NetOut
+                            if nubNet == 0:
+                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
+                                # TOOL.ALLP(act, 'act')
+                                NetOut = NetOut.tolist()[act]
+                                # TOOL.ALLP(NetOut, 'NetOut')
+                            else:
+                                act = 0
+                                NetOut = NetOut[0].item()
+                            NetOut_dict[nubNet] = NetOut
+                            # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
+
+                            a_now[nubNet] = act
                             a_dict[nubNet].append([act])
                             a_prob[nubNet].append([NetOut])
 
                         spy_lst.append(self.S_Py.tolist()[0])  # (1, 2, 10) -list> (2, 10)
                         scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 2, 10) -list> (2, 10)
 
+                        # old val to compare the new val
+                        ComparedPara = ["ZVCT"]
+                        self.old_cns = {para: round(self.CNS.mem[para]['Val'], 2) for para in ComparedPara}
+
                         # CNS + 1 Step
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
+                        self.new_cns = {para: round(self.CNS.mem[para]['Val'], 2) for para in ComparedPara}
+
                         # 보상 및 종료조건 계산
                         r = {0: 0, 1: 0}
-                        for nubNet in range(self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
-
-                            if self.CNS.mem['KCNTOMS']['Val'] < maltime:
-                                if act == 1:    # Malfunction
-                                    r[nubNet] = -1
+                        for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
+                            if nubNet == 0:
+                                if self.CNS.mem['KCNTOMS']['Val'] < maltime:
+                                    if a_now[nubNet] == 1:    # Malfunction
+                                        r[nubNet] = -1
+                                    else:
+                                        r[nubNet] = 1
                                 else:
-                                    r[nubNet] = 1
+                                    if a_now[nubNet] == 1:    # Malfunction
+                                        r[nubNet] = 1
+                                    else:
+                                        r[nubNet] = -1
                             else:
-                                if act == 1:    # Malfunction
+                                if self.old_cns["ZVCT"] + NetOut_dict[1] == self.new_cns["ZVCT"]:
                                     r[nubNet] = 1
                                 else:
                                     r[nubNet] = -1
@@ -177,13 +198,16 @@ class Agent(mp.Process):
                                 done_dict[nubNet].append(1)
 
                         def dp_want_val(val, name):
-                            return f"{name}: {self.CNS.mem[val]['Val']:0.4f}"
+                            return f"{name}: {self.CNS.mem[val]['Val']:3.4f}"
 
-                        print(self.CurrentIter, r[0], f'\t{NetOut:0.4f}', dp_want_val('KCNTOMS', 'TIME'),
-                              dp_want_val('PVCT', 'VCT pressure'), dp_want_val('ZVCT', 'VCT level'),
+                        print(self.CurrentIter, f"{r[0]:3}|{r[1]:3}|", f'{NetOut_dict[0]:0.4f}',
+                              f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}",
+                              dp_want_val('PVCT', 'VCT pressure'),
+                              f"VCT Level: {self.new_cns['ZVCT']} "
+                              f"{self.old_cns['ZVCT'] + NetOut_dict[1]:3.4f} + {NetOut_dict[1]:3.4f}",
                               dp_want_val('UPRT', 'PRT temp'), dp_want_val('ZINST48', 'PRT pressure'),
-                              dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
-                              dp_want_val('BPV145', 'Let-down Valve pos'),
+                              # dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
+                              # dp_want_val('BPV145', 'Let-down Valve pos'),
                               )
 
                     # ==================================================================================================
@@ -202,7 +226,7 @@ class Agent(mp.Process):
                     scomp_fin = torch.tensor(scomp_lst[1:], dtype=torch.float)
 
                     # 각 네트워크 별 Advantage 계산
-                    for nubNet in range(self.LocalNet.NubNET):
+                    for nubNet in range(0, self.LocalNet.NubNET):
                         # GAE
                         # r_dict[nubNet]: (5,) -> (5,1)
                         # Netout : (5,1)
@@ -222,11 +246,15 @@ class Agent(mp.Process):
                         adv = torch.tensor(adv_list, dtype=torch.float)
 
                         PreVal = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
-                        Preval_a = PreVal.gather(1, torch.tensor(a_dict[nubNet]))
+                        if nubNet == 0:
+                            PreVal = PreVal.gather(1, torch.tensor(a_dict[nubNet])) # PreVal_a
+                        # TOOL.ALLP(PreVal, f"Preval {nubNet}")
 
                         # Ratio 계산 a/b == exp(log(a) - log(b))
+                        # TOOL.ALLP(a_prob[nubNet], f"a_prob {nubNet}")
                         Preval_old_a_prob = torch.tensor(a_prob[nubNet], dtype=torch.float)
-                        ratio = torch.exp(torch.log(Preval_a) - torch.log(Preval_old_a_prob))
+                        ratio = torch.exp(torch.log(PreVal) - torch.log(Preval_old_a_prob))
+                        # TOOL.ALLP(ratio, f"ratio {nubNet}")
 
                         # surr1, 2
                         eps_clip = 0.1
