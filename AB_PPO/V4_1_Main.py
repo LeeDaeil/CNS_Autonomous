@@ -114,7 +114,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter == 0 and self.CurrentIter % 5 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 15 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -124,6 +124,11 @@ class Agent(mp.Process):
             # Initial
             done = False
             self.InitialStateSet()
+
+            # GP
+            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST63", "ZINST63", "ZVCT"]}
+            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST63", "ZINST63", "ZVCT"]}
+            [ax_dict[i_].clear() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
 
             while not done:
                 fulltime = 15
@@ -142,8 +147,7 @@ class Agent(mp.Process):
                             # copy self.S_Py, self.S_Comp
                             copySPy, copySComp = self.S_Py, self.S_Comp
                             copyRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": []}   # recode 초기화
-                            TOOL.ALLP(copyRecodBox["ZINST58"], "CopySPy")
-                            print(f'TEST{__}')
+                            # TOOL.ALLP(copyRecodBox["ZINST58"], "CopySPy")
                             for PredictTime in range(__, fulltime*t_max):   # 시간이 갈수록 예지하는 시간이 줄어듬.
                                 # 예지 시작
                                 save_ragular_para = {_: 0 for _ in range(self.LocalNet.NubNET)}
@@ -172,9 +176,8 @@ class Agent(mp.Process):
                                 copyRecodBox["ZINST63"].append(copySPyLastVal[0, 1, 0].item())
                                 copyRecodBox["ZVCT"].append(copySPyLastVal[0, 2, 0].item())
                             # 예지 종료 결과값 Recode 그래픽화
-                            plt.plot(ProgRecodBox["ZINST58"] + copyRecodBox["ZINST58"], label=f"ZINST58_{__}")
-                            plt.plot(ProgRecodBox["ZINST63"] + copyRecodBox["ZINST63"], label=f"ZINST63_{__}")
-                            plt.plot(ProgRecodBox["ZVCT"] + copyRecodBox["ZVCT"], label=f"ZVCT_{__}")
+                            [ax_dict[i_].plot(ProgRecodBox[i_] + copyRecodBox[i_],
+                                              label=f"{i_}_{__}") for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
 
                         # plt.show()
                         # CNS + 1 Step
@@ -183,9 +186,9 @@ class Agent(mp.Process):
                         [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], 1)/t_) for i_, t_ in zip(ProgRecodBox.keys(), tun)]
 
                     # END Test Mode CODE
-                    plt.grid()
-                    plt.legend()
-                    plt.savefig(f"{self.CurrentIter}_test.png")
+                    [ax_dict[i_].grid() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
+                    [ax_dict[i_].legend() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
+                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
                     print('END TEST')
 
                 else:
