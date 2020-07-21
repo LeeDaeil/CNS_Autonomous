@@ -126,27 +126,28 @@ class Agent(mp.Process):
             self.InitialStateSet()
 
             # GP
-            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT"]}
-            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT"]}
-            [ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
+            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
+            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
+            [ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
 
             while not done:
                 fulltime = 15
                 t_max = 5       # total iteration = fulltime * t_max
-                tun = [1000, 100, 100]
-                ProgRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": []}   # recode 초기화
+                tun = [1000, 100, 100, 1, 1]
+                ro = [1, 1, 1, 2, 2]
+                ProgRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": []}   # recode 초기화
                 if self.PrognosticMode:
                     # Test Mode
                     for t in range(self.W.TimeLeg):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
-                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], 1)/t_) for i_, t_ in zip(ProgRecodBox.keys(), tun)]
+                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_)/t_) for i_, t_, r_ in zip(ProgRecodBox.keys(), tun, ro)]
 
                     for __ in range(fulltime*t_max):    # total iteration
                         if __ != 0 and __ % 10 == 0:     # 10Step 마다 예지
                             # copy self.S_Py, self.S_Comp
                             copySPy, copySComp = self.S_Py, self.S_Comp
-                            copyRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": []}   # recode 초기화
+                            copyRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": []}   # recode 초기화
                             # TOOL.ALLP(copyRecodBox["ZINST58"], "CopySPy")
                             for PredictTime in range(__, fulltime*t_max):   # 시간이 갈수록 예지하는 시간이 줄어듬.
                                 # 예지 시작
@@ -155,7 +156,10 @@ class Agent(mp.Process):
                                     NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=copySPy, x_comp=copySComp)
                                     NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
                                     act_ = NetOut.argmax().item()    # 행열에서 최대값을 추출 후 값 반환
-                                    save_ragular_para[nubNet] = (act_ - 10)/10  # act_ 값이 값의 증감으로 변경
+                                    if nubNet < 4:
+                                        save_ragular_para[nubNet] = (act_ - 10)/10  # act_ 값이 값의 증감으로 변경
+                                    else:
+                                        save_ragular_para[nubNet] = (act_ - 100)/100  # act_ 값이 값의 증감으로 변경
                                 # TOOL.ALLP(save_ragular_para, "PARA")
 
                                 # copySPy, copySComp에 값 추가
@@ -169,26 +173,32 @@ class Agent(mp.Process):
                                 # copySComp
                                 copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
                                 # copySpy와 다르게 copy SComp는 이전의 제어 값을 그대로 사용함.
+                                copySCompLastVal = copySCompLastVal + tensor([[
+                                    [save_ragular_para[3]], [save_ragular_para[4] / 100],
+                                ]])  # 마지막 변수에 예측된 값을 더해줌.
                                 copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
                                 copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
                                 # 결과값 Recode
                                 copyRecodBox["ZINST58"].append(copySPyLastVal[0, 0, 0].item())
                                 copyRecodBox["ZINST63"].append(copySPyLastVal[0, 1, 0].item())
                                 copyRecodBox["ZVCT"].append(copySPyLastVal[0, 2, 0].item())
+
+                                copyRecodBox["BFV122"].append(copySComp[0, 0, 0].item())
+                                copyRecodBox["BPV145"].append(copySComp[0, 1, 0].item())
                             # 예지 종료 결과값 Recode 그래픽화
                             [ax_dict[i_].plot(ProgRecodBox[i_] + copyRecodBox[i_],
-                                              label=f"{i_}_{__}") for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
+                                              label=f"{i_}_{__}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
 
                         # plt.show()
                         # CNS + 1 Step
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
-                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], 1)/t_) for i_, t_ in zip(ProgRecodBox.keys(), tun)]
+                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_)/t_) for i_, t_, r_ in zip(ProgRecodBox.keys(), tun, ro)]
 
                     # END Test Mode CODE
-                    [ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
-                    [ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
-                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
+                    [ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
                     print('END TEST')
 
                 else:
@@ -229,8 +239,8 @@ class Agent(mp.Process):
                             scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 2, 10) -list> (2, 10)
 
                             # old val to compare the new val
-                            ComparedPara = ["ZVCT", "ZINST58", "ZINST63"]
-                            ComparedParaRound = [1, 1, 1]
+                            ComparedPara = ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]
+                            ComparedParaRound = [1, 1, 1, 2, 2]
                             self.old_cns = {para: round(self.CNS.mem[para]['Val'], pr) for para, pr in zip(ComparedPara,ComparedParaRound)}
 
                             # CNS + 1 Step
@@ -239,8 +249,8 @@ class Agent(mp.Process):
                             self.new_cns = {para: round(self.CNS.mem[para]['Val'], pr) for para, pr in zip(ComparedPara,ComparedParaRound)}
 
                             # 보상 및 종료조건 계산
-                            r = {0: 0, 1: 0, 2: 0, 3: 0}
-                            pa = {0: 0, 1: 0, 2: 0, 3: 0}
+                            r = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+                            pa = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
                             for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
                                 if nubNet == 0:
                                     if self.CNS.mem['KCNTOMS']['Val'] < maltime:
@@ -254,7 +264,10 @@ class Agent(mp.Process):
                                         else:
                                             r[nubNet] = -1
                                 else:
-                                    predict_a = (a_now[nubNet] - 10)/10
+                                    if nubNet < 4:
+                                        predict_a = (a_now[nubNet] - 10)/10
+                                    else:
+                                        predict_a = (a_now[nubNet] - 100) / 100
                                     pa[nubNet] = predict_a
                                     # 2020-07-20 Rule
                                     # if self.new_cns["ZVCT"]-0.2 <= self.old_cns["ZVCT"] + predict_a <= self.new_cns["ZVCT"]+0.2:
@@ -262,7 +275,7 @@ class Agent(mp.Process):
                                     # else:
                                     #     r[nubNet] = -1
                                     # 2020-07-20 Rule 2
-                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63"}
+                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63", 4:"BFV122", 5: "BPV145"}
                                     if self.new_cns[want_para_reward[nubNet]] == self.old_cns[want_para_reward[nubNet]] + predict_a:
                                         r[nubNet] = 1
                                     else:
@@ -275,7 +288,10 @@ class Agent(mp.Process):
                                             # 12.2 - 12.1 -> 0.3
                                             # r[nubNet] = 1 - ( - (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
                                             r[nubNet] = - (- (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                    r[nubNet] = round(r[nubNet], 2)     # 0.100 나와서 2자리에서 반올림.
+                                    if nubNet < 4:
+                                        r[nubNet] = round(r[nubNet], 2)     # 0.100 나와서 2자리에서 반올림.
+                                    else:
+                                        r[nubNet] = round(r[nubNet], 3)  # 0.100 나와서 3자리에서 반올림.
 
                                 r_dict[nubNet].append(r[nubNet])
 
@@ -289,9 +305,10 @@ class Agent(mp.Process):
                             def dp_want_val(val, name):
                                 return f"{name}: {self.CNS.mem[val]['Val']:4.4f}"
 
-                            print(self.CurrentIter, f"{r[0]:4}|{r[1]:4}|{r[2]:4}|{r[3]:4}|",
+                            print(self.CurrentIter, f"{r[0]:4}|{r[1]:4}|{r[2]:4}|{r[3]:4}|{r[4]:6}|{r[5]:6}|",
                                   f'{NetOut_dict[0]:0.4f}', f'{NetOut_dict[1]:0.4f}',
                                   f'{NetOut_dict[2]:0.4f}', f'{NetOut_dict[3]:0.4f}',
+                                  f'{NetOut_dict[4]:0.4f}', f'{NetOut_dict[5]:0.4f}',
                                   f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}",
                                   # dp_want_val('PVCT', 'VCT pressure'),
                                   f"VCT Level: {self.new_cns['ZVCT']}",
@@ -300,6 +317,10 @@ class Agent(mp.Process):
                                   f"{self.old_cns['ZINST58'] + pa[2]:5.2f} + {pa[2]:5.2f}",
                                   f"PZR Level: {self.new_cns['ZINST63']}",
                                   f"{self.old_cns['ZINST63'] + pa[3]:5.2f} + {pa[3]:5.2f}",
+                                  f"BFV122: {self.new_cns['BFV122']}",
+                                  f"{self.old_cns['BFV122'] + pa[4]:5.2f} + {pa[4]:5.2f}",
+                                  f"BFV122: {self.new_cns['BPV145']}",
+                                  f"{self.old_cns['BPV145'] + pa[5]:5.2f} + {pa[5]:5.2f}",
                                   # dp_want_val('UPRT', 'PRT temp'), dp_want_val('ZINST48', 'PRT pressure'),
                                   # dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
                                   # dp_want_val('BPV145', 'Let-down Valve pos'),

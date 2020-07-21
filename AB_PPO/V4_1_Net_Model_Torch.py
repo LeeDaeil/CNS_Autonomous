@@ -16,6 +16,8 @@ class NETBOX:
             1: PPOModel(name="VCTLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=20),
             2: PPOModel(name="PZRLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=20),
             3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=20),
+            4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=10, ClipNetOut=[-1.0, 1.0], ActCase=200),
         }
         self.NubNET = len(self.NET)
 
