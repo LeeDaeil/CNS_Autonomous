@@ -126,9 +126,9 @@ class Agent(mp.Process):
             self.InitialStateSet()
 
             # GP
-            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST63", "ZINST63", "ZVCT"]}
-            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST63", "ZINST63", "ZVCT"]}
-            [ax_dict[i_].clear() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
+            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT"]}
+            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT"]}
+            [ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
 
             while not done:
                 fulltime = 15
@@ -177,7 +177,7 @@ class Agent(mp.Process):
                                 copyRecodBox["ZVCT"].append(copySPyLastVal[0, 2, 0].item())
                             # 예지 종료 결과값 Recode 그래픽화
                             [ax_dict[i_].plot(ProgRecodBox[i_] + copyRecodBox[i_],
-                                              label=f"{i_}_{__}") for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
+                                              label=f"{i_}_{__}") for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
 
                         # plt.show()
                         # CNS + 1 Step
@@ -186,9 +186,9 @@ class Agent(mp.Process):
                         [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], 1)/t_) for i_, t_ in zip(ProgRecodBox.keys(), tun)]
 
                     # END Test Mode CODE
-                    [ax_dict[i_].grid() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
-                    [ax_dict[i_].legend() for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
-                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST63", "ZINST63", "ZVCT"]]
+                    [ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
+                    [ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
+                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT"]]
                     print('END TEST')
 
                 else:
