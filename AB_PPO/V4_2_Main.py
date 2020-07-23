@@ -7,7 +7,7 @@ from torch import nn, functional, optim
 
 from AB_PPO.CNS_UDP_FAST import CNS
 from AB_PPO.COMMONTOOL import TOOL
-from AB_PPO.V4_1_Net_Model_Torch import *
+from AB_PPO.V4_2_Net_Model_Torch import *
 
 import time
 import copy
@@ -20,9 +20,9 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [5, 0, 0]
+        self.CNS_NUMBERS = [10, 0, 0]
 
-        self.TimeLeg = 10
+        self.TimeLeg = 15
 
         # TO CNS_UDP_FASE.py
         self.UpdateIterval = 5
@@ -51,6 +51,9 @@ class Agent(mp.Process):
         self.LocalMem = copy.deepcopy(self.mem)
         # Work info
         self.W = Work_info()
+        # GP Setting
+        self.fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
+        self.ax_dict = {i_: self.fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
         print(f'Make -- {self}')
 
     # ==============================================================================================================
@@ -93,9 +96,11 @@ class Agent(mp.Process):
         self.S_ONE_Comp = [self.COMPState[key][-1] for key in self.COMPPara]
 
     def PreProcessing(self, para, val):
-        if para == 'ZINST58': val = round(val/1000, 7)      # 가압기 압력
-        if para == 'ZINST63': val = round(val/100, 7)       # 가압기 수위
-        if para == 'ZVCT': val = round(val/100, 7)          # VCT 수위
+        if para == 'ZINST58': val = round(val/1000, 4)      # 가압기 압력
+        if para == 'ZINST63': val = round(val/100, 4)       # 가압기 수위
+        if para == 'ZVCT': val = round(val/100, 4)          # VCT 수위
+        if para == 'BFV122': val = round(val, 2)            # BF122 Pos
+        if para == 'BPV145': val = round(val, 2)            # BPV145 Pos
         return val
 
     # ==============================================================================================================
@@ -114,7 +119,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter != 0 and self.CurrentIter % 15 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 30 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -125,10 +130,8 @@ class Agent(mp.Process):
             done = False
             self.InitialStateSet()
 
-            # GP
-            fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
-            ax_dict = {i_: fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]}
-            [ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+            # GP 이전 데이터 Clear
+            [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
 
             while not done:
                 fulltime = 15
@@ -166,17 +169,30 @@ class Agent(mp.Process):
                                 # copySpy
                                 copySPyLastVal = copySPy[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
                                 copySPyLastVal = copySPyLastVal + tensor([[
-                                    [save_ragular_para[0]/1000], [save_ragular_para[1]/100], [save_ragular_para[2]/100]
+                                    [round(save_ragular_para[0]/1000, 4)],
+                                    [round(save_ragular_para[1]/100, 4)],
+                                    [round(save_ragular_para[2]/100, 4)]
                                 ]])     # 마지막 변수에 예측된 값을 더해줌.
                                 copySPy = torch.cat((copySPy, copySPyLastVal), dim=2)   # 본래 텐서에 값을 더함.
+                                # 반올림
+                                copySPy = np.around(copySPy.data.numpy(), decimals=5)
+                                copySPy = torch.tensor(copySPy)
                                 copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
+                                # TOOL.ALLP(copySPy.data.numpy(), "copySPy Next")
+
                                 # copySComp
                                 copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
+                                # TOOL.ALLP(copySCompLastVal.data.numpy(), "COPYSCOMP")
                                 # copySpy와 다르게 copy SComp는 이전의 제어 값을 그대로 사용함.
-                                copySCompLastVal = copySCompLastVal + tensor([[
-                                    [save_ragular_para[3]], [save_ragular_para[4] / 100],
-                                ]])  # 마지막 변수에 예측된 값을 더해줌.
+                                #TODO
+                                # 자기자신 자체
+                                copySCompLastVal = tensor([[[round(save_ragular_para[3], 2)],
+                                                            [round(save_ragular_para[4], 2)]]])
+
                                 copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
+                                # 반올림
+                                copySComp = np.around(copySComp.data.numpy(), decimals=3)
+                                copySComp = torch.tensor(copySComp)
                                 copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
                                 # 결과값 Recode
                                 copyRecodBox["ZINST58"].append(copySPyLastVal[0, 0, 0].item())
@@ -186,7 +202,7 @@ class Agent(mp.Process):
                                 copyRecodBox["BFV122"].append(copySComp[0, 0, 0].item())
                                 copyRecodBox["BPV145"].append(copySComp[0, 1, 0].item())
                             # 예지 종료 결과값 Recode 그래픽화
-                            [ax_dict[i_].plot(ProgRecodBox[i_] + copyRecodBox[i_],
+                            [self.ax_dict[i_].plot(ProgRecodBox[i_] + copyRecodBox[i_],
                                               label=f"{i_}_{__}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
 
                         # plt.show()
@@ -196,9 +212,9 @@ class Agent(mp.Process):
                         [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_)/t_) for i_, t_, r_ in zip(ProgRecodBox.keys(), tun, ro)]
 
                     # END Test Mode CODE
-                    [ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
-                    [ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
-                    [fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [self.ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [self.ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [self.fig_dict[i_].savefig(f"{self.CurrentIter}_{i_}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
                     print('END TEST')
 
                 else:
@@ -275,22 +291,32 @@ class Agent(mp.Process):
                                     # else:
                                     #     r[nubNet] = -1
                                     # 2020-07-20 Rule 2
-                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63", 4:"BFV122", 5: "BPV145"}
-                                    if self.new_cns[want_para_reward[nubNet]] == self.old_cns[want_para_reward[nubNet]] + predict_a:
-                                        r[nubNet] = 1
-                                    else:
-                                        DeZVCT = self.new_cns[want_para_reward[nubNet]] - (self.old_cns[want_para_reward[nubNet]] + predict_a)
-                                        if DeZVCT < 0: # 예측된 값이 더 크다.
-                                            # 12.2 - 12.1 -> 0.1
-                                            # r[nubNet] = 1 - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                            r[nubNet] = - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                        else:   # 예측된 값이 더 작다.
-                                            # 12.2 - 12.1 -> 0.3
-                                            # r[nubNet] = 1 - ( - (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                            r[nubNet] = - (- (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
+                                    # TODO
+                                    #  변수 타입에 따라서 로직 변화함.
+                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63", 4: "BFV122", 5: "BPV145"}
                                     if nubNet < 4:
+                                        if self.new_cns[want_para_reward[nubNet]] == self.old_cns[want_para_reward[nubNet]] + predict_a:
+                                            r[nubNet] = 1
+                                        else:
+                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - (self.old_cns[want_para_reward[nubNet]] + predict_a)
+                                            if DeZVCT < 0: # 예측된 값이 더 크다.
+                                                # 12.2 - 12.1 -> 0.1
+                                                # r[nubNet] = 1 - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
+                                                r[nubNet] = - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
+                                            else:   # 예측된 값이 더 작다.
+                                                # 12.2 - 12.1 -> 0.3
+                                                # r[nubNet] = 1 - ( - (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
+                                                r[nubNet] = - (- (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
                                         r[nubNet] = round(r[nubNet], 2)     # 0.100 나와서 2자리에서 반올림.
                                     else:
+                                        if self.new_cns[want_para_reward[nubNet]] == predict_a:
+                                            r[nubNet] = 1
+                                        else:
+                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - predict_a
+                                            if DeZVCT < 0: # 예측된 값이 더 크다.
+                                                r[nubNet] = - (predict_a - self.new_cns[want_para_reward[nubNet]])
+                                            else:
+                                                r[nubNet] = - ( - predict_a + self.new_cns[want_para_reward[nubNet]])
                                         r[nubNet] = round(r[nubNet], 3)  # 0.100 나와서 3자리에서 반올림.
 
                                 r_dict[nubNet].append(r[nubNet])
@@ -318,9 +344,9 @@ class Agent(mp.Process):
                                   f"PZR Level: {self.new_cns['ZINST63']}",
                                   f"{self.old_cns['ZINST63'] + pa[3]:5.2f} + {pa[3]:5.2f}",
                                   f"BFV122: {self.new_cns['BFV122']}",
-                                  f"{self.old_cns['BFV122'] + pa[4]:5.2f} + {pa[4]:5.2f}",
+                                  f"{self.new_cns['BFV122'] + pa[4]:5.2f} + {pa[4]:5.2f}",
                                   f"BFV122: {self.new_cns['BPV145']}",
-                                  f"{self.old_cns['BPV145'] + pa[5]:5.2f} + {pa[5]:5.2f}",
+                                  f"{self.new_cns['BPV145'] + pa[5]:5.2f} + {pa[5]:5.2f}",
                                   # dp_want_val('UPRT', 'PRT temp'), dp_want_val('ZINST48', 'PRT pressure'),
                                   # dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
                                   # dp_want_val('BPV145', 'Let-down Valve pos'),
