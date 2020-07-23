@@ -20,11 +20,8 @@ class NETBOX:
             5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
 
             # CNN
-            6: CNNModel(name="VCTLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=1),
-            7: CNNModel(name="PZRLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=1),
-            8: CNNModel(name="PZRpressure", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=1),
-            9: CNNModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=1),
-            10: CNNModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=1),
+            6: CNNModel(name="Phy", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            7: CNNModel(name="Comp", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=2),
         }
         self.NubNET = len(self.NET)
 
@@ -237,7 +234,7 @@ class CNNModel(nn.Module):
             # x = nn.functional.softmax(self.FC2_A(x), dim=1)
             x = nn.functional.relu6(self.FC2_A(x))
         # x = nn.functional.log_softmax(self.FC2_A(x), dim=1)
-        TOOL.ALLP(x, comt='x_Act')
+        # TOOL.ALLP(x, comt='x_Act')
         return x
 
     # def GetPredictCrticOut(self, x_py, x_comp):
