@@ -7,7 +7,7 @@ from torch import nn, functional, optim
 
 from AB_PPO.CNS_UDP_FAST import CNS
 from AB_PPO.COMMONTOOL import TOOL
-from AB_PPO.V4_3_1_Net_Model_Torch import *
+from AB_PPO.V4_3_2_Net_Model_Torch import *
 
 import time
 import copy
@@ -119,7 +119,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter == 0 and self.CurrentIter % 30 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 30 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
