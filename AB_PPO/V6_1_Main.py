@@ -63,10 +63,27 @@ class Agent(mp.Process):
             self.para.append(pa[_])
             self.val.append(va[_])
 
-    def send_action(self, act):
+    def send_action(self, act=0, BFV122=0, PV145=0):
         # 전송될 변수와 값 저장하는 리스트
         self.para = []
         self.val = []
+
+        if act == 0:
+            self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
+
+        if PV145 == 0:
+            self.send_action_append(["KSWO90", "KSWO91"], [0, 0])  # PV145 Stay
+        elif PV145 == 1:
+            self.send_action_append(["KSWO90", "KSWO91"], [0, 1])  # PV145 Up
+        elif PV145 == 2:
+            self.send_action_append(["KSWO90", "KSWO91"], [1, 0])  # PV145 Down
+
+        if BFV122 == 0:
+            self.send_action_append(["KSWO101", "KSWO102"], [0, 0])  # BFV122 Stay
+        elif BFV122 == 1:
+            self.send_action_append(["KSWO101", "KSWO102"], [0, 1])  # BFV122 Up
+        elif BFV122 == 2:
+            self.send_action_append(["KSWO101", "KSWO102"], [1, 0])  # BFV122 Down
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -117,12 +134,14 @@ class Agent(mp.Process):
             self.CNS._send_malfunction_signal(36, size, maltime)
             time.sleep(1)
             print(f'DONE initial {size}, {maltime}')
+            # 초기 제어 Setting 보내기
+            self.send_action()
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter != 0 and self.CurrentIter % 30 == 0:
+            if self.CurrentIter == 0 and self.CurrentIter % 30 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -141,16 +160,16 @@ class Agent(mp.Process):
                 t_max = 5       # total iteration = fulltime * t_max
                 ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
-                ro = [2, 2, 2, 2, 2]
+                ro = [5, 4, 4, 2, 2]
                 ProgRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": []}   # recode 초기화
 
                 if self.PrognosticMode:
                     # Test Mode
-                    SOFTMODE = False
+                    SOFTMODE = True
                     for t in range(self.W.TimeLeg):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
-                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_)/t_) for i_, t_, r_ in zip(ProgRecodBox.keys(), tun, ro)]
+                        [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_) / t_) for i_, t_, r_ in zip(ProgRecodBox.keys(), tun, ro)]
 
                     if not SOFTMODE:
                         for __ in range(fulltime * t_max):  # total iteration
@@ -237,9 +256,7 @@ class Agent(mp.Process):
                             self.MakeStateSet()
                             [ProgRecodBox[i_].append(round(self.CNS.mem[i_]['Val'], r_) / t_) for i_, t_, r_ in
                              zip(ProgRecodBox.keys(), tun, ro)]
-
                     else:
-
                         for __ in range(fulltime*t_max):    # total iteration
                             if __ != 0 and __ % 10 == 0:     # 10Step 마다 예지
                                 # copy self.S_Py, self.S_Comp
@@ -253,27 +270,35 @@ class Agent(mp.Process):
                                         NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=copySPy, x_comp=copySComp)
                                         NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
                                         act_ = NetOut.argmax().item()    # 행열에서 최대값을 추출 후 값 반환
-                                        save_ragular_para[nubNet] = (act_ - 100)/100  # act_ 값이 값의 증감으로 변경
-                                    TOOL.ALLP(save_ragular_para, "save_ragular_para")
+                                        if nubNet in [0, 6, 7]:
+                                            save_ragular_para[nubNet] = act_
+                                        elif nubNet in [1]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 100000, 5)
+                                        elif nubNet in [2, 3]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 10000, 4)
+                                        elif nubNet in [4, 5]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 100, 2)
+
+                                    # TOOL.ALLP(save_ragular_para, "save_ragular_para")
 
                                     # copySPy, copySComp에 값 추가
                                     # copySpy
                                     copySPyLastVal = copySPy[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
 
                                     add_val = tensor([[
-                                        [round(save_ragular_para[0]/1000, 5)],
-                                        [round(save_ragular_para[1]/100, 4)],
-                                        [round(save_ragular_para[2]/100, 4)]
+                                        [save_ragular_para[1]],
+                                        [save_ragular_para[2]],
+                                        [save_ragular_para[3]],
                                     ]])
-                                    TOOL.ALLP(copySPyLastVal, "copySPyLastVal")
-                                    TOOL.ALLP(add_val, "add_val")
+                                    # TOOL.ALLP(copySPyLastVal, "copySPyLastVal")
+                                    # TOOL.ALLP(add_val, "add_val")
                                     copySPyLastVal = copySPyLastVal + add_val     # 마지막 변수에 예측된 값을 더해줌.
 
                                     copySPy = torch.cat((copySPy, copySPyLastVal), dim=2)   # 본래 텐서에 값을 더함.
                                     # 반올림
-                                    TOOL.ALLP(copySPy.data.numpy(), "COPYSPY")
+                                    # TOOL.ALLP(copySPy.data.numpy(), "COPYSPY")
                                     copySPy = np.around(copySPy.data.numpy(), decimals=5)
-                                    TOOL.ALLP(copySPy, "COPYSPY_Round")
+                                    # TOOL.ALLP(copySPy, "COPYSPY_Round")
                                     copySPy = torch.tensor(copySPy)
                                     copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
                                     # TOOL.ALLP(copySPy.data.numpy(), "copySPy Next")
@@ -284,8 +309,8 @@ class Agent(mp.Process):
                                     # copySpy와 다르게 copy SComp는 이전의 제어 값을 그대로 사용함.
                                     #TODO
                                     # 자기자신 자체
-                                    copySCompLastVal = tensor([[[round(save_ragular_para[3], 2)],
-                                                                [round(save_ragular_para[4], 2)]]])
+                                    copySCompLastVal = tensor([[[save_ragular_para[4]],
+                                                                [save_ragular_para[5]]]])
 
                                     copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
                                     # 반올림
@@ -325,6 +350,7 @@ class Agent(mp.Process):
                         spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
                         a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
                         a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                        a_now_orgin = {_: 0 for _ in range(self.LocalNet.NubNET)}
                         a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
                         r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
                         done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
@@ -340,48 +366,54 @@ class Agent(mp.Process):
                                 NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
                                 NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
                                 # TOOL.ALLP(NetOut, 'Netout before Categorical')
-                                if nubNet < 6:
-                                    act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
-                                    # TOOL.ALLP(act, 'act')
-                                    NetOut = NetOut.tolist()[act]
-                                    # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
-                                    NetOut_dict[nubNet] = NetOut
-                                    # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
+                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
+                                # TOOL.ALLP(act, 'act')
+                                NetOut = NetOut.tolist()[act]
+                                # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
+                                NetOut_dict[nubNet] = NetOut
+                                # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
+                                if nubNet in [0, 6, 7]:
                                     a_now[nubNet] = act
-                                    a_dict[nubNet].append([act])
-                                    a_prob[nubNet].append([NetOut])
-                                else:
-                                    y_predict[nubNet].append(NetOut.data.numpy())
-                                    # TOOL.ALLP(y_predict[nubNet], 'y_predict')
+                                elif nubNet in [1]:
+                                    a_now[nubNet] = round((act - 100) / 100000, 5)
+                                elif nubNet in [2, 3]:
+                                    a_now[nubNet] = round((act - 100) / 10000, 4)
+                                elif nubNet in [4, 5]:
+                                    a_now[nubNet] = round((act - 100) / 100, 2)
+                                a_now_orgin[nubNet] = act
+                                a_dict[nubNet].append([act])        # for training
+                                a_prob[nubNet].append([NetOut])     # for training
 
-                            spy_lst.append(self.S_Py.tolist()[0])  # (1, 2, 10) -list> (2, 10)
-                            scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 2, 10) -list> (2, 10)
+                            spy_lst.append(self.S_Py.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+                            scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
 
                             # old val to compare the new val
-                            ComparedPara = ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]
-                            ComparedParaRound = [2, 2, 2, 2, 2]
-                            self.old_cns = {para: round(self.CNS.mem[para]['Val'], pr) for para, pr in zip(ComparedPara,ComparedParaRound)}
+                            self.old_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist() # (3,)
+                            self.old_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist() # (3,)
+                            self.old_cns = [    # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
+                                round(self.old_phys[0], 5), round(self.old_phys[1], 4), round(self.old_phys[2], 4),
+                                round(self.old_comp[0], 2), round(self.old_comp[1], 2)
+                            ]
                             # TOOL.ALLP(self.old_cns, "old_CNS")
+
+                            # Send Act to CNS!
+                            self.send_action(act=0, BFV122=a_now[6], PV145=a_now[7])
 
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
                             self.MakeStateSet()
-                            self.new_cns = {para: round(self.CNS.mem[para]['Val'], pr) for para, pr in zip(ComparedPara,ComparedParaRound)}
-
-                            y_answer_one = self.S_Py[:, :, -1:].data.reshape(3)
-                            # TOOL.ALLP(y_answer_one, "Answer_one")
-                            y_answer[6].append(y_answer_one.numpy())
-                            y_answer_one = self.S_Comp[:, :, -1:].data.reshape(2)
-                            y_answer[7].append(y_answer_one.numpy())
-                            # TOOL.ALLP(y_answer, "y_answer")
+                            self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
+                            self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
+                            self.new_cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
+                                round(self.new_phys[0], 5), round(self.new_phys[1], 4), round(self.new_phys[2], 4),
+                                round(self.new_comp[0], 2), round(self.new_comp[1], 2)
+                            ]
 
                             # 보상 및 종료조건 계산
-                            r = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-                            pa = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-                            for nubNet in range(0, 6):      # 보상 네트워크별로 계산 및 저장
-                            # for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
-                                if nubNet == 0:
+                            r = {_: 0 for _ in range(0, self.LocalNet.NubNET)}
+                            for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
+                                if nubNet in [0]:
                                     if self.CNS.mem['KCNTOMS']['Val'] < maltime:
                                         if a_now[nubNet] == 1:    # Malfunction
                                             r[nubNet] = -1
@@ -392,40 +424,49 @@ class Agent(mp.Process):
                                             r[nubNet] = 1
                                         else:
                                             r[nubNet] = -1
-                                else:
-                                    predict_a = round((a_now[nubNet] - 100) / 100, 2)
-                                    pa[nubNet] = predict_a
-                                    # TODO
-                                    #  변수 타입에 따라서 로직 변화함.
-                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63", 4: "BFV122", 5: "BPV145"}
-                                    if nubNet < 4:
-                                        if self.new_cns[want_para_reward[nubNet]] == self.old_cns[want_para_reward[nubNet]] + predict_a:
-                                            r[nubNet] = 1
-                                        else:
-                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - (self.old_cns[want_para_reward[nubNet]] + predict_a)
-                                            if DeZVCT < 0: # 예측된 값이 더 크다.
-                                                # 12.2 - 12.1 -> 0.1
-                                                # r[nubNet] = 1 - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                                r[nubNet] = - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                            else:   # 예측된 값이 더 작다.
-                                                # 12.2 - 12.1 -> 0.3
-                                                # r[nubNet] = 1 - ( - (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                                r[nubNet] = - (- (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                        r[nubNet] = round(r[nubNet], 3)     # 0.100 나와서 2자리에서 반올림.
+                                elif nubNet in [1, 2, 3]:
+                                    Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] + a_now[nubNet])
+                                    if Dealta == 0:
+                                        r[nubNet] = 1
+                                    elif Dealta < 0:
+                                        r[nubNet] = - ((self.old_cns[nubNet - 1] + a_now[nubNet]) - self.new_cns[nubNet-1])
+                                    elif Dealta > 0:
+                                        r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                    # TOOL.ALLP(Dealta, f"Dealta")
+                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
+                                    if nubNet in [1]:
+                                        r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
+                                    elif nubNet in [2, 3]:
+                                        r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
+                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
+                                    # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], a_now[nubNet])
+                                elif nubNet in [4, 5]:
+                                    Dealta = self.new_cns[nubNet - 1] - a_now[nubNet]
+                                    if Dealta == 0:
+                                        r[nubNet] = 1
+                                    elif Dealta < 0:
+                                        r[nubNet] = - ((a_now[nubNet]) - self.new_cns[nubNet - 1])
+                                    elif Dealta > 0:
+                                        r[nubNet] = - (- (a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                    # TOOL.ALLP(Dealta, f"Dealta")
+                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
+                                    r[nubNet] = round(r[nubNet], 3)
+                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
+                                    # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], a_now[nubNet])
+
+                                elif nubNet in [6, 7]:
+                                    Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
+                                    Dealta = round(Dealta, 2)
+                                    if Dealta < -0.01:      # 0.53 - 0.55 = - 0.02
+                                        r[nubNet] = self.new_cns[1] - 0.55      # # 0.53 - 0.55 = - 0.02
+                                    elif Dealta > 0.01:     # 0.57 - 0.55 = 0.02
+                                        r[nubNet] = 0.55 - self.new_cns[1]      # 0.55 - 0.57 = - 0.02
                                     else:
-                                        if self.new_cns[want_para_reward[nubNet]] == predict_a:
-                                            r[nubNet] = 1
-                                        else:
-                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - predict_a
-                                            if DeZVCT < 0: # 예측된 값이 더 크다.
-                                                r[nubNet] = - (predict_a - self.new_cns[want_para_reward[nubNet]])
-                                            else:
-                                                r[nubNet] = - ( - predict_a + self.new_cns[want_para_reward[nubNet]])
-                                        r[nubNet] = round(r[nubNet], 3)  # 0.100 나와서 3자리에서 반올림.
+                                        r[nubNet] = 1
+                                    r[nubNet] = round(r[nubNet], 3)
 
                                 r_dict[nubNet].append(r[nubNet])
-                                # TOOL.ALLP(r[nubNet], "r_nubNet")
-                                # TOOL.ALLP(pa[nubNet], "pa_nubNet")
+
                                 # 종료 조건 계산
                                 if __ == 14 and t == t_max-1:
                                     done_dict[nubNet].append(0)
@@ -436,26 +477,14 @@ class Agent(mp.Process):
                             def dp_want_val(val, name):
                                 return f"{name}: {self.CNS.mem[val]['Val']:4.4f}"
 
-                            print(self.CurrentIter, f"{r[0]:6}|{r[1]:6}|{r[2]:6}|{r[3]:6}|{r[4]:6}|{r[5]:6}|",
-                                  f'{NetOut_dict[0]:0.4f}', f'{NetOut_dict[1]:0.4f}',
-                                  f'{NetOut_dict[2]:0.4f}', f'{NetOut_dict[3]:0.4f}',
-                                  f'{NetOut_dict[4]:0.4f}', f'{NetOut_dict[5]:0.4f}',
-                                  f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}",
-                                  # dp_want_val('PVCT', 'VCT pressure'),
-                                  f"VCT Level: {self.new_cns['ZVCT']}",
-                                  f"{self.old_cns['ZVCT'] + pa[1]:5.2f} + {pa[1]:5.2f}",
-                                  f"PZR pre: {self.new_cns['ZINST58']}",
-                                  f"{self.old_cns['ZINST58'] + pa[2]:5.2f} + {pa[2]:5.2f}",
-                                  f"PZR Level: {self.new_cns['ZINST63']}",
-                                  f"{self.old_cns['ZINST63'] + pa[3]:5.2f} + {pa[3]:5.2f}",
-                                  f"BFV122: {self.new_cns['BFV122']}",
-                                  f"{self.new_cns['BFV122'] + pa[4]:5.2f} + {pa[4]:5.2f}",
-                                  f"BFV122: {self.new_cns['BPV145']}",
-                                  f"{self.new_cns['BPV145'] + pa[5]:5.2f} + {pa[5]:5.2f}",
-                                  # dp_want_val('UPRT', 'PRT temp'), dp_want_val('ZINST48', 'PRT pressure'),
-                                  # dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
-                                  # dp_want_val('BPV145', 'Let-down Valve pos'),
-                                  )
+                            DIS = f"[{self.CurrentIter:3}]" + f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}|"
+                            for _ in r.keys():
+                                DIS += f"{r[_]:6} |"
+                            for _ in NetOut_dict.keys():
+                                DIS += f"[{NetOut_dict[_]:0.4f}-{a_now_orgin[_]:4}]"
+                            for para, _ in zip(["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"], [0, 1, 2, 3, 4]):
+                                DIS += f"| {para}: {self.old_cns[_]:5.2f} | {self.new_cns[_]:5.2f}"
+                            print(DIS)
 
                             # Logger
                             TOOL.log_add(file_name=f"{self.name}.txt", ep=self.CurrentIter, ep_iter=ep_iter, x=self.old_cns)
@@ -477,8 +506,8 @@ class Agent(mp.Process):
                         scomp_fin = torch.tensor(scomp_lst[1:], dtype=torch.float)
 
                         # 각 네트워크 별 Advantage 계산
-                        for nubNet in range(0, 6):
-                        # for nubNet in range(0, self.LocalNet.NubNET):
+                        # for nubNet in range(0, 6):
+                        for nubNet in range(0, self.LocalNet.NubNET):
                             # GAE
                             # r_dict[nubNet]: (5,) -> (5,1)
                             # Netout : (5,1)
@@ -529,24 +558,6 @@ class Agent(mp.Process):
                             # print(self.CurrentIter, 'AgentNub: ', nubNet,
                             #       'adv: ', adv.mean().item(), 'loss: ', loss.mean().item(),
                             #       '= - min_val(', min_val.mean().item(), ') + Smooth(', smooth_l1_loss.mean().item(), ')')
-
-                        for nubNet in range(6, 8):
-                            y_predict_tensor = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
-                            # TOOL.ALLP(y_predict[nubNet], "loss_y_predict")
-                            # TOOL.ALLP(y_answer[nubNet], "loss_y_predict")
-                            y_answer_tensor = torch.tensor(y_answer[nubNet], dtype=torch.float)
-                            # TOOL.ALLP(y_predict_tensor, "loss_y_predict")
-                            # TOOL.ALLP(y_answer_tensor, "loss_y_predict_ans")
-
-                            loss = nn.functional.mse_loss(y_predict_tensor, y_answer_tensor)
-
-                            self.LocalOPT.NETOPT[nubNet].zero_grad()
-                            loss.mean().backward()
-                            for global_param, local_param in zip(self.GlobalNet.NET[nubNet].parameters(),
-                                                                 self.LocalNet.NET[nubNet].parameters()):
-                                global_param._grad = local_param.grad
-                            self.LocalOPT.NETOPT[nubNet].step()
-                            self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
 
                 print('DONE EP')
                 break

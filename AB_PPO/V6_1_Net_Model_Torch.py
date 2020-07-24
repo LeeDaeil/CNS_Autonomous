@@ -18,10 +18,13 @@ class NETBOX:
             3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
             4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
             5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            # Control
+            6: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            7: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
 
             # CNN
-            6: CNNModel(name="Phy", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
-            7: CNNModel(name="Comp", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=2),
+            # 6: CNNModel(name="Phy", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            # 7: CNNModel(name="Comp", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=2),
         }
         self.NubNET = len(self.NET)
 
