@@ -12,15 +12,15 @@ class NETBOX:
     """
     def __init__(self):
         self.NET = {
-            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0]),
-            1: PPOModel(name="VCTLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            2: PPOModel(name="PZRLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0]),
+            1: PPOModel(name="VCTLevel", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            2: PPOModel(name="PZRLevel", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
             # Control
-            6: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
-            7: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            6: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            7: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
 
             # CNN
             # 6: CNNModel(name="Phy", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
@@ -75,8 +75,8 @@ class PPOModel(nn.Module):
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
             # self.FC2_A = nn.Linear(8*(self.NubPhyPara + self.NubComPara), self.ActCase)    # default 2 out
-            self.FC2_A = nn.Linear(65, self.ActCase)    # default 2 out
-            self.FC2_C = nn.Linear(65, 1)
+            self.FC2_A = nn.Linear(91, self.ActCase)    # default 2 out
+            self.FC2_C = nn.Linear(91, 1)
 
     def _CommonPredictNet(self, x_py, x_comp):
         # print(self.ModelName)
@@ -102,7 +102,7 @@ class PPOModel(nn.Module):
         else:
             # x = x.reshape(x.shape[0], 24)
             # x = x.reshape(x.shape[0], 8*(self.NubPhyPara + self.NubComPara))
-            x = x.reshape(x.shape[0], 65)
+            x = x.reshape(x.shape[0], 91)
         # TOOL.ALLP(x, comt='x_te')
         return x
 
@@ -188,8 +188,8 @@ class CNNModel(nn.Module):
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
             # self.FC2_A = nn.Linear(8*(self.NubPhyPara + self.NubComPara), self.ActCase)    # default 2 out
-            self.FC2_A = nn.Linear(65, self.ActCase)    # default 2 out
-            # self.FC2_C = nn.Linear(65, 1)
+            self.FC2_A = nn.Linear(91, self.ActCase)    # default 2 out
+            # self.FC2_C = nn.Linear(91, 1)
 
     def _CommonPredictNet(self, x_py, x_comp):
         # print(self.ModelName)
@@ -215,7 +215,7 @@ class CNNModel(nn.Module):
         else:
             # x = x.reshape(x.shape[0], 24)
             # x = x.reshape(x.shape[0], 8*(self.NubPhyPara + self.NubComPara))
-            x = x.reshape(x.shape[0], 65)
+            x = x.reshape(x.shape[0], 91)
         # TOOL.ALLP(x, comt='x_te')
         return x
 
@@ -271,11 +271,11 @@ class CNNModel(nn.Module):
 
 if __name__ == '__main__':
     for net_name in ["TEST", "Progno1"]:
-        TESTMODEL = PPOModel(name=net_name, NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-0.2, 0.2], ActCase=1)
+        TESTMODEL = PPOModel(name=net_name, NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-0.2, 0.2], ActCase=1)
         TESTMODEL.TestOut(batchtest=False)
         TESTMODEL.TestOut(batchtest=True)
 
-        TESTMODEL = CNNModel(name=net_name, NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-0.2, 0.2],
+        TESTMODEL = CNNModel(name=net_name, NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-0.2, 0.2],
                              ActCase=1)
         TESTMODEL.TestOut(batchtest=False)
         TESTMODEL.TestOut(batchtest=True)

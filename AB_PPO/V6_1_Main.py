@@ -94,13 +94,16 @@ class Agent(mp.Process):
         self.PhyPara = ['ZINST58', 'ZINST63', 'ZVCT']
         self.PhyState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.PhyPara}
 
-        self.COMPPara = ['BFV122', 'BPV145']
+        self.COMPPara = ['BFV122', 'BPV145', 'BFV122_CONT', 'BPV145_CONT']
         self.COMPState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.COMPPara}
 
-    def MakeStateSet(self):
+    def MakeStateSet(self, BFV122=0, PV145=0):
         # 값을 쌓음 (return Dict)
         [self.PhyState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.PhyPara]
-        [self.COMPState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.COMPPara]
+        self.COMPState['BFV122'].append(self.PreProcessing('BFV122', self.CNS.mem['BFV122']['Val']))
+        self.COMPState['BPV145'].append(self.PreProcessing('BPV145', self.CNS.mem['BPV145']['Val']))
+        self.COMPState['BFV122_CONT'].append(self.PreProcessing('BFV122_CONT', BFV122))
+        self.COMPState['BPV145_CONT'].append(self.PreProcessing('BPV145_CONT', PV145))
 
         # Tensor로 전환
         self.S_Py = torch.tensor([self.PhyState[key] for key in self.PhyPara])
@@ -116,8 +119,11 @@ class Agent(mp.Process):
         if para == 'ZINST58': val = round(val/1000, 5)      # 가압기 압력
         if para == 'ZINST63': val = round(val/100, 4)       # 가압기 수위
         if para == 'ZVCT': val = round(val/100, 4)          # VCT 수위
+
         if para == 'BFV122': val = round(val, 2)            # BF122 Pos
         if para == 'BPV145': val = round(val, 2)            # BPV145 Pos
+        if para == 'BFV122_CONT': val = round(val/2, 2)            # BPV145 Pos
+        if para == 'BPV145_CONT': val = round(val/2, 2)            # BPV145 Pos
         return val
 
     # ==============================================================================================================
@@ -153,7 +159,7 @@ class Agent(mp.Process):
             self.InitialStateSet()
 
             # GP 이전 데이터 Clear
-            [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+            [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
                 fulltime = 15
@@ -162,7 +168,7 @@ class Agent(mp.Process):
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
 
-                ProgRecodBox = {"Time": [],"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": []}   # recode 초기화
+                ProgRecodBox = {"Time": [],"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": [], "BFV122_CONT": [], "BPV145_CONT": []}   # recode 초기화
                 Timer = 0
 
                 if self.PrognosticMode:
@@ -179,6 +185,9 @@ class Agent(mp.Process):
                         ProgRecodBox["ZVCT"].append(temp_S_py[2])
                         ProgRecodBox["BFV122"].append(temp_S_comp[0])
                         ProgRecodBox["BPV145"].append(temp_S_comp[1])
+
+                        ProgRecodBox["BFV122_CONT"].append(0)
+                        ProgRecodBox["BPV145_CONT"].append(0)
 
                         ProgRecodBox["Time"].append(Timer)
                         Timer += 1
@@ -216,14 +225,16 @@ class Agent(mp.Process):
                                 copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
 
                                 copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
-                                copySCompLastVal = tensor([[[save_ragular_para[4]], [save_ragular_para[5]]]])
+                                copySCompLastVal = tensor([[[save_ragular_para[4]], [save_ragular_para[5]],
+                                                            [save_ragular_para[6] / 2], [save_ragular_para[7] / 2],
+                                                            ]])
                                 copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
                                 # copySComp = torch.tensor(copySComp)
                                 copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
 
                                 # 마지막 값 추출
                                 copy_temp_S_py = copySPy[:, :, -1:].data.numpy().reshape(3)
-                                copy_temp_S_comp = copySComp[:, :, -1:].data.numpy().reshape(2)
+                                copy_temp_S_comp = copySComp[:, :, -1:].data.numpy().reshape(4)
                                 # 데이터 저장
                                 copyRecodBox["ZINST58"].append(copy_temp_S_py[0])
                                 copyRecodBox["ZINST63"].append(copy_temp_S_py[1])
@@ -231,12 +242,15 @@ class Agent(mp.Process):
                                 copyRecodBox["BFV122"].append(copy_temp_S_comp[0])
                                 copyRecodBox["BPV145"].append(copy_temp_S_comp[1])
 
+                                copyRecodBox["BFV122_CONT"].append(copy_temp_S_comp[2])
+                                copyRecodBox["BPV145_CONT"].append(copy_temp_S_comp[3])
+
                                 copyRecodBox["Time"].append(Temp_Timer)
                                 Temp_Timer += 1
 
                             # 예지 종료 결과값 Recode 그래픽화
-                            [self.ax_dict[i_].plot(copyRecodBox["Time"], copyRecodBox[i_], label=f"{i_}_{t}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
-                            [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_{t}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                            [self.ax_dict[i_].plot(copyRecodBox["Time"], copyRecodBox[i_], label=f"{i_}_{t}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                            [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_{t}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
                         a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
                         for nubNet in range(0, self.LocalNet.NubNET):
@@ -260,7 +274,7 @@ class Agent(mp.Process):
 
                         # CNS + 1 Step
                         self.CNS.run_freeze_CNS()
-                        self.MakeStateSet()
+                        self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
                         # 마지막 값 추출
                         temp_S_py = self.S_Py[:, :, -1:].data.numpy().reshape(3)
                         temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(2)
@@ -271,13 +285,16 @@ class Agent(mp.Process):
                         ProgRecodBox["BFV122"].append(temp_S_comp[0])
                         ProgRecodBox["BPV145"].append(temp_S_comp[1])
 
+                        ProgRecodBox["BFV122_CONT"].append(temp_S_comp[2])
+                        ProgRecodBox["BPV145_CONT"].append(temp_S_comp[3])
+
                         ProgRecodBox["Time"].append(Timer)
                         Timer += 1
 
                     # END Test Mode CODE
-                    [self.ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
-                    [self.ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
-                    [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
+                    [self.ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                    [self.ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145",  "BFV122_CONT", "BPV145_CONT"]]
+                    [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
                     print('END TEST')
 
                 else:
@@ -342,7 +359,7 @@ class Agent(mp.Process):
 
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
-                            self.MakeStateSet()
+                            self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
                             self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
                             self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
                             self.new_cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
