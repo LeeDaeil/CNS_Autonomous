@@ -141,7 +141,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter == 0 and self.CurrentIter % 30 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 30 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -329,6 +329,26 @@ class Agent(mp.Process):
                                                   label=f"{i_}_{__}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"]]
 
                             # plt.show()
+                            a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                            for nubNet in range(0, self.LocalNet.NubNET):
+                                # TOOL.ALLP(self.S_Py, 'S_Py')
+                                # TOOL.ALLP(self.S_Comp, 'S_Comp')
+                                NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                                NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
+                                # TOOL.ALLP(NetOut, 'Netout before Categorical')
+                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
+
+                                if nubNet in [0, 6, 7]:
+                                    a_now[nubNet] = act
+                                elif nubNet in [1]:
+                                    a_now[nubNet] = round((act - 100) / 100000, 5)
+                                elif nubNet in [2, 3]:
+                                    a_now[nubNet] = round((act - 100) / 10000, 4)
+                                elif nubNet in [4, 5]:
+                                    a_now[nubNet] = round((act - 100) / 100, 2)
+                            # Send Act to CNS!
+                            self.send_action(act=0, BFV122=a_now[6], PV145=a_now[7])
+
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
                             self.MakeStateSet()
