@@ -178,7 +178,7 @@ class Agent(mp.Process):
                         self.MakeStateSet()
                         # 마지막 값 추출
                         temp_S_py = self.S_Py[:, :, -1:].data.numpy().reshape(3)
-                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(2)
+                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(4)
                         # 데이터 저장
                         ProgRecodBox["ZINST58"].append(temp_S_py[0])
                         ProgRecodBox["ZINST63"].append(temp_S_py[1])
@@ -277,7 +277,7 @@ class Agent(mp.Process):
                         self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
                         # 마지막 값 추출
                         temp_S_py = self.S_Py[:, :, -1:].data.numpy().reshape(3)
-                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(2)
+                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(4)
                         # 데이터 저장
                         ProgRecodBox["ZINST58"].append(temp_S_py[0])
                         ProgRecodBox["ZINST63"].append(temp_S_py[1])
@@ -347,7 +347,7 @@ class Agent(mp.Process):
 
                             # old val to compare the new val
                             self.old_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist() # (3,)
-                            self.old_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist() # (3,)
+                            self.old_comp = self.S_Comp[:, :, -1:].data.reshape(4).tolist() # (3,)
                             self.old_cns = [    # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
                                 round(self.old_phys[0], 5), round(self.old_phys[1], 4), round(self.old_phys[2], 4),
                                 round(self.old_comp[0], 2), round(self.old_comp[1], 2)
@@ -361,7 +361,7 @@ class Agent(mp.Process):
                             self.CNS.run_freeze_CNS()
                             self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
                             self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
-                            self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
+                            self.new_comp = self.S_Comp[:, :, -1:].data.reshape(4).tolist()  # (3,)
                             self.new_cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
                                 round(self.new_phys[0], 5), round(self.new_phys[1], 4), round(self.new_phys[2], 4),
                                 round(self.new_comp[0], 2), round(self.new_comp[1], 2)
