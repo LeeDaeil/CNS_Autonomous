@@ -20,7 +20,7 @@ import logging.handlers
 from Load_follwing_A3C.CNS_UDP_FAST import CNS
 #------------------------------------------------------------------
 get_file_time_path = datetime.datetime.now()
-MAKE_FILE_PATH = f'./FAST/VER_3_{get_file_time_path.month}_{get_file_time_path.day}_' \
+MAKE_FILE_PATH = f'./VER_3_{get_file_time_path.month}_{get_file_time_path.day}_' \
                  f'{get_file_time_path.hour}_' \
                  f'{get_file_time_path.minute}_' \
                  f'{get_file_time_path.second}_'
@@ -29,10 +29,10 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
                     level=logging.INFO)
 #------------------------------------------------------------------
 episode = 0             # Global EP
-Parameters_noise = True
+Parameters_noise = False
 GAE = False
-MULTTACT = True
-MANUAL = False
+MULTTACT = False
+MANUAL = True
 
 class MainModel:
     def __init__(self):
@@ -49,6 +49,7 @@ class MainModel:
             'PORT_list': [7100, 7200, 7300],
         }
         if MANUAL:
+            self.build_info['IP_list'][0] = input("Manual-CNS_Com IP:")
             self.build_info['Nub'] = [1, 0, 0]
         else:
             self.build_info['Nub'] = [10, 10, 10]
@@ -62,8 +63,9 @@ class MainModel:
 
         count = 1
         if MANUAL:
-            window_ = show_window(worker)
-            window_.start()
+            # window!
+            # window_ = show_window(worker)
+            # window_.start()
             pass
         else:
             while True:
@@ -456,15 +458,7 @@ class A3Cagent(threading.Thread):
                 else:
                     self.send_action_append([t_pa], [1])  # Stay
         else:
-            if action == 0: self.send_action_append(['KSWO70'], [0])  # Stay
-            elif action == 1: self.send_action_append(['KSWO70'], [1])  # Stay
-            elif action == 2: pass
-            elif action == 3: self.send_action_append(['KSWO81'], [0])  # Stay
-            elif action == 4: self.send_action_append(['KSWO81'], [1])  # Stay
-            elif action == 5: pass
-            elif action == 6: self.send_action_append(['KSWO53'], [0])  # Stay
-            elif action == 7: self.send_action_append(['KSWO53'], [1])  # Stay
-            elif action == 8: pass
+            if action == 0: self.send_action_append(['KSWO70'], [0])  # Rod Stay
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -532,7 +526,7 @@ class A3Cagent(threading.Thread):
                 if MULTTACT:
                     done, R, Success = self.update_parameter(A=[0, 0, 0])
                 else:
-                    done, R, Success = self.update_parameter(A=2)
+                    done, R, Success = self.update_parameter(A=0)
                 self.db.add_now_state(Now_S=self.state)
                 # if len(self.db.train_DB['Now_S']) > self.input_time_length and self.Time_tick >= mal_time * 5:
                 #     # 네트워크에 사용할 입력 데이터 다 쌓고 + Mal function이 시작하면 제어하도록 설계
@@ -545,7 +539,7 @@ class A3Cagent(threading.Thread):
                 if MULTTACT:
                     self.save_state['Act'] = [0, 0, 0]
                 else:
-                    self.save_state['Act'] = 2
+                    self.save_state['Act'] = 0
                 self.save_state['time'] = self.db.train_DB['Step'] * self.cns_speed
                 self.db.save_state(self.save_state)
 
@@ -568,6 +562,9 @@ class A3Cagent(threading.Thread):
                     # 2.2 최근 상태에 대한 액션을 CNS로 전송하고 뿐만아니라 자동 제어 신호도 전송한다.
                     if MANUAL:
                         Action_net = int(input(f"[{self.db.train_DB['Step']}-{self.Time_tick}]Slected ACT:"))
+                        if Action_net == -1:
+                            print("Done!")
+                            done, Action_net = True, 0
                         self.send_action(action=Action_net)
                     else:
                         self.send_action(action=Action_net)
