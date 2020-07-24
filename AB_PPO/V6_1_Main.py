@@ -454,10 +454,14 @@ class Agent(mp.Process):
                                         r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
-                                    if nubNet in [1]:
-                                        r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
-                                    elif nubNet in [2, 3]:
-                                        r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
+                                    if r[nubNet] == 1:
+                                        pass
+                                    else:
+                                        if nubNet in [1]:
+                                            r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
+                                        elif nubNet in [2, 3]:
+                                            r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
+
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
                                     # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], a_now[nubNet])
                                 elif nubNet in [4, 5]:
@@ -477,9 +481,9 @@ class Agent(mp.Process):
                                 elif nubNet in [6, 7]:
                                     Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
                                     Dealta = round(Dealta, 2)
-                                    if Dealta < -0.01:      # 0.53 - 0.55 = - 0.02
+                                    if Dealta < -0.005:      # 0.53 - 0.55 = - 0.02
                                         r[nubNet] = self.new_cns[1] - 0.55      # # 0.53 - 0.55 = - 0.02
-                                    elif Dealta > 0.01:     # 0.57 - 0.55 = 0.02
+                                    elif Dealta > 0.005:     # 0.57 - 0.55 = 0.02
                                         r[nubNet] = 0.55 - self.new_cns[1]      # 0.55 - 0.57 = - 0.02
                                     else:
                                         r[nubNet] = 1
