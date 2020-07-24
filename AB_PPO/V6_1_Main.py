@@ -17,7 +17,7 @@ import pandas as pd
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
-        self.CURNET_COM_IP = '192.168.0.10'
+        self.CURNET_COM_IP = '192.168.0.29'
         self.CNS_IP_LIST = ['192.168.0.105', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
         self.CNS_NUMBERS = [3, 0, 0]
@@ -106,6 +106,9 @@ class Agent(mp.Process):
     # ==============================================================================================================
 
     def run(self):
+        # Logger initial
+        TOOL.log_ini(file_name=f"{self.name}.txt")
+
         while True:
             self.CNS.init_cns(initial_nub=1)
             time.sleep(1)
@@ -136,6 +139,7 @@ class Agent(mp.Process):
             while not done:
                 fulltime = 15
                 t_max = 5       # total iteration = fulltime * t_max
+                ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
                 ro = [2, 2, 2, 2, 2]
                 ProgRecodBox = {"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": []}   # recode 초기화
@@ -452,6 +456,10 @@ class Agent(mp.Process):
                                   # dp_want_val('ZINST36', 'Let-down flow'), dp_want_val('BFV122', 'Charging Valve pos'),
                                   # dp_want_val('BPV145', 'Let-down Valve pos'),
                                   )
+
+                            # Logger
+                            TOOL.log_add(file_name=f"{self.name}.txt", ep=self.CurrentIter, ep_iter=ep_iter, x=self.old_cns)
+                            ep_iter += 1
 
                         # ==================================================================================================
                         # Train

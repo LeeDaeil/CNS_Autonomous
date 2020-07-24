@@ -1,5 +1,6 @@
 import numpy as np
-
+import os
+from datetime import datetime
 
 class TOOL:
     @staticmethod
@@ -32,3 +33,23 @@ class TOOL:
             return print(x.data.numpy())
         else:
             return print(x)
+
+    @staticmethod
+    def log_add(file_name, ep, ep_iter, x, opt='Default'):   #x 받아서 텍스트에 저장
+        if opt == 'Default':
+            with open(file_name, 'a') as f:
+                if ep_iter == 0:
+                    f.write(f"{'=' * 30}\n{datetime.today().strftime('%Y/%m/%d %H:%M:%S')}\n{'=' * 30}\n")
+                    f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
+                else:
+                    f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
+        else:
+            pass
+        pass
+    @staticmethod
+    def log_ini(file_name):      # 파일존재 확인 및 초기화
+        if os.path.isdir(file_name):
+            os.remove(file_name)
+        else:
+            with open(file_name, 'w') as f:
+                f.write(f"{'='*30}\n{datetime.today().strftime('%Y/%m/%d %H:%M:%S')}\n{'='*30}\n")
