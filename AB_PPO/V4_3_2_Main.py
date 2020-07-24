@@ -183,9 +183,9 @@ class Agent(mp.Process):
                                     #     [round(save_ragular_para[2] / 100, 4)]
                                     # ]])
                                     add_val = tensor([[
-                                        [round(save_ragular_para[6][0] / 1000, 5)],
-                                        [round(save_ragular_para[6][1] / 100, 4)],
-                                        [round(save_ragular_para[6][2] / 100, 4)]
+                                        [save_ragular_para[6][0]],
+                                        [save_ragular_para[6][1]],
+                                        [save_ragular_para[6][2]]
                                     ]], dtype=torch.float)
                                     TOOL.ALLP(copySPyLastVal, "copySPyLastVal")
                                     TOOL.ALLP(add_val, "add_val")
@@ -533,7 +533,8 @@ class Agent(mp.Process):
                             loss = nn.functional.mse_loss(y_predict_tensor, y_answer_tensor)
 
                             self.LocalOPT.NETOPT[nubNet].zero_grad()
-                            loss.mean().backward()
+                            # loss.mean().backward()
+                            loss.backward()
                             for global_param, local_param in zip(self.GlobalNet.NET[nubNet].parameters(),
                                                                  self.LocalNet.NET[nubNet].parameters()):
                                 global_param._grad = local_param.grad

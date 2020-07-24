@@ -17,8 +17,8 @@ import pandas as pd
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
-        self.CURNET_COM_IP = '192.168.0.29'
-        self.CNS_IP_LIST = ['192.168.0.105', '192.168.0.7', '192.168.0.4']
+        self.CURNET_COM_IP = '192.168.0.10'
+        self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
         self.CNS_NUMBERS = [1, 0, 0]
 
@@ -147,7 +147,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter == 0 and self.CurrentIter % 30 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 2 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -382,49 +382,57 @@ class Agent(mp.Process):
                                         else:
                                             r[nubNet] = -1
                                 elif nubNet in [1, 2, 3]:
+                                    print(f"{nubNet}: {self.new_cns[nubNet-1]}, {self.old_cns[nubNet-1]}, {a_now[nubNet]}")
                                     Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] + a_now[nubNet])
-                                    if Dealta == 0:
+                                    print(Dealta)
+                                    bound = {1: 0.00001, 2: 0.0001, 3: 0.0001}
+                                    if Dealta < - bound[nubNet]:
+                                        r[nubNet] = -1
+                                        # r[nubNet] = - ((self.old_cns[nubNet - 1] + a_now[nubNet]) - self.new_cns[nubNet-1])
+                                    elif Dealta > bound[nubNet]:
+                                        r[nubNet] = -1
+                                        # r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                    else:
                                         r[nubNet] = 1
-                                    elif Dealta < 0:
-                                        r[nubNet] = - ((self.old_cns[nubNet - 1] + a_now[nubNet]) - self.new_cns[nubNet-1])
-                                    elif Dealta > 0:
-                                        r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                    print(r[nubNet])
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
-                                    if r[nubNet] == 1:
-                                        pass
-                                    else:
-                                        if nubNet in [1]:
-                                            r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
-                                        elif nubNet in [2, 3]:
-                                            r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
+                                    # if r[nubNet] == 1:
+                                    #     pass
+                                    # else:
+                                    #     if nubNet in [1]:
+                                    #         r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
+                                    #     elif nubNet in [2, 3]:
+                                    #         r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
 
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
                                     # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], a_now[nubNet])
                                 elif nubNet in [4, 5]:
                                     Dealta = self.new_cns[nubNet - 1] - a_now[nubNet]
-                                    if Dealta == 0:
+                                    if Dealta < -0.01:
+                                        # r[nubNet] = - ((a_now[nubNet]) - self.new_cns[nubNet - 1])
+                                        r[nubNet] = - 1
+                                    elif Dealta > 0.01:
+                                        # r[nubNet] = - (- (a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                        r[nubNet] = - 1
+                                    else:
                                         r[nubNet] = 1
-                                    elif Dealta < 0:
-                                        r[nubNet] = - ((a_now[nubNet]) - self.new_cns[nubNet - 1])
-                                    elif Dealta > 0:
-                                        r[nubNet] = - (- (a_now[nubNet]) + self.new_cns[nubNet - 1])
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
-                                    r[nubNet] = round(r[nubNet], 3)
+                                    # r[nubNet] = round(r[nubNet], 3)
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
                                     # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], a_now[nubNet])
 
                                 elif nubNet in [6, 7]:
+                                    print(f"{nubNet}: {self.new_cns[1]}")
                                     Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
-                                    Dealta = round(Dealta, 2)
                                     if Dealta < -0.005:      # 0.53 - 0.55 = - 0.02
-                                        r[nubNet] = self.new_cns[1] - 0.55      # # 0.53 - 0.55 = - 0.02
+                                        r[nubNet] = (self.new_cns[1] - 0.55) * 10      # # 0.53 - 0.55 = - 0.02
                                     elif Dealta > 0.005:     # 0.57 - 0.55 = 0.02
-                                        r[nubNet] = 0.55 - self.new_cns[1]      # 0.55 - 0.57 = - 0.02
+                                        r[nubNet] = (0.55 - self.new_cns[1]) * 10      # 0.55 - 0.57 = - 0.02
                                     else:
                                         r[nubNet] = 1
-                                    r[nubNet] = round(r[nubNet], 3)
+                                    print(r[nubNet])
 
                                 r_dict[nubNet].append(r[nubNet])
 
