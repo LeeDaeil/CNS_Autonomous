@@ -45,9 +45,13 @@ class TOOL:
                     f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
                 else:
                     f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
+        elif opt == 'Malinfo':
+            with open(file_name, 'a') as f:
+                f.write(f"\t{ep:5} | Size : {x[0]:10}\tMaltime : {x[1]:10}\n")
         else:
             pass
         pass
+
     @staticmethod
     def log_ini(file_name):      # 파일존재 확인 및 초기화
         if os.path.isdir(file_name):
@@ -67,6 +71,7 @@ class TOOL:
                 file_nub += 1
                 file_name[-1] = f'{file_nub}'
         return logger
+
 
 class DB:
     def __init__(self, max_leg=1):

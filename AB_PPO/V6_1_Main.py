@@ -144,12 +144,13 @@ class Agent(mp.Process):
 
         ProgRecodBox["Time"].append(Timer)
 
-        with open(f"{self.name}__log.txt", 'a') as f:
-            f.write(f"{self.CurrentIter} | {Timer} | {list(temp_S_py[0])} | {list(temp_S_py[1])}"
-                    f" | {list(temp_S_py[2])} | {list(temp_S_comp[0])} | {list(temp_S_comp[1])}"
-                    f" | {list(temp_S_comp[2])} | {list(temp_S_comp[3])}\n")
-            pass
+        DIS = ""
+        for i in temp_S_py:
+            DIS += f" | {i:2.6f}"
+        for i in temp_S_comp:
+            DIS += f" | {i:2.6f}"
 
+        TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=Timer, x=DIS)
 
         Timer += 1
         return Timer, ProgRecodBox
@@ -159,6 +160,7 @@ class Agent(mp.Process):
     def run(self):
         # Logger initial
         TOOL.log_ini(file_name=f"{self.name}.txt")
+        TOOL.log_ini(file_name=f"{self.name}_log.txt")
 
         while True:
             self.CNS.init_cns(initial_nub=1)
@@ -168,6 +170,7 @@ class Agent(mp.Process):
             self.CNS._send_malfunction_signal(36, size, maltime)
             time.sleep(1)
             print(f'DONE initial {size}, {maltime}')
+            TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=0, x=[size, maltime], opt='Malinfo')
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
