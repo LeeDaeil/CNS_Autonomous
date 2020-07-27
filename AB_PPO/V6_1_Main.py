@@ -127,6 +127,34 @@ class Agent(mp.Process):
         return val
 
     # ==============================================================================================================
+    # 입력 값 저장
+    def Recode(self, ProgRecodBox, Timer, S_Py, S_Comp):
+        # 마지막 값 추출
+        temp_S_py = S_Py[:, :, -1:].data.numpy().reshape(3)
+        temp_S_comp = S_Comp[:, :, -1:].data.numpy().reshape(4)
+        # 데이터 저장
+        ProgRecodBox["ZINST58"].append(temp_S_py[0])
+        ProgRecodBox["ZINST63"].append(temp_S_py[1])
+        ProgRecodBox["ZVCT"].append(temp_S_py[2])
+        ProgRecodBox["BFV122"].append(temp_S_comp[0])
+        ProgRecodBox["BPV145"].append(temp_S_comp[1])
+
+        ProgRecodBox["BFV122_CONT"].append(temp_S_comp[2])
+        ProgRecodBox["BPV145_CONT"].append(temp_S_comp[3])
+
+        ProgRecodBox["Time"].append(Timer)
+
+        with open(f"{self.name}__log.txt", 'a') as f:
+            f.write(f"{self.CurrentIter} | {Timer} | {list(temp_S_py[0])} | {list(temp_S_py[1])}"
+                    f" | {list(temp_S_py[2])} | {list(temp_S_comp[0])} | {list(temp_S_comp[1])}"
+                    f" | {list(temp_S_comp[2])} | {list(temp_S_comp[3])}\n")
+            pass
+
+
+        Timer += 1
+        return Timer, ProgRecodBox
+
+    # ==============================================================================================================
 
     def run(self):
         # Logger initial
@@ -136,12 +164,10 @@ class Agent(mp.Process):
             self.CNS.init_cns(initial_nub=1)
             time.sleep(1)
 
-            size, maltime = ran.randint(100, 600), ran.randint(3, 5) * 5
+            size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
             self.CNS._send_malfunction_signal(36, size, maltime)
             time.sleep(1)
             print(f'DONE initial {size}, {maltime}')
-            # 초기 제어 Setting 보내기
-            self.send_action()
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
@@ -162,7 +188,7 @@ class Agent(mp.Process):
             [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 15
+                fulltime = 500
                 t_max = 5       # total iteration = fulltime * t_max
                 ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
@@ -172,136 +198,111 @@ class Agent(mp.Process):
                 Timer = 0
 
                 if self.PrognosticMode:
-                    # Test Mode
-                    for save_time_leg in range(self.W.TimeLeg):
-                        self.CNS.run_freeze_CNS()
-                        self.MakeStateSet()
-                        # 마지막 값 추출
-                        temp_S_py = self.S_Py[:, :, -1:].data.numpy().reshape(3)
-                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(4)
-                        # 데이터 저장
-                        ProgRecodBox["ZINST58"].append(temp_S_py[0])
-                        ProgRecodBox["ZINST63"].append(temp_S_py[1])
-                        ProgRecodBox["ZVCT"].append(temp_S_py[2])
-                        ProgRecodBox["BFV122"].append(temp_S_comp[0])
-                        ProgRecodBox["BPV145"].append(temp_S_comp[1])
+                    for i in range(0, 2):
+                        if i == 0: # Automode
+                            # 초기 제어 Setting 보내기
+                            self.send_action()
+                            time.sleep(1)
 
-                        ProgRecodBox["BFV122_CONT"].append(0)
-                        ProgRecodBox["BPV145_CONT"].append(0)
+                        # Test Mode
+                        for save_time_leg in range(self.W.TimeLeg):
+                            self.CNS.run_freeze_CNS()
+                            self.MakeStateSet()
+                            Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
-                        ProgRecodBox["Time"].append(Timer)
-                        Timer += 1
+                        for t in range(fulltime * t_max):  # total iteration
+                            if t == 0 or t % 10 == 0: # 0스텝 또는 10 스텝마다 예지
+                                copySPy, copySComp = copy.deepcopy(self.S_Py), copy.deepcopy(self.S_Comp)   # 내용만 Copy
+                                copyRecodBox = copy.deepcopy(ProgRecodBox)
+                                Temp_Timer = copy.deepcopy(Timer)
+                                for PredictTime in range(t, fulltime * t_max):  # 시간이 갈수록 예지하는 시간이 줄어듬.
+                                    save_ragular_para = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                                    # 예지된 값 생산
+                                    for nubNet in range(0, self.LocalNet.NubNET):
+                                        NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=copySPy, x_comp=copySComp)
+                                        NetOut = NetOut.view(-1)  # (1, 2) -> (2, )
+                                        act_ = NetOut.argmax().item()  # 행열에서 최대값을 추출 후 값 반환
+                                        if nubNet in [0, 6, 7]:
+                                            save_ragular_para[nubNet] = act_
+                                        elif nubNet in [1]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 100000, 5)
+                                        elif nubNet in [2, 3]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 10000, 4)
+                                        elif nubNet in [4, 5]:
+                                            save_ragular_para[nubNet] = round((act_ - 100) / 100, 2)
+                                    # 예지된 값 저장 및 종료
 
-                    for t in range(fulltime * t_max):  # total iteration
-                        if t == 0 or t % 10 == 0: # 0스텝 또는 10 스텝마다 예지
-                            copySPy, copySComp = copy.deepcopy(self.S_Py), copy.deepcopy(self.S_Comp)   # 내용만 Copy
-                            copyRecodBox = copy.deepcopy(ProgRecodBox)
-                            Temp_Timer = copy.deepcopy(Timer)
-                            for PredictTime in range(t, fulltime * t_max):  # 시간이 갈수록 예지하는 시간이 줄어듬.
-                                save_ragular_para = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                                # 예지된 값 생산
-                                for nubNet in range(0, self.LocalNet.NubNET):
-                                    NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=copySPy, x_comp=copySComp)
-                                    NetOut = NetOut.view(-1)  # (1, 2) -> (2, )
-                                    act_ = NetOut.argmax().item()  # 행열에서 최대값을 추출 후 값 반환
-                                    if nubNet in [0, 6, 7]:
-                                        save_ragular_para[nubNet] = act_
-                                    elif nubNet in [1]:
-                                        save_ragular_para[nubNet] = round((act_ - 100) / 100000, 5)
-                                    elif nubNet in [2, 3]:
-                                        save_ragular_para[nubNet] = round((act_ - 100) / 10000, 4)
-                                    elif nubNet in [4, 5]:
-                                        save_ragular_para[nubNet] = round((act_ - 100) / 100, 2)
-                                # 예지된 값 저장 및 종료
+                                    #
+                                    copySPyLastVal = copySPy[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
+                                    add_val = tensor([[[save_ragular_para[1]],
+                                                       [save_ragular_para[2]],
+                                                       [save_ragular_para[3]]]])
+                                    copySPyLastVal = copySPyLastVal + add_val  # 마지막 변수에 예측된 값을 더해줌.
+                                    copySPy = torch.cat((copySPy, copySPyLastVal), dim=2)  # 본래 텐서에 값을 더함.
+                                    # copySPy = torch.tensor(copySPy)
+                                    copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
 
-                                #
-                                copySPyLastVal = copySPy[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
-                                add_val = tensor([[[save_ragular_para[1]],
-                                                   [save_ragular_para[2]],
-                                                   [save_ragular_para[3]]]])
-                                copySPyLastVal = copySPyLastVal + add_val  # 마지막 변수에 예측된 값을 더해줌.
-                                copySPy = torch.cat((copySPy, copySPyLastVal), dim=2)  # 본래 텐서에 값을 더함.
-                                # copySPy = torch.tensor(copySPy)
-                                copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
+                                    copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
+                                    copySCompLastVal = tensor([[[save_ragular_para[4]], [save_ragular_para[5]],
+                                                                [save_ragular_para[6] / 2], [save_ragular_para[7] / 2],
+                                                                ]])
+                                    copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
+                                    # copySComp = torch.tensor(copySComp)
+                                    copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
 
-                                copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
-                                copySCompLastVal = tensor([[[save_ragular_para[4]], [save_ragular_para[5]],
-                                                            [save_ragular_para[6] / 2], [save_ragular_para[7] / 2],
-                                                            ]])
-                                copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
-                                # copySComp = torch.tensor(copySComp)
-                                copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
+                                    # Recode
+                                    Temp_Timer, copyRecodBox = self.Recode(copyRecodBox, Temp_Timer, S_Py=copySPy, S_Comp=copySComp)
 
-                                # 마지막 값 추출
-                                copy_temp_S_py = copySPy[:, :, -1:].data.numpy().reshape(3)
-                                copy_temp_S_comp = copySComp[:, :, -1:].data.numpy().reshape(4)
-                                # 데이터 저장
-                                copyRecodBox["ZINST58"].append(copy_temp_S_py[0])
-                                copyRecodBox["ZINST63"].append(copy_temp_S_py[1])
-                                copyRecodBox["ZVCT"].append(copy_temp_S_py[2])
-                                copyRecodBox["BFV122"].append(copy_temp_S_comp[0])
-                                copyRecodBox["BPV145"].append(copy_temp_S_comp[1])
+                                # 예지 종료 결과값 Recode 그래픽화
+                                [self.ax_dict[i_].plot(copyRecodBox["Time"], copyRecodBox[i_], label=f"{i_}_{t}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                                [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_{t}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
-                                copyRecodBox["BFV122_CONT"].append(copy_temp_S_comp[2])
-                                copyRecodBox["BPV145_CONT"].append(copy_temp_S_comp[3])
+                            a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                            for nubNet in range(0, self.LocalNet.NubNET):
+                                # TOOL.ALLP(self.S_Py, 'S_Py')
+                                # TOOL.ALLP(self.S_Comp, 'S_Comp')
+                                NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                                NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
+                                # TOOL.ALLP(NetOut, 'Netout before Categorical')
+                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
 
-                                copyRecodBox["Time"].append(Temp_Timer)
-                                Temp_Timer += 1
+                                if nubNet in [0, 6, 7]:
+                                    a_now[nubNet] = act
+                                elif nubNet in [1]:
+                                    a_now[nubNet] = round((act - 100) / 100000, 5)
+                                elif nubNet in [2, 3]:
+                                    a_now[nubNet] = round((act - 100) / 10000, 4)
+                                elif nubNet in [4, 5]:
+                                    a_now[nubNet] = round((act - 100) / 100, 2)
+                            # Send Act to CNS!
+                            self.send_action(act=0, BFV122=a_now[6], PV145=a_now[7])
 
-                            # 예지 종료 결과값 Recode 그래픽화
-                            [self.ax_dict[i_].plot(copyRecodBox["Time"], copyRecodBox[i_], label=f"{i_}_{t}") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
-                            [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_{t}.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                            # CNS + 1 Step
+                            self.CNS.run_freeze_CNS()
+                            self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
+                            # Recode
+                            Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
-                        a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                        for nubNet in range(0, self.LocalNet.NubNET):
-                            # TOOL.ALLP(self.S_Py, 'S_Py')
-                            # TOOL.ALLP(self.S_Comp, 'S_Comp')
-                            NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
-                            NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
-                            # TOOL.ALLP(NetOut, 'Netout before Categorical')
-                            act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
-
-                            if nubNet in [0, 6, 7]:
-                                a_now[nubNet] = act
-                            elif nubNet in [1]:
-                                a_now[nubNet] = round((act - 100) / 100000, 5)
-                            elif nubNet in [2, 3]:
-                                a_now[nubNet] = round((act - 100) / 10000, 4)
-                            elif nubNet in [4, 5]:
-                                a_now[nubNet] = round((act - 100) / 100, 2)
-                        # Send Act to CNS!
-                        self.send_action(act=0, BFV122=a_now[6], PV145=a_now[7])
-
-                        # CNS + 1 Step
-                        self.CNS.run_freeze_CNS()
-                        self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
-                        # 마지막 값 추출
-                        temp_S_py = self.S_Py[:, :, -1:].data.numpy().reshape(3)
-                        temp_S_comp = self.S_Comp[:, :, -1:].data.numpy().reshape(4)
-                        # 데이터 저장
-                        ProgRecodBox["ZINST58"].append(temp_S_py[0])
-                        ProgRecodBox["ZINST63"].append(temp_S_py[1])
-                        ProgRecodBox["ZVCT"].append(temp_S_py[2])
-                        ProgRecodBox["BFV122"].append(temp_S_comp[0])
-                        ProgRecodBox["BPV145"].append(temp_S_comp[1])
-
-                        ProgRecodBox["BFV122_CONT"].append(temp_S_comp[2])
-                        ProgRecodBox["BPV145_CONT"].append(temp_S_comp[3])
-
-                        ProgRecodBox["Time"].append(Timer)
-                        Timer += 1
-
-                    # END Test Mode CODE
-                    [self.ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
-                    [self.ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145",  "BFV122_CONT", "BPV145_CONT"]]
-                    [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
-                    print('END TEST')
+                        # END Test Mode CODE
+                        [self.ax_dict[i_].grid() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                        [self.ax_dict[i_].legend() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145",  "BFV122_CONT", "BPV145_CONT"]]
+                        if i == 0:
+                            [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_M.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                        else:
+                            [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_A.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+                        print('END TEST')
 
                 else:
+                    # 초기 제어 Setting 보내기
+                    self.send_action()
+                    time.sleep(1)
+
                     # Train Mode
                     for t in range(self.W.TimeLeg):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
+                        # Recode
+                        Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
                     for __ in range(fulltime):
                         spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
@@ -366,6 +367,8 @@ class Agent(mp.Process):
                                 round(self.new_phys[0], 5), round(self.new_phys[1], 4), round(self.new_phys[2], 4),
                                 round(self.new_comp[0], 2), round(self.new_comp[1], 2)
                             ]
+                            # Recode
+                            Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
                             # 보상 및 종료조건 계산
                             r = {_: 0 for _ in range(0, self.LocalNet.NubNET)}
