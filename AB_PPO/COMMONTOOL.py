@@ -1,6 +1,8 @@
 import numpy as np
 import os
 from datetime import datetime
+from collections import deque
+import torch
 
 class TOOL:
     @staticmethod
@@ -53,3 +55,43 @@ class TOOL:
         else:
             with open(file_name, 'w') as f:
                 f.write(f"{'='*30}\n{datetime.today().strftime('%Y/%m/%d %H:%M:%S')}\n{'='*30}\n")
+
+    @staticmethod
+    def DBlogger(name="Default0"):
+        file_nub, file_name = 0, "Default0"
+        while True:
+            if not os.path.isfile(file_name + '.txt'):
+                logger = file_name
+                break
+            else:
+                file_nub += 1
+                file_name[-1] = f'{file_nub}'
+        return logger
+
+class DB:
+    def __init__(self, max_leg=1):
+        self.DB_logger = TOOL.DBlogger(name="DB_log0")
+        self.max_leg = max_leg
+        self.Phypara_list = ["ZINST58", "ZINST63", "ZVCT"]
+        self.Coppara_list = ["BFV122", "BPV145"]
+        self.Costom_list = ["BFV122_CONT", "BPV145_CONT"]
+        self.NetPhyInput = {para: deque(maxlen=self.max_leg) for para in self.Phypara_list}
+        self.NetCopInput = {para: deque(maxlen=self.max_leg) for para in self.Coppara_list}
+        self.NetCtmInput = {para: deque(maxlen=self.max_leg) for para in self.Costom_list}
+
+    def appendmem(self, mem):
+        for para in self.Phypara_list:
+            self.NetPhyInput[para].append(mem[para]['Val'])
+        for para in self.Coppara_list:
+            self.NetCopInput[para].append(mem[para]['Val'])
+
+    def appendCtm(self, val={}):
+        assert isinstance(val, dict), "Val이 Dict가 아님."
+        assert len(val.keys()) != len(self.Costom_list), f"Costom_list {self.Costom_list}: " \
+                                                         f"Val {val.keys()} Key 에러"
+        for para in self.Costom_list:
+            self.NetCtmInput[para].append(val[para])
+
+    def to_torch(self):
+        # [n, val] -> # [1, n, val]
+        return torch.tensor([self.NetPhyInput]), torch.tensor([self.NetCopInput]), torch.tensor([self.NetCtmInput])
