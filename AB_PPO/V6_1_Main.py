@@ -20,7 +20,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [1, 0, 0]
+        self.CNS_NUMBERS = [10, 0, 0]
 
         self.TimeLeg = 15
 
@@ -147,7 +147,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter != 0 and self.CurrentIter % 2 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -382,9 +382,7 @@ class Agent(mp.Process):
                                         else:
                                             r[nubNet] = -1
                                 elif nubNet in [1, 2, 3]:
-                                    print(f"{nubNet}: {self.new_cns[nubNet-1]}, {self.old_cns[nubNet-1]}, {a_now[nubNet]}")
                                     Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] + a_now[nubNet])
-                                    print(Dealta)
                                     bound = {1: 0.00001, 2: 0.0001, 3: 0.0001}
                                     if Dealta < - bound[nubNet]:
                                         r[nubNet] = -1
@@ -394,7 +392,6 @@ class Agent(mp.Process):
                                         # r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
                                     else:
                                         r[nubNet] = 1
-                                    print(r[nubNet])
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
                                     # if r[nubNet] == 1:
@@ -424,7 +421,6 @@ class Agent(mp.Process):
                                     # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], a_now[nubNet])
 
                                 elif nubNet in [6, 7]:
-                                    print(f"{nubNet}: {self.new_cns[1]}")
                                     Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
                                     if Dealta < -0.005:      # 0.53 - 0.55 = - 0.02
                                         r[nubNet] = (self.new_cns[1] - 0.55) * 10      # # 0.53 - 0.55 = - 0.02
@@ -432,7 +428,6 @@ class Agent(mp.Process):
                                         r[nubNet] = (0.55 - self.new_cns[1]) * 10      # 0.55 - 0.57 = - 0.02
                                     else:
                                         r[nubNet] = 1
-                                    print(r[nubNet])
 
                                 r_dict[nubNet].append(r[nubNet])
 
