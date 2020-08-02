@@ -12,15 +12,15 @@ class NETBOX:
     """
     def __init__(self):
         self.NET = {
-            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0]),
-            1: PPOModel(name="VCTLevel", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            2: PPOModel(name="PZRLevel", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
-            5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0]),
+            1: PPOModel(name="VCTLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            2: PPOModel(name="PZRLevel", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            3: PPOModel(name="PZRpressure", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            4: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
+            5: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=200),
             # Control
-            6: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
-            7: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=4, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            6: PPOModel(name="BFV122", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
+            7: PPOModel(name="BPV145", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),
 
             # CNN
             # 6: CNNModel(name="Phy", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0], ActCase=3),

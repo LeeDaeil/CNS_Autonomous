@@ -32,7 +32,6 @@ class CNS:
             self.LoggerPath = ''
             self.CurrentEP = 0
 
-
     def _make_mem_structure(self, max_len):
         # 초기 shared_mem의 구조를 선언한다.
         idx = 0
@@ -167,7 +166,6 @@ class CNS:
                     # 이때 반드시 모든 Val은 업데이트 된 상태이며 Append 및 데이터 로깅도 이부분에서 수행된다.
                     self.mem['cMALA']['Val'] = 1 if self.mem['cMALT']['Val'] <= self.mem['KCNTOMS']['Val'] else 0
                     self.save_line()
-                    self._append_val_to_list()
                     break
                 else:
                     pass

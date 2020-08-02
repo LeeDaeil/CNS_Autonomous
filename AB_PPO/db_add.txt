@@ -4,3 +4,10 @@ cMALA	INTEGER	CNS Mal function Activation or not
 cMALC	INTEGER	CNS Mal function Case
 cMALO	INTEGER	CNS Mal function Option
 cMALT	INTEGER	CNS Mal function Time
+vZINST58	REAL	Pzr pressure
+vZINST63	REAL	Pzr level
+vZVCT	REAL	VCT level
+vBFV122	REAL	BFV122 Pos
+vBPV145	REAL	BFV145 Pos
+vBPV122C	REAL	BFV145 Pos
+vBPV145C	REAL	BFV145 Pos

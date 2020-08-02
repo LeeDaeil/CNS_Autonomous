@@ -72,6 +72,9 @@ class TOOL:
                 file_name[-1] = f'{file_nub}'
         return logger
 
+    @staticmethod
+    def RoundVal(val, div, r):
+        return round(val / div, r)
 
 class DB:
     def __init__(self, max_leg=1):

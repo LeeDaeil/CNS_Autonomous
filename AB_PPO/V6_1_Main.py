@@ -44,16 +44,27 @@ class Agent(mp.Process):
         for _ in range(0, self.LocalNet.NubNET):
             self.LocalNet.NET[_].load_state_dict(self.GlobalNet.NET[_].state_dict())
         self.LocalOPT = NETOPTBOX(NubNET=self.LocalNet.NubNET, NET=self.GlobalNet.NET)
+        # Work info
+        self.W = Work_info()
         # CNS
-        self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port)
+        self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
+        self.CNS.LoggerPath = 'V6_2'
         # SharedMem
         self.mem = MEM
         self.LocalMem = copy.deepcopy(self.mem)
-        # Work info
-        self.W = Work_info()
+        # 사용되는 파라메터
+        self.PARA_info = {
+            'ZINST58': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST63': {'Div': 100, 'Round': 4, 'Type': 'P'},
+            'ZVCT': {'Div': 100, 'Round': 4, 'Type': 'P'},
+            'BFV122': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'BPV145': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'BPV122C': {'Div': 2, 'Round': 2, 'Type': 'C'},
+            'BPV145C': {'Div': 2, 'Round': 2, 'Type': 'C'},
+        }
         # GP Setting
-        self.fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]}
-        self.ax_dict = {i_: self.fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]}
+        # self.fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]}
+        # self.ax_dict = {i_: self.fig_dict[i_].add_subplot() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]}
         print(f'Make -- {self}')
 
     # ==============================================================================================================
@@ -90,88 +101,47 @@ class Agent(mp.Process):
     #
     # ==============================================================================================================
     # 입력 출력 값 생성
-    def InitialStateSet(self):
-        self.PhyPara = ['ZINST58', 'ZINST63', 'ZVCT']
-        self.PhyState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.PhyPara}
 
-        self.COMPPara = ['BFV122', 'BPV145', 'BFV122_CONT', 'BPV145_CONT']
-        self.COMPState = {_: deque(maxlen=self.W.TimeLeg) for _ in self.COMPPara}
+    def PreProcessing(self):
+        # Network용 입력 값 재처리
+        for k in self.PARA_info.keys():
+            if self.PARA_info[k]['Type'] != 'C':    # Control 변수를 제외한 변수만 재처리
+                self.CNS.mem[f'v{k}']['Val'] = TOOL.RoundVal(self.CNS.mem[k]['Val'],
+                                                         self.PARA_info[k]['Div'],
+                                                         self.PARA_info[k]['Round'])
 
-    def MakeStateSet(self, BFV122=0, PV145=0):
-        # 값을 쌓음 (return Dict)
-        [self.PhyState[_].append(self.PreProcessing(_, self.CNS.mem[_]['Val'])) for _ in self.PhyPara]
-        self.COMPState['BFV122'].append(self.PreProcessing('BFV122', self.CNS.mem['BFV122']['Val']))
-        self.COMPState['BPV145'].append(self.PreProcessing('BPV145', self.CNS.mem['BPV145']['Val']))
-        self.COMPState['BFV122_CONT'].append(self.PreProcessing('BFV122_CONT', BFV122))
-        self.COMPState['BPV145_CONT'].append(self.PreProcessing('BPV145_CONT', PV145))
+        # Network에 사용되는 값 업데이트
+        if True:
+            # Tensor로 전환
+            # self.S_Py = torch.tensor([self.PhyState[key] for key in self.PhyPara])
+            S_py_list, S_Comp_list = [], []
+            for k in self.PARA_info.keys():
+                if self.PARA_info[f'{k}']['Type'] == 'P':
+                    S_py_list.append(self.CNS.mem[f'{k}']['List'])
+                if self.PARA_info[f'{k}']['Type'] == 'F':
+                    S_Comp_list.append(self.CNS.mem[f'{k}']['List'])
 
-        # Tensor로 전환
-        self.S_Py = torch.tensor([self.PhyState[key] for key in self.PhyPara])
-        self.S_Py = self.S_Py.reshape(1, self.S_Py.shape[0], self.S_Py.shape[1])
-        self.S_Comp = torch.tensor([self.COMPState[key] for key in self.COMPPara])
-        self.S_Comp = self.S_Comp.reshape(1, self.S_Comp.shape[0], self.S_Comp.shape[1])
+            self.S_Py = torch.tensor(S_py_list)
+            self.S_Py = self.S_Py.reshape(1, self.S_Py.shape[0], self.S_Py.shape[1])
+            self.S_Comp = torch.tensor(S_Comp_list)
+            self.S_Comp = self.S_Comp.reshape(1, self.S_Comp.shape[0], self.S_Comp.shape[1])
 
-        # Old 1개 리스트
-        self.S_ONE_Py = [self.PhyState[key][-1] for key in self.PhyPara]
-        self.S_ONE_Comp = [self.COMPState[key][-1] for key in self.COMPPara]
-
-    def PreProcessing(self, para, val):
-        if para == 'ZINST58': val = round(val/1000, 5)      # 가압기 압력
-        if para == 'ZINST63': val = round(val/100, 4)       # 가압기 수위
-        if para == 'ZVCT': val = round(val/100, 4)          # VCT 수위
-
-        if para == 'BFV122': val = round(val, 2)            # BF122 Pos
-        if para == 'BPV145': val = round(val, 2)            # BPV145 Pos
-        if para == 'BFV122_CONT': val = round(val/2, 2)            # BPV145 Pos
-        if para == 'BPV145_CONT': val = round(val/2, 2)            # BPV145 Pos
-        return val
-
-    # ==============================================================================================================
-    # 입력 값 저장
-    def Recode(self, ProgRecodBox, Timer, S_Py, S_Comp):
-        # 마지막 값 추출
-        temp_S_py = S_Py[:, :, -1:].data.numpy().reshape(3)
-        temp_S_comp = S_Comp[:, :, -1:].data.numpy().reshape(4)
-        # 데이터 저장
-        ProgRecodBox["ZINST58"].append(temp_S_py[0])
-        ProgRecodBox["ZINST63"].append(temp_S_py[1])
-        ProgRecodBox["ZVCT"].append(temp_S_py[2])
-        ProgRecodBox["BFV122"].append(temp_S_comp[0])
-        ProgRecodBox["BPV145"].append(temp_S_comp[1])
-
-        ProgRecodBox["BFV122_CONT"].append(temp_S_comp[2])
-        ProgRecodBox["BPV145_CONT"].append(temp_S_comp[3])
-
-        ProgRecodBox["Time"].append(Timer)
-
-        DIS = ""
-        for i in temp_S_py:
-            DIS += f" | {i:2.6f}"
-        for i in temp_S_comp:
-            DIS += f" | {i:2.6f}"
-
-        TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=Timer, x=DIS)
-
-        Timer += 1
-        return Timer, ProgRecodBox
-
-    # ==============================================================================================================
+    def CNSStep(self):
+        self.CNS.run_freeze_CNS()   # CNS에 취득한 값을 메모리에 업데이트
+        self.PreProcessing()        # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
+        self.CNS._append_val_to_list()  # 최종 값['Val']를 ['List']에 저장
 
     def run(self):
-        # Logger initial
-        TOOL.log_ini(file_name=f"{self.name}.txt")
-        TOOL.log_ini(file_name=f"{self.name}_log.txt")
-
         while True:
             # Get iter
             self.CurrentIter = self.mem['Iter']
-
+            self.mem['Iter'] += 1
+            # Mal function initial
             size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
+            # CNS initial
             self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime, ep=self.CurrentIter)
             print(f'DONE initial {size}, {maltime}')
 
-            TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=0, x=[size, maltime], opt='Malinfo')
-            self.mem['Iter'] += 1
             # 진단 모듈 Tester !
             if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
                 print(self.CurrentIter, 'Yes Test')
@@ -182,10 +152,9 @@ class Agent(mp.Process):
 
             # Initial
             done = False
-            self.InitialStateSet()
 
             # GP 이전 데이터 Clear
-            [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
+            # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
                 fulltime = 2
@@ -194,7 +163,7 @@ class Agent(mp.Process):
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
 
-                ProgRecodBox = {"Time": [],"ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": [], "BFV122_CONT": [], "BPV145_CONT": []}   # recode 초기화
+                ProgRecodBox = {"Time": [], "ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": [], "BFV122_CONT": [], "BPV145_CONT": []}   # recode 초기화
                 Timer = 0
 
                 if self.PrognosticMode:
@@ -298,11 +267,9 @@ class Agent(mp.Process):
                     time.sleep(1)
 
                     # Train Mode
-                    for t in range(self.W.TimeLeg):
-                        self.CNS.run_freeze_CNS()
-                        self.MakeStateSet()
-                        # Recode
-                        Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
+                    # Time Leg 만큼 데이터 수집만 수행
+                    for t in range(self.W.TimeLeg + 1):
+                        self.CNSStep()
 
                     for __ in range(fulltime):
                         spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
