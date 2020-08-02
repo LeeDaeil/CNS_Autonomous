@@ -2,10 +2,11 @@ import socket
 from struct import unpack, pack
 from time import sleep
 from numpy import shape
+from collections import deque
 
 
 class CNS:
-    def __init__(self, threrad_name, CNS_IP, CNS_Port, Remote_IP, Remote_Port):
+    def __init__(self, threrad_name, CNS_IP, CNS_Port, Remote_IP, Remote_Port, Max_len=10):
         if True:
             # thread name
             self.th_name = threrad_name
@@ -24,9 +25,9 @@ class CNS:
 
         if True:
             # memory
-            self.mem = self.make_mem_structure()
+            self.mem = self._make_mem_structure(max_len=Max_len)
 
-    def make_mem_structure(self):
+    def _make_mem_structure(self, max_len):
         # 초기 shared_mem의 구조를 선언한다.
         idx = 0
         shared_mem = {}
@@ -36,12 +37,20 @@ class CNS:
                 if temp_[0] == '':  # if empty space -> break
                     break
                 sig = 0 if temp_[1] == 'INTEGER' else 1
-                shared_mem[temp_[0]] = {'Sig': sig, 'Val': 0, 'Num': idx}
+                shared_mem[temp_[0]] = {'Sig': sig, 'Val': 0, 'Num': idx, 'List': deque(maxlen=max_len)}
+                idx += 1
+        with open('./db_add.txt', 'r') as f:
+            while True:
+                temp_ = f.readline().split('\t')
+                if temp_[0] == '':  # if empty space -> break
+                    break
+                sig = 0 if temp_[1] == 'INTEGER' else 1
+                shared_mem[temp_[0]] = {'Sig': sig, 'Val': 0, 'Num': idx, 'List': deque(maxlen=max_len)}
                 idx += 1
         # 다음과정을 통하여 shared_mem 은 PID : { type. val, num }를 가진다.
         return shared_mem
 
-    def update_mem(self):
+    def _update_mem(self):
         data, _ = self.resv_sock.recvfrom(self.size_buffer_mem)
         data = data[8:]
         # print(len(data)) data의 8바이트를 제외한 나머지 버퍼의 크기
@@ -52,6 +61,10 @@ class CNS:
             pid = pid.decode().rstrip('\x00')  # remove '\x00'
             if pid != '':
                 self.mem[pid]['Val'] = val
+
+    def _append_val_to_list(self):
+        [self.mem[pid]['List'].append(self.mem[pid]['Val']) for pid in self.mem.keys()]
+        return 0
 
     def _send_control_signal(self, para, val):
         '''
@@ -73,11 +86,13 @@ class CNS:
 
             para_sw = '12sihh' if self.mem[para[i]]['Sig'] == 0 else '12sfhh'
 
-            temp_data += pack(para_sw,
-                              pid_temp,
-                              self.mem[para[i]]['Val'],
-                              self.mem[para[i]]['Sig'],
-                              self.mem[para[i]]['Num'])
+            # 만약 para가 CNS DB에 포함되지 않은 Custom para이면 Pass
+            if para[i][0] != 'c':
+                temp_data += pack(para_sw,
+                                  pid_temp,
+                                  self.mem[para[i]]['Val'],
+                                  self.mem[para[i]]['Sig'],
+                                  self.mem[para[i]]['Num'])
 
         buffer = UDP_header + pack('h', shape(para)[0]) + temp_data + buffer[len(temp_data):]
 
@@ -120,7 +135,7 @@ class CNS:
         # UDP 통신에 쌇인 데이터를 새롭게 하는 기능
         self._send_control_signal(['KFZRUN', 'KSWO277'], [5, initial_nub])
         while True:
-            self.update_mem()
+            self._update_mem()
             if self.mem['KFZRUN']['Val'] == 6:
                 # initial 상태가 완료되면 6으로 되고, break
                 break
@@ -137,16 +152,36 @@ class CNS:
         old_cont = self.mem['KCNTOMS']['Val'] + self.want_tick
         self.run_cns()
         while True:
-            self.update_mem()
+            self._update_mem()
             new_cont = self.mem['KCNTOMS']['Val']
             if old_cont == new_cont:
                 if self.mem['KFZRUN']['Val'] == 4:
                     # 1회 run 완료 시 4로 변환
+                    # 데이터가 최신으로 업데이트 되었음으로 val를 List에 append
+                    # 이때 반드시 모든 Val은 업데이트 된 상태이며 Append 및 데이터 로깅도 이부분에서 수행된다.
+                    self._append_val_to_list()
                     break
                 else:
                     pass
             else:
                 pass
+
+    # 실제 사용 Level
+    def reset(self, initial_nub=1, mal=False, mal_case=0, mal_opt=0, mal_time=0):
+        self.mem['cINIT']['Val'] = initial_nub
+        self.mem['cMAL']['Val'] = 1 if mal is True else 0
+        self.mem['cMALC']['Val'] = mal_case
+        self.mem['cMALO']['Val'] = mal_opt
+        self.mem['cMALT']['Val'] = mal_time
+
+        self.init_cns(initial_nub=initial_nub)
+        sleep(1)
+        if mal:
+            self._send_malfunction_signal(Mal_nub=mal_case, Mal_opt=mal_opt, Mal_time=mal_time)
+            sleep(1)
+
+    def step(self):
+        self.run_freeze_CNS()
 
 
 if __name__ == '__main__':

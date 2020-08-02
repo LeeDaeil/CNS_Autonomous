@@ -100,12 +100,8 @@ class Agent(mp.Process):
 
     def run(self):
         while True:
-            self.CNS.init_cns(initial_nub=1)
-            time.sleep(1)
-
-            size, maltime = ran.randint(100, 600), ran.randint(3, 5) * 5
-            self.CNS._send_malfunction_signal(36, size, maltime)
-            time.sleep(1)
+            size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime)
             print(f'DONE initial {size}, {maltime}')
 
             # Get iter

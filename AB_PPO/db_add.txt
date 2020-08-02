@@ -1,0 +1,5 @@
+cINIT	INTEGER	CNS Initial Nub
+cMAL	INTEGER	CNS Mal function True/False
+cMALC	INTEGER	CNS Mal function Case
+cMALO	INTEGER	CNS Mal function Option
+cMALT	INTEGER	CNS Mal function Time

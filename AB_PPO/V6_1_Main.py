@@ -20,7 +20,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [10, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.TimeLeg = 15
 
@@ -163,17 +163,13 @@ class Agent(mp.Process):
         TOOL.log_ini(file_name=f"{self.name}_log.txt")
 
         while True:
-            self.CNS.init_cns(initial_nub=1)
-            time.sleep(1)
-
             size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
-            self.CNS._send_malfunction_signal(36, size, maltime)
-            time.sleep(1)
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime)
             print(f'DONE initial {size}, {maltime}')
-            TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=0, x=[size, maltime], opt='Malinfo')
 
             # Get iter
             self.CurrentIter = self.mem['Iter']
+            TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=0, x=[size, maltime], opt='Malinfo')
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
             if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
@@ -304,6 +300,9 @@ class Agent(mp.Process):
                     for t in range(self.W.TimeLeg):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
+
+                        print(self.CNS.mem['cINIT'])
+
                         # Recode
                         Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
