@@ -163,12 +163,13 @@ class Agent(mp.Process):
         TOOL.log_ini(file_name=f"{self.name}_log.txt")
 
         while True:
-            size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
-            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime)
-            print(f'DONE initial {size}, {maltime}')
-
             # Get iter
             self.CurrentIter = self.mem['Iter']
+
+            size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime, ep=self.CurrentIter)
+            print(f'DONE initial {size}, {maltime}')
+
             TOOL.log_add(file_name=f"{self.name}_log.txt", ep=self.CurrentIter, ep_iter=0, x=[size, maltime], opt='Malinfo')
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
@@ -187,8 +188,8 @@ class Agent(mp.Process):
             [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 500
-                t_max = 5       # total iteration = fulltime * t_max
+                fulltime = 2
+                t_max = 2       # total iteration = fulltime * t_max
                 ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
@@ -300,9 +301,6 @@ class Agent(mp.Process):
                     for t in range(self.W.TimeLeg):
                         self.CNS.run_freeze_CNS()
                         self.MakeStateSet()
-
-                        print(self.CNS.mem['cINIT'])
-
                         # Recode
                         Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
