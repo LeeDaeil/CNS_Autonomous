@@ -20,7 +20,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.7', '192.168.0.4', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [10, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.TimeLeg = 15
 
@@ -41,19 +41,24 @@ class Agent(mp.Process):
         # Network info
         self.GlobalNet = GlobalNet
         self.LocalNet = NETBOX()
+        # 부모 네트워크의 정보를 자식 네트워크로 업데이트
         for _ in range(0, self.LocalNet.NubNET):
             self.LocalNet.NET[_].load_state_dict(self.GlobalNet.NET[_].state_dict())
+        # 옵티마이저 생성
         self.LocalOPT = NETOPTBOX(NubNET=self.LocalNet.NubNET, NET=self.GlobalNet.NET)
+
         # Work info
         self.W = Work_info()
         # CNS
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
-        self.CNS.LoggerPath = 'V6_2'
+        self.CNS.LoggerPath = 'V6_1_EOP'
         # SharedMem
         self.mem = MEM
         self.LocalMem = copy.deepcopy(self.mem)
+
         # 사용되는 파라메터
         self.PARA_info = {
+            # 변수명 : {'Div': 몇으로 나눌 것인지, 'Round': 반올림, 'Type': 어디에 저장할 것인지.}
             'ZINST58': {'Div': 1000, 'Round': 5, 'Type': 'P'},
             'ZINST63': {'Div': 100, 'Round': 4, 'Type': 'P'},
             'ZVCT': {'Div': 100, 'Round': 4, 'Type': 'P'},
@@ -70,7 +75,7 @@ class Agent(mp.Process):
                     print(f'v{_} 값이 없음 db_add.txt에 추가할 것')
             # 역으로 db_add에 있으나 사용되지 않은 파라메터 출력
             for _ in self.CNS.mem.keys():
-                if _[0] == 'v':  # 첫글자가 v이면..
+                if _[0] == 'v': # 첫글자가 v이면..
                     if not _[1:] in self.PARA_info.keys():
                         print(f'{_} 값이 없음 self.PARA_info에 추가할 것')
         ## -----------------------------------------------
