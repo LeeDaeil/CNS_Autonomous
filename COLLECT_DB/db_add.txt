@@ -5,10 +5,6 @@ cMALC	INTEGER	CNS Mal function Case
 cMALCA	INTEGER	CNS Mal function Case actication or not
 cMALO	INTEGER	CNS Mal function Option
 cMALT	INTEGER	CNS Mal function Time
-cMALC2	INTEGER	CNS Mal function Case
-cMALCA2	INTEGER	CNS Mal function Case actication or not
-cMALO2	INTEGER	CNS Mal function Option
-cMALT2	INTEGER	CNS Mal function Time
 vZINST58	REAL	Pzr pressure
 vZINST63	REAL	Pzr level
 vZVCT	REAL	VCT level

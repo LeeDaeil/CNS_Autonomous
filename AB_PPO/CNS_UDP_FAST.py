@@ -30,7 +30,7 @@ class CNS:
             self.mem = self._make_mem_structure(max_len=self.max_len)
             # logger path
             self.LoggerPath = ''
-            self.CurrentEP = 0
+            self.file_name = 0
 
     def _make_mem_structure(self, max_len):
         # 초기 shared_mem의 구조를 선언한다.
@@ -165,6 +165,7 @@ class CNS:
                     # 데이터가 최신으로 업데이트 되었음으로 val를 List에 append
                     # 이때 반드시 모든 Val은 업데이트 된 상태이며 Append 및 데이터 로깅도 이부분에서 수행된다.
                     self.mem['cMALA']['Val'] = 1 if self.mem['cMALT']['Val'] <= self.mem['KCNTOMS']['Val'] else 0
+                    self.mem['cMALCA']['Val'] = self.mem['cMALC']['Val'] if self.mem['cMALT']['Val'] <= self.mem['KCNTOMS']['Val'] else 0
                     self.save_line()
                     break
                 else:
@@ -174,22 +175,22 @@ class CNS:
 
     # logger
     def init_line(self):
-        with open(f"./{self.LoggerPath}/{self.CurrentEP}.txt", 'w') as f:
+        with open(f"./{self.LoggerPath}/{self.file_name}.txt", 'w') as f:
             DIS = ''
             for para_name in self.mem.keys():
                 DIS += f'{para_name},'
             f.write(f'{DIS}\n')
 
     def save_line(self):
-        with open(f"./{self.LoggerPath}/{self.CurrentEP}.txt", 'a') as f:
+        with open(f"./{self.LoggerPath}/{self.file_name}.txt", 'a') as f:
             DIS = ''
             for para_name in self.mem.keys():
                 DIS += f"{self.mem[para_name]['Val']},"
             f.write(f'{DIS}\n')
 
     # 실제 사용 Level
-    def reset(self, initial_nub=1, mal=False, mal_case=0, mal_opt=0, mal_time=0, ep=0):
-        self.CurrentEP = ep # Update ep number
+    def reset(self, initial_nub=1, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=0):
+        self.file_name = file_name # Update ep number
         self.init_line()
 
         # mem reset
@@ -198,6 +199,7 @@ class CNS:
         self.mem['cINIT']['Val'] = initial_nub
         self.mem['cMAL']['Val'] = 1 if mal is True else 0
         self.mem['cMALA']['Val'] = 0
+
         self.mem['cMALC']['Val'] = mal_case
         self.mem['cMALO']['Val'] = mal_opt
         self.mem['cMALT']['Val'] = mal_time
@@ -206,7 +208,10 @@ class CNS:
         sleep(1)
         if mal:
             self._send_malfunction_signal(Mal_nub=mal_case, Mal_opt=mal_opt, Mal_time=mal_time)
-            sleep(1)
+            sleep(2)
+            # if mal_case2 != 0:
+            #     self._send_malfunction_signal(Mal_nub=mal_case2, Mal_opt=mal_opt2, Mal_time=mal_time2)
+            #     sleep(2)
 
     def step(self):
         self.run_freeze_CNS()

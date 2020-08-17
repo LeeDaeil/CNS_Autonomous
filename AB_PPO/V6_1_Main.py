@@ -18,9 +18,9 @@ import pandas as pd
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
         self.CURNET_COM_IP = '192.168.0.10'
-        self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
+        self.CNS_IP_LIST = ['192.168.0.7', '192.168.0.4', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [1, 0, 0]
+        self.CNS_NUMBERS = [10, 0, 0]
 
         self.TimeLeg = 15
 
@@ -139,7 +139,7 @@ class Agent(mp.Process):
             # Mal function initial
             size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
             # CNS initial
-            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime, ep=self.CurrentIter)
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime, file_name=self.CurrentIter)
             print(f'DONE initial {size}, {maltime}')
 
             # 진단 모듈 Tester !
