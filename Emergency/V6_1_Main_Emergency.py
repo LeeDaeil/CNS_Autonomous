@@ -94,8 +94,8 @@ class Agent(mp.Process):
         self.para = []
         self.val = []
 
-        if act == 0:
-            self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
+        # if act == 0:
+        #     self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
 
         if PV145 == 0:
             self.send_action_append(["KSWO90", "KSWO91"], [0, 0])  # PV145 Stay
@@ -152,18 +152,21 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # Mal function initial
-            size, maltime = ran.randint(100, 600), ran.randint(30, 100) * 5
+            size, maltime = ran.randint(10010, 10020), ran.randint(2, 10) * 5
             # CNS initial
-            self.CNS.reset(initial_nub=1, mal=True, mal_case=36, mal_opt=size, mal_time=maltime, file_name=self.CurrentIter)
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=13, mal_opt=size, mal_time=maltime, file_name=self.CurrentIter)
             print(f'DONE initial {size}, {maltime}')
 
-            # 진단 모듈 Tester !
-            if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
-                print(self.CurrentIter, 'Yes Test')
-                self.PrognosticMode = True
-            else:
-                print(self.CurrentIter, 'No Test')
-                self.PrognosticMode = False
+            # 진단 모듈 Tester !    # TODO 수정할 것
+            # if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
+            #     print(self.CurrentIter, 'Yes Test')
+            #     self.PrognosticMode = True
+            # else:
+            #     print(self.CurrentIter, 'No Test')
+            #     self.PrognosticMode = False
+
+            print(self.CurrentIter, 'No Test')
+            self.PrognosticMode = False
 
             # Initial
             done = False
@@ -172,8 +175,8 @@ class Agent(mp.Process):
             # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 2
-                t_max = 2       # total iteration = fulltime * t_max
+                fulltime = 30
+                t_max = 5       # total iteration = fulltime * t_max
                 ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
@@ -288,21 +291,9 @@ class Agent(mp.Process):
 
                     # 실제 훈련 시작 부분
                     for __ in range(fulltime):
-                        # spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
-                        # a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        # a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                        # a_now_orgin = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                        # a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        #
-                        # r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        # done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        #
-                        # y_predict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        # y_answer = {_: [] for _ in range(self.LocalNet.NubNET)}
                         self.RLMem.CleanTrainMem()
                         # Sampling
                         for t in range(t_max):
-                            NetOut_dict = {_: 0 for _ in range(self.LocalNet.NubNET)}
                             for nubNet in range(0, self.LocalNet.NubNET):
                                 # TOOL.ALLP(self.S_Py, 'S_Py')
                                 # TOOL.ALLP(self.S_Comp, 'S_Comp')
@@ -322,31 +313,17 @@ class Agent(mp.Process):
 
                                 # act와 확률 값 저장
                                 self.RLMem.SaveNetOut(nubNet, NetOut, act)
-
-                                # NetOut_dict[nubNet] = NetOut
                                 # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
                                 modify_act = 0
-                                if nubNet in [0, 6, 7]:
+                                if nubNet in [0]:
                                     modify_act = act
-                                elif nubNet in [1]:
-                                    modify_act = round((act - 100) / 100000, 5)
-                                elif nubNet in [2, 3]:
-                                    modify_act = round((act - 100) / 10000, 4)
-                                elif nubNet in [4, 5]:
-                                    modify_act = round((act - 100) / 100, 2)
 
                                 # 수정된 act 저장 <- 주로 실제 CNS의 제어 변수에 이용하기 위해서 사용
                                 self.RLMem.SaveModNetOut(nubNet, modify_act)
 
-                                # a_now_orgin[nubNet] = act
-                                # a_dict[nubNet].append([act])        # for training
-                                # a_prob[nubNet].append([NetOut])     # for training
-
                             # 훈련용 상태 저장
                             self.RLMem.SaveState(self.S_Py, self.S_Comp)
-                            # spy_lst.append(self.S_Py.tolist()[0])  # (1, 3, 15) -list> (3, 15)
-                            # scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
 
                             # old val to compare the new val
                             self.old_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist() # (3,)
@@ -364,7 +341,6 @@ class Agent(mp.Process):
 
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
-                            # self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
 
                             self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
                             self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
@@ -373,11 +349,7 @@ class Agent(mp.Process):
                                 round(self.new_comp[0], 2), round(self.new_comp[1], 2)
                             ]
 
-                            # Recode
-                            # Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
-
                             # 보상 및 종료조건 계산
-                            # r = {_: 0 for _ in range(0, self.LocalNet.NubNET)}
                             for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
                                 if nubNet in [0]:
                                     if self.CNS.mem['KCNTOMS']['Val'] < maltime:
@@ -390,55 +362,6 @@ class Agent(mp.Process):
                                             self.RLMem.SaveReward(nubNet, 1)
                                         else:
                                             self.RLMem.SaveReward(nubNet, -1)
-                                elif nubNet in [1, 2, 3]:
-                                    Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] +
-                                                                       self.RLMem.int_mod_action[nubNet])
-                                    bound = {1: 0.00001, 2: 0.0001, 3: 0.0001}
-                                    if Dealta < - bound[nubNet]:
-                                        self.RLMem.SaveReward(nubNet, -1)
-                                        # r[nubNet] = - ((self.old_cns[nubNet - 1] + self.RLMem.int_mod_action[nubNet]) - self.new_cns[nubNet-1])
-                                    elif Dealta > bound[nubNet]:
-                                        self.RLMem.SaveReward(nubNet, -1)
-                                        # r[nubNet] = - (- (self.old_cns[nubNet - 1] + self.RLMem.int_mod_action[nubNet]) + self.new_cns[nubNet - 1])
-                                    else:
-                                        self.RLMem.SaveReward(nubNet, 1)
-                                    # TOOL.ALLP(Dealta, f"Dealta")
-                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
-                                    # if r[nubNet] == 1:
-                                    #     pass
-                                    # else:
-                                    #     if nubNet in [1]:
-                                    #         r[nubNet] = round(round(r[nubNet], 5) * 1000, 2)  # 0.000__ => 0.__
-                                    #     elif nubNet in [2, 3]:
-                                    #         r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
-
-                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
-                                    # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], self.RLMem.int_mod_action[nubNet])
-                                elif nubNet in [4, 5]:
-                                    Dealta = self.new_cns[nubNet - 1] - self.RLMem.int_mod_action[nubNet]
-                                    if Dealta < -0.01:
-                                        # r[nubNet] = - ((self.RLMem.int_mod_action[nubNet]) - self.new_cns[nubNet - 1])
-                                        self.RLMem.SaveReward(nubNet, - 1)
-                                    elif Dealta > 0.01:
-                                        # r[nubNet] = - (- (self.RLMem.int_mod_action[nubNet]) + self.new_cns[nubNet - 1])
-                                        self.RLMem.SaveReward(nubNet, - 1)
-                                    else:
-                                        self.RLMem.SaveReward(nubNet, 1)
-                                    # TOOL.ALLP(Dealta, f"Dealta")
-                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
-                                    # r[nubNet] = round(r[nubNet], 3)
-                                    # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
-                                    # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], self.RLMem.int_mod_action[nubNet])
-                                elif nubNet in [6, 7]:
-                                    Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
-                                    if Dealta < -0.005:      # 0.53 - 0.55 = - 0.02
-                                        self.RLMem.SaveReward(nubNet, (self.new_cns[1] - 0.55) * 10)     # # 0.53 - 0.55 = - 0.02
-                                    elif Dealta > 0.005:     # 0.57 - 0.55 = 0.02
-                                        self.RLMem.SaveReward(nubNet, (0.55 - self.new_cns[1]) * 10)      # 0.55 - 0.57 = - 0.02
-                                    else:
-                                        self.RLMem.SaveReward(nubNet, 1)
-
-                                # r_dict[nubNet].append(r[nubNet])
 
                                 # 종료 조건 계산
                                 if __ == 14 and t == t_max-1:
@@ -449,6 +372,16 @@ class Agent(mp.Process):
                                 return f"{name}: {self.CNS.mem[val]['Val']:4.4f}"
 
                             DIS = f"[{self.CurrentIter:3}]" + f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}|"
+                            DIS += "[Reward "
+                            for _ in range(self.RLMem.net_nub):
+                                DIS += f"{self.RLMem.float_reward[_]:6}"
+                            DIS += "][Prob "
+                            for _ in range(self.RLMem.net_nub):
+                                DIS += f"{self.RLMem.float_porb_action[_]:6}"
+                            DIS += "][Act "
+                            for _ in range(self.RLMem.net_nub):
+                                DIS += f"{self.RLMem.int_action[_]:6}"
+                            DIS += "]"
                             # for _ in r.keys():
                             #     DIS += f"{r[_]:6} |"
                             # for _ in NetOut_dict.keys():

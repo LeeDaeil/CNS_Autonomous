@@ -11,7 +11,8 @@ class NETBOX:
     """
     def __init__(self):
         self.NET = {
-            0: PPOModel(name="TEST", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1.0, 1.0]),
+            # 0번 비상이 발생하였는지? 아니면 발생하지 않았는지 판단
+            0: PPOModel(name="Dig", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1, 0], ActCase=2),
         }
         self.NubNET = len(self.NET)
 
