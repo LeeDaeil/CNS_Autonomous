@@ -103,3 +103,147 @@ class DB:
     def to_torch(self):
         # [n, val] -> # [1, n, val]
         return torch.tensor([self.NetPhyInput]), torch.tensor([self.NetCopInput]), torch.tensor([self.NetCtmInput])
+
+class RLMem:
+    def __init__(self, net_nub):
+        self.net_nub = net_nub
+        # 액션
+        self.int_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_action = {_: [] for _ in range(self.net_nub)}
+        self.list_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 수정된 액션
+        self.int_mod_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_mod_action = {_: [] for _ in range(self.net_nub)}
+        self.list_mod_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 액션 Proba
+        self.float_porb_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_porb_action = {_: [] for _ in range(self.net_nub)}
+        self.list_porb_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 상태
+        self.spy_list = []
+        self.spy_list_temp = []
+
+        self.scomp_list = []
+        self.scomp_list_temp = []
+
+        # 보상
+        self.float_reward = {_: 0 for _ in range(self.net_nub)}
+        self.list_reward = {_: [] for _ in range(self.net_nub)}
+        self.list_reward_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 종료
+        self.bool_done = {_: 0 for _ in range(self.net_nub)}
+        self.list_done = {_: [] for _ in range(self.net_nub)}
+        self.list_done_temp = {_: [] for _ in range(self.net_nub)}
+
+    def SaveNetOut(self, NetNub, NetOut, Act):
+        # 액션
+        self.int_action[NetNub] = Act
+        self.list_action[NetNub].append(Act)            # 저장용 변수
+        self.list_action_temp[NetNub].append([Act])     # 훈련용 변수
+
+        # 액션 확률
+        self.float_porb_action[NetNub] = NetOut
+        self.list_porb_action[NetNub].append(NetOut)        # 저장용 변수
+        self.list_porb_action_temp[NetNub].append([NetOut]) # 훈련용 변수
+
+    def SaveModNetOut(self, NetNub, Act):
+        # 수정된 액션 <- 주로 실제 CNS의 제어 변수에 이용하기 위해서 사용
+        self.int_mod_action[NetNub] = Act
+        self.list_mod_action[NetNub].append(Act)        # 저장용 변수
+        self.list_mod_action_temp[NetNub].append(Act)   # 훈련용 변수
+
+    def SaveState(self, spy, scomp):
+        self.spy_list.append(spy.tolist()[0])           # (1, 3, 15) -list> (3, 15)
+        self.spy_list_temp.append(spy.tolist()[0])      # (1, 3, 15) -list> (3, 15)
+
+        self.scomp_list.append(scomp.tolist()[0])       # (1, 3, 15) -list> (3, 15)
+        self.scomp_list_temp.append(scomp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+
+    def SaveReward(self, NetNub, Reward):
+        self.float_reward[NetNub] = Reward
+        self.list_reward[NetNub].append(Reward)
+        self.list_reward_temp[NetNub].append(Reward)
+
+    def SaveDone(self, NetNub, Done):
+        # Done == True: 0, False: 1
+        if Done:    # True
+            d = 0
+        else:       # False
+            d = 1
+
+        self.bool_done[NetNub] = d
+        self.list_done[NetNub].append(d)
+        self.list_done_temp[NetNub].append(d)
+
+    def GetAct(self, NetNub):
+        return self.int_mod_action[NetNub]
+
+    def GetBatch(self):
+        spy_batch = torch.tensor(self.spy_list_temp, dtype=torch.float)
+        scomp_batch = torch.tensor(self.scomp_list_temp, dtype=torch.float)
+        return spy_batch, scomp_batch
+
+    def GetFinBatch(self, spy, scomp):
+        self.spy_list_temp.append(spy.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+        self.scomp_list_temp.append(scomp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+        spy_batch = torch.tensor(self.spy_list_temp[1:], dtype=torch.float)
+        scomp_batch = torch.tensor(self.scomp_list_temp[1:], dtype=torch.float)
+        return spy_batch, scomp_batch
+
+    def CleanEP(self):
+        # 액션
+        self.int_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_action = {_: [] for _ in range(self.net_nub)}
+        self.list_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 수정된 액션
+        self.int_mod_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_mod_action = {_: [] for _ in range(self.net_nub)}
+        self.list_mod_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 액션 Proba
+        self.float_porb_action = {_: 0 for _ in range(self.net_nub)}
+        self.list_porb_action = {_: [] for _ in range(self.net_nub)}
+        self.list_porb_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 상태
+        self.spy_list = []
+        self.spy_list_temp = []
+
+        self.scomp_list = []
+        self.scomp_list_temp = []
+
+        # 보상
+        self.float_reward = {_: 0 for _ in range(self.net_nub)}
+        self.list_reward = {_: [] for _ in range(self.net_nub)}
+        self.list_reward_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 종료
+        self.bool_done = {_: 0 for _ in range(self.net_nub)}
+        self.list_done = {_: [] for _ in range(self.net_nub)}
+        self.list_done_temp = {_: [] for _ in range(self.net_nub)}
+
+    def CleanTrainMem(self):
+        # 액션
+        self.list_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 수정된 액션
+        self.list_mod_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 액션 Proba
+        self.list_porb_action_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 상태
+        self.spy_list_temp = []
+
+        self.scomp_list_temp = []
+
+        # 보상
+        self.list_reward_temp = {_: [] for _ in range(self.net_nub)}
+
+        # 종료
+        self.list_done_temp = {_: [] for _ in range(self.net_nub)}

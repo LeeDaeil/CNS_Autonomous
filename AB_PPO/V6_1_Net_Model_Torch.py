@@ -75,8 +75,8 @@ class PPOModel(nn.Module):
             # self.FC2_A = nn.Linear(24, 1)
             # self.FC2_C = nn.Linear(24, 1)
             # self.FC2_A = nn.Linear(8*(self.NubPhyPara + self.NubComPara), self.ActCase)    # default 2 out
-            self.FC2_A = nn.Linear(91, self.ActCase)    # default 2 out
-            self.FC2_C = nn.Linear(91, 1)
+            self.FC2_A = nn.Linear(65, self.ActCase)    # default 2 out
+            self.FC2_C = nn.Linear(65, 1)
 
     def _CommonPredictNet(self, x_py, x_comp):
         # print(self.ModelName)
@@ -102,7 +102,7 @@ class PPOModel(nn.Module):
         else:
             # x = x.reshape(x.shape[0], 24)
             # x = x.reshape(x.shape[0], 8*(self.NubPhyPara + self.NubComPara))
-            x = x.reshape(x.shape[0], 91)
+            x = x.reshape(x.shape[0], 65)
         # TOOL.ALLP(x, comt='x_te')
         return x
 
