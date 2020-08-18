@@ -1,18 +1,12 @@
-import torch
-import numpy as np
 import random as ran
-import matplotlib.pylab as plt
 from torch import multiprocessing as mp
-from torch import nn, functional, optim
 
-from AB_PPO.CNS_UDP_FAST import CNS
-from AB_PPO.COMMONTOOL import TOOL, RLMem
-from AB_PPO.V6_1_Net_Model_Torch import *
+from CNS_UDP_FAST import CNS
+from COMMONTOOL import RLMem
+from Emergency.V6_1_Net_Model_Emergency import *
 
 import time
 import copy
-from collections import deque
-import pandas as pd
 
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
@@ -364,9 +358,9 @@ class Agent(mp.Process):
                             # TOOL.ALLP(self.old_cns, "old_CNS")
 
                             # Send Act to CNS!
-                            self.send_action(act=0,
-                                             BFV122=self.RLMem.GetAct(6),
-                                             PV145=self.RLMem.GetAct(7))
+                            # self.send_action(act=0,
+                            #                  BFV122=self.RLMem.GetAct(6),
+                            #                  PV145=self.RLMem.GetAct(7))
 
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()

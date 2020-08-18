@@ -44,7 +44,7 @@ class CNS:
                 sig = 0 if temp_[1] == 'INTEGER' else 1
                 shared_mem[temp_[0]] = {'Sig': sig, 'Val': 0, 'Num': idx, 'List': deque(maxlen=max_len)}
                 idx += 1
-        with open('./db_add.txt', 'r') as f:
+        with open(f'./db_add.txt', 'r') as f:
             while True:
                 temp_ = f.readline().split('\t')
                 if temp_[0] == '':  # if empty space -> break

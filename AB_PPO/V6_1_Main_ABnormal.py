@@ -2,6 +2,7 @@ import random as ran
 from torch import multiprocessing as mp
 
 from CNS_UDP_FAST import CNS
+from COMMONTOOL import RLMem
 from AB_PPO.V6_1_Net_Model_Torch import *
 
 import time
@@ -13,7 +14,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.7', '192.168.0.4', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [10, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.TimeLeg = 15
 
@@ -34,25 +35,33 @@ class Agent(mp.Process):
         # Network info
         self.GlobalNet = GlobalNet
         self.LocalNet = NETBOX()
+        # 부모 네트워크의 정보를 자식 네트워크로 업데이트
         for _ in range(0, self.LocalNet.NubNET):
             self.LocalNet.NET[_].load_state_dict(self.GlobalNet.NET[_].state_dict())
+        # 옵티마이저 생성
         self.LocalOPT = NETOPTBOX(NubNET=self.LocalNet.NubNET, NET=self.GlobalNet.NET)
+
         # Work info
         self.W = Work_info()
+        # RLMem info
+        self.RLMem = RLMem(net_nub=self.LocalNet.NubNET)
+
         # CNS
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
-        self.CNS.LoggerPath = 'V6_2'
+        self.CNS.LoggerPath = 'V6_1_EOP'
         # SharedMem
         self.mem = MEM
         self.LocalMem = copy.deepcopy(self.mem)
+
         # 사용되는 파라메터
         self.PARA_info = {
+            # 변수명 : {'Div': 몇으로 나눌 것인지, 'Round': 반올림, 'Type': 어디에 저장할 것인지.}
             'ZINST58': {'Div': 1000, 'Round': 5, 'Type': 'P'},
             'ZINST63': {'Div': 100, 'Round': 4, 'Type': 'P'},
             'ZVCT': {'Div': 100, 'Round': 4, 'Type': 'P'},
             'BFV122': {'Div': 1, 'Round': 2, 'Type': 'F'},
             'BPV145': {'Div': 1, 'Round': 2, 'Type': 'F'},
-            'BPV122C': {'Div': 2, 'Round': 2, 'Type': 'C'},
+            'BPV122C': {'Div': 2, 'RoCNSnd': 2, 'Type': 'C'},
             'BPV145C': {'Div': 2, 'Round': 2, 'Type': 'C'},
         }
         ## 사용되는 파라메터가 db_add.txt에 있는지 확인하는 모듈
@@ -63,7 +72,7 @@ class Agent(mp.Process):
                     print(f'v{_} 값이 없음 db_add.txt에 추가할 것')
             # 역으로 db_add에 있으나 사용되지 않은 파라메터 출력
             for _ in self.CNS.mem.keys():
-                if _[0] == 'v':  # 첫글자가 v이면..
+                if _[0] == 'v': # 첫글자가 v이면..
                     if not _[1:] in self.PARA_info.keys():
                         print(f'{_} 값이 없음 self.PARA_info에 추가할 것')
         ## -----------------------------------------------
@@ -169,10 +178,10 @@ class Agent(mp.Process):
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
 
-                ProgRecodBox = {"Time": [], "ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": [], "BFV122_CONT": [], "BPV145_CONT": []}   # recode 초기화
-                Timer = 0
+                # ProgRecodBox = {"Time": [], "ZINST58": [], "ZINST63": [], "ZVCT": [], "BFV122": [], "BPV145": [], "BFV122_CONT": [], "BPV145_CONT": []}   # recode 초기화
+                # Timer = 0
 
-                if self.PrognosticMode:
+                if self.PrognosticMode: # TODO 작업 필요함... 0817
                     for i in range(0, 2):
                         if i == 0: # Automode
                             # 초기 제어 Setting 보내기
@@ -266,62 +275,82 @@ class Agent(mp.Process):
                         else:
                             [self.fig_dict[i_].savefig(f"{i_}_{self.CurrentIter}_A.png") for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
                         print('END TEST')
-
                 else:
+                    # Train Mode
+
                     # 초기 제어 Setting 보내기
                     self.send_action()
                     time.sleep(1)
 
-                    # Train Mode
                     # Time Leg 만큼 데이터 수집만 수행
                     for t in range(self.W.TimeLeg + 1):
                         self.CNSStep()
 
+                    # 실제 훈련 시작 부분
                     for __ in range(fulltime):
-                        spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
-                        a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                        a_now_orgin = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                        a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
-
-                        y_predict = {_: [] for _ in range(self.LocalNet.NubNET)}
-                        y_answer = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        # spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
+                        # a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        # a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                        # a_now_orgin = {_: 0 for _ in range(self.LocalNet.NubNET)}
+                        # a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        #
+                        # r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        # done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        #
+                        # y_predict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        # y_answer = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        self.RLMem.CleanTrainMem()
                         # Sampling
                         for t in range(t_max):
                             NetOut_dict = {_: 0 for _ in range(self.LocalNet.NubNET)}
                             for nubNet in range(0, self.LocalNet.NubNET):
                                 # TOOL.ALLP(self.S_Py, 'S_Py')
                                 # TOOL.ALLP(self.S_Comp, 'S_Comp')
+
+                                # 입력 변수들에서 Actor 네트워크의 출력을 받음.
                                 NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
                                 NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
                                 # TOOL.ALLP(NetOut, 'Netout before Categorical')
+
+                                # act 계산 이때 act는 int 값.
                                 act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
                                 # TOOL.ALLP(act, 'act')
+
+                                # act의 확률 값을 반환
                                 NetOut = NetOut.tolist()[act]
                                 # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
-                                NetOut_dict[nubNet] = NetOut
+
+                                # act와 확률 값 저장
+                                self.RLMem.SaveNetOut(nubNet, NetOut, act)
+
+                                # NetOut_dict[nubNet] = NetOut
                                 # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
+                                modify_act = 0
                                 if nubNet in [0, 6, 7]:
-                                    a_now[nubNet] = act
+                                    modify_act = act
                                 elif nubNet in [1]:
-                                    a_now[nubNet] = round((act - 100) / 100000, 5)
+                                    modify_act = round((act - 100) / 100000, 5)
                                 elif nubNet in [2, 3]:
-                                    a_now[nubNet] = round((act - 100) / 10000, 4)
+                                    modify_act = round((act - 100) / 10000, 4)
                                 elif nubNet in [4, 5]:
-                                    a_now[nubNet] = round((act - 100) / 100, 2)
-                                a_now_orgin[nubNet] = act
-                                a_dict[nubNet].append([act])        # for training
-                                a_prob[nubNet].append([NetOut])     # for training
+                                    modify_act = round((act - 100) / 100, 2)
 
-                            spy_lst.append(self.S_Py.tolist()[0])  # (1, 3, 15) -list> (3, 15)
-                            scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+                                # 수정된 act 저장 <- 주로 실제 CNS의 제어 변수에 이용하기 위해서 사용
+                                self.RLMem.SaveModNetOut(nubNet, modify_act)
+
+                                # a_now_orgin[nubNet] = act
+                                # a_dict[nubNet].append([act])        # for training
+                                # a_prob[nubNet].append([NetOut])     # for training
+
+                            # 훈련용 상태 저장
+                            self.RLMem.SaveState(self.S_Py, self.S_Comp)
+                            # spy_lst.append(self.S_Py.tolist()[0])  # (1, 3, 15) -list> (3, 15)
+                            # scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 3, 15) -list> (3, 15)
 
                             # old val to compare the new val
                             self.old_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist() # (3,)
-                            self.old_comp = self.S_Comp[:, :, -1:].data.reshape(4).tolist() # (3,)
+                            self.old_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist() # (3,)
                             self.old_cns = [    # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
                                 round(self.old_phys[0], 5), round(self.old_phys[1], 4), round(self.old_phys[2], 4),
                                 round(self.old_comp[0], 2), round(self.old_comp[1], 2)
@@ -329,45 +358,50 @@ class Agent(mp.Process):
                             # TOOL.ALLP(self.old_cns, "old_CNS")
 
                             # Send Act to CNS!
-                            self.send_action(act=0, BFV122=a_now[6], PV145=a_now[7])
+                            self.send_action(act=0,
+                                             BFV122=self.RLMem.GetAct(6),
+                                             PV145=self.RLMem.GetAct(7))
 
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
-                            self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
+                            # self.MakeStateSet(BFV122=a_now[6], PV145=a_now[7])
+
                             self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
-                            self.new_comp = self.S_Comp[:, :, -1:].data.reshape(4).tolist()  # (3,)
+                            self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
                             self.new_cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
                                 round(self.new_phys[0], 5), round(self.new_phys[1], 4), round(self.new_phys[2], 4),
                                 round(self.new_comp[0], 2), round(self.new_comp[1], 2)
                             ]
+
                             # Recode
-                            Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
+                            # Timer, ProgRecodBox = self.Recode(ProgRecodBox, Timer, S_Py=self.S_Py, S_Comp=self.S_Comp)
 
                             # 보상 및 종료조건 계산
-                            r = {_: 0 for _ in range(0, self.LocalNet.NubNET)}
+                            # r = {_: 0 for _ in range(0, self.LocalNet.NubNET)}
                             for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
                                 if nubNet in [0]:
                                     if self.CNS.mem['KCNTOMS']['Val'] < maltime:
-                                        if a_now[nubNet] == 1:    # Malfunction
-                                            r[nubNet] = -1
+                                        if self.RLMem.int_mod_action[nubNet] == 1:    # Malfunction
+                                            self.RLMem.SaveReward(nubNet, -1)
                                         else:
-                                            r[nubNet] = 1
+                                            self.RLMem.SaveReward(nubNet, 1)
                                     else:
-                                        if a_now[nubNet] == 1:    # Malfunction
-                                            r[nubNet] = 1
+                                        if self.RLMem.int_mod_action[nubNet] == 1:    # Malfunction
+                                            self.RLMem.SaveReward(nubNet, 1)
                                         else:
-                                            r[nubNet] = -1
+                                            self.RLMem.SaveReward(nubNet, -1)
                                 elif nubNet in [1, 2, 3]:
-                                    Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] + a_now[nubNet])
+                                    Dealta = self.new_cns[nubNet-1] - (self.old_cns[nubNet-1] +
+                                                                       self.RLMem.int_mod_action[nubNet])
                                     bound = {1: 0.00001, 2: 0.0001, 3: 0.0001}
                                     if Dealta < - bound[nubNet]:
-                                        r[nubNet] = -1
-                                        # r[nubNet] = - ((self.old_cns[nubNet - 1] + a_now[nubNet]) - self.new_cns[nubNet-1])
+                                        self.RLMem.SaveReward(nubNet, -1)
+                                        # r[nubNet] = - ((self.old_cns[nubNet - 1] + self.RLMem.int_mod_action[nubNet]) - self.new_cns[nubNet-1])
                                     elif Dealta > bound[nubNet]:
-                                        r[nubNet] = -1
-                                        # r[nubNet] = - (- (self.old_cns[nubNet - 1] + a_now[nubNet]) + self.new_cns[nubNet - 1])
+                                        self.RLMem.SaveReward(nubNet, -1)
+                                        # r[nubNet] = - (- (self.old_cns[nubNet - 1] + self.RLMem.int_mod_action[nubNet]) + self.new_cns[nubNet - 1])
                                     else:
-                                        r[nubNet] = 1
+                                        self.RLMem.SaveReward(nubNet, 1)
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
                                     # if r[nubNet] == 1:
@@ -379,51 +413,48 @@ class Agent(mp.Process):
                                     #         r[nubNet] = round(round(r[nubNet], 4) * 100, 2)  # 0.00__ => 0.__
 
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
-                                    # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], a_now[nubNet])
+                                    # print(self.new_cns[nubNet-1], self.old_cns[nubNet-1], self.RLMem.int_mod_action[nubNet])
                                 elif nubNet in [4, 5]:
-                                    Dealta = self.new_cns[nubNet - 1] - a_now[nubNet]
+                                    Dealta = self.new_cns[nubNet - 1] - self.RLMem.int_mod_action[nubNet]
                                     if Dealta < -0.01:
-                                        # r[nubNet] = - ((a_now[nubNet]) - self.new_cns[nubNet - 1])
-                                        r[nubNet] = - 1
+                                        # r[nubNet] = - ((self.RLMem.int_mod_action[nubNet]) - self.new_cns[nubNet - 1])
+                                        self.RLMem.SaveReward(nubNet, - 1)
                                     elif Dealta > 0.01:
-                                        # r[nubNet] = - (- (a_now[nubNet]) + self.new_cns[nubNet - 1])
-                                        r[nubNet] = - 1
+                                        # r[nubNet] = - (- (self.RLMem.int_mod_action[nubNet]) + self.new_cns[nubNet - 1])
+                                        self.RLMem.SaveReward(nubNet, - 1)
                                     else:
-                                        r[nubNet] = 1
+                                        self.RLMem.SaveReward(nubNet, 1)
                                     # TOOL.ALLP(Dealta, f"Dealta")
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet")
                                     # r[nubNet] = round(r[nubNet], 3)
                                     # TOOL.ALLP(r[nubNet], f"{nubNet} R nubnet round")
-                                    # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], a_now[nubNet])
-
+                                    # print(self.new_cns[nubNet - 1], self.old_cns[nubNet - 1], self.RLMem.int_mod_action[nubNet])
                                 elif nubNet in [6, 7]:
                                     Dealta = self.new_cns[1] - 0.55 # normal PZR level # 0.30 - 0.55 = - 0.25 # 0.56 - 0.55 = 0.01
                                     if Dealta < -0.005:      # 0.53 - 0.55 = - 0.02
-                                        r[nubNet] = (self.new_cns[1] - 0.55) * 10      # # 0.53 - 0.55 = - 0.02
+                                        self.RLMem.SaveReward(nubNet, (self.new_cns[1] - 0.55) * 10)     # # 0.53 - 0.55 = - 0.02
                                     elif Dealta > 0.005:     # 0.57 - 0.55 = 0.02
-                                        r[nubNet] = (0.55 - self.new_cns[1]) * 10      # 0.55 - 0.57 = - 0.02
+                                        self.RLMem.SaveReward(nubNet, (0.55 - self.new_cns[1]) * 10)      # 0.55 - 0.57 = - 0.02
                                     else:
-                                        r[nubNet] = 1
+                                        self.RLMem.SaveReward(nubNet, 1)
 
-                                r_dict[nubNet].append(r[nubNet])
+                                # r_dict[nubNet].append(r[nubNet])
 
                                 # 종료 조건 계산
                                 if __ == 14 and t == t_max-1:
-                                    done_dict[nubNet].append(0)
                                     done = True
-                                else:
-                                    done_dict[nubNet].append(1)
+                                self.RLMem.SaveDone(nubNet, done)
 
                             def dp_want_val(val, name):
                                 return f"{name}: {self.CNS.mem[val]['Val']:4.4f}"
 
                             DIS = f"[{self.CurrentIter:3}]" + f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}|"
-                            for _ in r.keys():
-                                DIS += f"{r[_]:6} |"
-                            for _ in NetOut_dict.keys():
-                                DIS += f"[{NetOut_dict[_]:0.4f}-{a_now_orgin[_]:4}]"
-                            for para, _ in zip(["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"], [0, 1, 2, 3, 4]):
-                                DIS += f"| {para}: {self.old_cns[_]:5.2f} | {self.new_cns[_]:5.2f}"
+                            # for _ in r.keys():
+                            #     DIS += f"{r[_]:6} |"
+                            # for _ in NetOut_dict.keys():
+                            #     DIS += f"[{NetOut_dict[_]:0.4f}-{self.RLMem.int_mod_action[_]:4}]"
+                            # for para, _ in zip(["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"], [0, 1, 2, 3, 4]):
+                            #     DIS += f"| {para}: {self.old_cns[_]:5.2f} | {self.new_cns[_]:5.2f}"
                             print(DIS)
 
                             # Logger
@@ -437,13 +468,9 @@ class Agent(mp.Process):
                         lmbda = 0.95
 
                         # 1 .. 10
-                        spy_batch = torch.tensor(spy_lst, dtype=torch.float)
-                        scomp_batch = torch.tensor(scomp_lst, dtype=torch.float)
+                        spy_batch, scomp_batch = self.RLMem.GetBatch()
                         # 2 .. 10 + (1 Last value)
-                        spy_lst.append(self.S_Py.tolist()[0])
-                        scomp_lst.append(self.S_Comp.tolist()[0])
-                        spy_fin = torch.tensor(spy_lst[1:], dtype=torch.float)
-                        scomp_fin = torch.tensor(scomp_lst[1:], dtype=torch.float)
+                        spy_fin, scomp_fin = self.RLMem.GetFinBatch(self.S_Py, self.S_Comp)
 
                         # 각 네트워크 별 Advantage 계산
                         # for nubNet in range(0, 6):
@@ -452,9 +479,9 @@ class Agent(mp.Process):
                             # r_dict[nubNet]: (5,) -> (5,1)
                             # Netout : (5,1)
                             # done_dict[nubNet]: (5,) -> (5,1)
-                            td_target = torch.tensor(r_dict[nubNet], dtype=torch.float).view(t_max, 1) + \
+                            td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(t_max, 1) + \
                                         gamma * self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_fin, scomp_fin) * \
-                                        torch.tensor(done_dict[nubNet], dtype=torch.float).view(t_max, 1)
+                                        torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(t_max, 1)
                             delta = td_target - self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch)
                             delta = delta.detach().numpy()
 
@@ -467,12 +494,12 @@ class Agent(mp.Process):
                             adv = torch.tensor(adv_list, dtype=torch.float)
 
                             PreVal = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
-                            PreVal = PreVal.gather(1, torch.tensor(a_dict[nubNet])) # PreVal_a
+                            PreVal = PreVal.gather(1, torch.tensor(self.RLMem.list_action_temp[nubNet])) # PreVal_a
                             # TOOL.ALLP(PreVal, f"Preval {nubNet}")
 
                             # Ratio 계산 a/b == exp(log(a) - log(b))
                             # TOOL.ALLP(a_prob[nubNet], f"a_prob {nubNet}")
-                            Preval_old_a_prob = torch.tensor(a_prob[nubNet], dtype=torch.float)
+                            Preval_old_a_prob = torch.tensor(self.RLMem.list_porb_action_temp[nubNet], dtype=torch.float)
                             ratio = torch.exp(torch.log(PreVal) - torch.log(Preval_old_a_prob))
                             # TOOL.ALLP(ratio, f"ratio {nubNet}")
 

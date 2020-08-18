@@ -1,17 +1,11 @@
-import torch
-import numpy as np
 import random as ran
 from torch import multiprocessing as mp
-from torch import nn, functional, optim
 
-from AB_PPO.CNS_UDP_FAST import CNS
-from AB_PPO.COMMONTOOL import TOOL
+from CNS_UDP_FAST import CNS
 from AB_PPO.V3_Net_Model_Torch import *
 
-import time
 import copy
 from collections import deque
-import pandas as pd
 
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정

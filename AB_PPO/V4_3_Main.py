@@ -1,10 +1,9 @@
-import numpy as np
 import random as ran
 import matplotlib.pylab as plt
 from torch import multiprocessing as mp
 
 from CNS_UDP_FAST import CNS
-from AB_PPO.V4_2_Net_Model_Torch import *
+from AB_PPO.V4_3_Net_Model_Torch import *
 
 import copy
 from collections import deque
@@ -15,9 +14,9 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.9', '192.168.0.7', '192.168.0.4']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [10, 0, 0]
+        self.CNS_NUMBERS = [5, 0, 0]
 
-        self.TimeLeg = 15
+        self.TimeLeg = 10
 
         # TO CNS_UDP_FASE.py
         self.UpdateIterval = 5
@@ -91,11 +90,9 @@ class Agent(mp.Process):
         self.S_ONE_Comp = [self.COMPState[key][-1] for key in self.COMPPara]
 
     def PreProcessing(self, para, val):
-        if para == 'ZINST58': val = round(val/1000, 4)      # 가압기 압력
-        if para == 'ZINST63': val = round(val/100, 4)       # 가압기 수위
-        if para == 'ZVCT': val = round(val/100, 4)          # VCT 수위
-        if para == 'BFV122': val = round(val, 2)            # BF122 Pos
-        if para == 'BPV145': val = round(val, 2)            # BPV145 Pos
+        if para == 'ZINST58': val = round(val/1000, 6)      # 가압기 압력
+        if para == 'ZINST63': val = round(val/100, 6)       # 가압기 수위
+        if para == 'ZVCT': val = round(val/100, 5)          # VCT 수위
         return val
 
     # ==============================================================================================================
@@ -110,7 +107,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # 진단 모듈 Tester !
-            if self.CurrentIter != 0 and self.CurrentIter % 30 == 0:
+            if self.CurrentIter != 0 and self.CurrentIter % 15 == 0:
                 print(self.CurrentIter, 'Yes Test')
                 self.PrognosticMode = True
             else:
@@ -160,30 +157,23 @@ class Agent(mp.Process):
                                 # copySpy
                                 copySPyLastVal = copySPy[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
                                 copySPyLastVal = copySPyLastVal + tensor([[
-                                    [round(save_ragular_para[0]/1000, 4)],
-                                    [round(save_ragular_para[1]/100, 4)],
-                                    [round(save_ragular_para[2]/100, 4)]
+                                    [save_ragular_para[0]/1000], [save_ragular_para[1]/100], [save_ragular_para[2]/100]
                                 ]])     # 마지막 변수에 예측된 값을 더해줌.
                                 copySPy = torch.cat((copySPy, copySPyLastVal), dim=2)   # 본래 텐서에 값을 더함.
-                                # 반올림
-                                copySPy = np.around(copySPy.data.numpy(), decimals=5)
-                                copySPy = torch.tensor(copySPy)
                                 copySPy = copySPy[:, :, 1:]     # 맨뒤의 값을 자름.
-                                # TOOL.ALLP(copySPy.data.numpy(), "copySPy Next")
-
                                 # copySComp
                                 copySCompLastVal = copySComp[:, :, -1:]  # [1, 3, 10] -> [1, 3, 1] 마지막 변수 가져옴.
-                                # TOOL.ALLP(copySCompLastVal.data.numpy(), "COPYSCOMP")
                                 # copySpy와 다르게 copy SComp는 이전의 제어 값을 그대로 사용함.
+
+                                # copySCompLastVal = copySCompLastVal + tensor([[
+                                #     [save_ragular_para[3]], [save_ragular_para[4]],
+                                # ]])  # 마지막 변수에 예측된 값을 더해줌.
+
                                 #TODO
                                 # 자기자신 자체
-                                copySCompLastVal = tensor([[[round(save_ragular_para[3], 2)],
-                                                            [round(save_ragular_para[4], 2)]]])
+                                copySCompLastVal = tensor([[[save_ragular_para[3]], [save_ragular_para[4]]]])
 
                                 copySComp = torch.cat((copySComp, copySCompLastVal), dim=2)  # 본래 텐서에 값을 더함.
-                                # 반올림
-                                copySComp = np.around(copySComp.data.numpy(), decimals=3)
-                                copySComp = torch.tensor(copySComp)
                                 copySComp = copySComp[:, :, 1:]  # 맨뒤의 값을 자름.
                                 # 결과값 Recode
                                 copyRecodBox["ZINST58"].append(copySPyLastVal[0, 0, 0].item())
@@ -217,31 +207,36 @@ class Agent(mp.Process):
                     for __ in range(fulltime):
                         spy_lst, scomp_lst, a_lst, r_lst = [], [], [], []
                         a_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        mu_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+
                         a_now = {_: 0 for _ in range(self.LocalNet.NubNET)}
                         a_prob = {_: [] for _ in range(self.LocalNet.NubNET)}
                         r_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
                         done_dict = {_: [] for _ in range(self.LocalNet.NubNET)}
+                        #
+                        trag_mu = {_: [] for _ in range(self.LocalNet.NubNET)}
                         # Sampling
                         for t in range(t_max):
                             NetOut_dict = {_: 0 for _ in range(self.LocalNet.NubNET)}
-                            for nubNet in range(0, self.LocalNet.NubNET):
-                                # TOOL.ALLP(self.S_Py, 'S_Py')
-                                # TOOL.ALLP(self.S_Comp, 'S_Comp')
-                                NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
-                                NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
-                                # TOOL.ALLP(NetOut, 'Netout before Categorical')
+                            for nubNet in [0, 2]:
+                                TOOL.ALLP(self.S_Py, 'S_Py')
+                                TOOL.ALLP(self.S_Comp, 'S_Comp')
+                                # TODO
+                                #  Network는 0, 2은 actor net
+                                mu_v = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                                mu = mu_v.data.numpy()  # detach 이후 numpy로 반환
+                                TOOL.ALLP(mu, "Mu")
+                                # Action 선택
+                                logstd = self.LocalNet.NET[nubNet].logstd.data.numpy()
+                                act = mu + np.exp(logstd) * np.random.normal(size=logstd.shape)
+                                act = np.clip(act, 0, 1)
+                                TOOL.ALLP(act, "ACT")   # (1, 3) 또는 (1, 2)
+                                # 액션 및 mu 저장
+                                a_dict[nubNet].append(act)
+                                mu_dict[nubNet].append(mu)
+                                NetOut_dict[nubNet] = act[0]   # 현재 상태의 action DIS (3,) 또는 (2,)
 
-                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
-                                # TOOL.ALLP(act, 'act')
-                                NetOut = NetOut.tolist()[act]
-                                # TOOL.ALLP(NetOut, 'NetOut')
-                                NetOut_dict[nubNet] = NetOut
-                                # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
-
-                                a_now[nubNet] = act
-                                a_dict[nubNet].append([act])
-                                a_prob[nubNet].append([NetOut])
-
+                            # 상태 저장
                             spy_lst.append(self.S_Py.tolist()[0])  # (1, 2, 10) -list> (2, 10)
                             scomp_lst.append(self.S_Comp.tolist()[0])  # (1, 2, 10) -list> (2, 10)
 
@@ -256,60 +251,16 @@ class Agent(mp.Process):
                             self.new_cns = {para: round(self.CNS.mem[para]['Val'], pr) for para, pr in zip(ComparedPara,ComparedParaRound)}
 
                             # 보상 및 종료조건 계산
-                            r = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-                            pa = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-                            for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
-                                if nubNet == 0:
-                                    if self.CNS.mem['KCNTOMS']['Val'] < maltime:
-                                        if a_now[nubNet] == 1:    # Malfunction
-                                            r[nubNet] = -1
-                                        else:
-                                            r[nubNet] = 1
-                                    else:
-                                        if a_now[nubNet] == 1:    # Malfunction
-                                            r[nubNet] = 1
-                                        else:
-                                            r[nubNet] = -1
-                                else:
-                                    if nubNet < 4:
-                                        predict_a = (a_now[nubNet] - 10)/10
-                                    else:
-                                        predict_a = (a_now[nubNet] - 100) / 100
-                                    pa[nubNet] = predict_a
-                                    # 2020-07-20 Rule
-                                    # if self.new_cns["ZVCT"]-0.2 <= self.old_cns["ZVCT"] + predict_a <= self.new_cns["ZVCT"]+0.2:
-                                    #     r[nubNet] = 1
-                                    # else:
-                                    #     r[nubNet] = -1
-                                    # 2020-07-20 Rule 2
-                                    # TODO
-                                    #  변수 타입에 따라서 로직 변화함.
-                                    want_para_reward = {1: "ZVCT", 2: "ZINST58", 3: "ZINST63", 4: "BFV122", 5: "BPV145"}
-                                    if nubNet < 4:
-                                        if self.new_cns[want_para_reward[nubNet]] == self.old_cns[want_para_reward[nubNet]] + predict_a:
-                                            r[nubNet] = 1
-                                        else:
-                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - (self.old_cns[want_para_reward[nubNet]] + predict_a)
-                                            if DeZVCT < 0: # 예측된 값이 더 크다.
-                                                # 12.2 - 12.1 -> 0.1
-                                                # r[nubNet] = 1 - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                                r[nubNet] = - ((self.old_cns[want_para_reward[nubNet]] + predict_a) - self.new_cns[want_para_reward[nubNet]])
-                                            else:   # 예측된 값이 더 작다.
-                                                # 12.2 - 12.1 -> 0.3
-                                                # r[nubNet] = 1 - ( - (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                                r[nubNet] = - (- (self.old_cns[want_para_reward[nubNet]] + predict_a) + self.new_cns[want_para_reward[nubNet]])
-                                        r[nubNet] = round(r[nubNet], 2)     # 0.100 나와서 2자리에서 반올림.
-                                    else:
-                                        if self.new_cns[want_para_reward[nubNet]] == predict_a:
-                                            r[nubNet] = 1
-                                        else:
-                                            DeZVCT = self.new_cns[want_para_reward[nubNet]] - predict_a
-                                            if DeZVCT < 0: # 예측된 값이 더 크다.
-                                                r[nubNet] = - (predict_a - self.new_cns[want_para_reward[nubNet]])
-                                            else:
-                                                r[nubNet] = - ( - predict_a + self.new_cns[want_para_reward[nubNet]])
-                                        r[nubNet] = round(r[nubNet], 3)  # 0.100 나와서 3자리에서 반올림.
+                            r = {0: 0, 1: 0, 2: 0, 3: 0}
+                            pa = {0: 0, 1: 0, 2: 0, 3: 0}
 
+                            for nubNet in range(0, self.LocalNet.NubNET):      # 보상 네트워크별로 계산 및 저장
+                                if nubNet == 0 or nubNet == 1:
+                                    # TODO
+                                    #  여기서 부터 작업해야함.
+                                    r[nubNet] = 1
+                                elif nubNet == 2 or nubNet == 3:
+                                    pass
                                 r_dict[nubNet].append(r[nubNet])
 
                                 # 종료 조건 계산

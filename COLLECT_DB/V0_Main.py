@@ -1,16 +1,9 @@
-import torch
-import numpy as np
-import random as ran
-import matplotlib.pylab as plt
 from torch import multiprocessing as mp
-from torch import nn, functional, optim
 
-from AB_PPO.CNS_UDP_FAST import CNS
+from CNS_UDP_FAST import CNS
 
 import time
 import copy
-from collections import deque
-import pandas as pd
 
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정

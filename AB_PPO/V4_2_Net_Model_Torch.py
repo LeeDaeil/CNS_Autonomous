@@ -1,8 +1,7 @@
 import torch
 from torch import nn, optim, tensor
-from AB_PPO.COMMONTOOL import TOOL
+from COMMONTOOL import TOOL
 from numpy.random import random
-import random as ra
 
 LSTMMODE = False
 
