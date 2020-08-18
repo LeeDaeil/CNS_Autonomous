@@ -37,17 +37,17 @@ class TOOL:
             return print(x)
 
     @staticmethod
-    def log_add(file_name, ep, ep_iter, x, opt='Default'):   #x 받아서 텍스트에 저장
+    def log_add(file_name, ep, ep_iter, x, mal_nub=0, mal_opt=0, mal_time=0, opt='Default'):   #x 받아서 텍스트에 저장
         if opt == 'Default':
             with open(file_name, 'a') as f:
                 if ep_iter == 0:
-                    f.write(f"{'=' * 30}\n{datetime.today().strftime('%Y/%m/%d %H:%M:%S')}\n{'=' * 30}\n")
+                    f.write(f"{'=' * 30}\n{datetime.today().strftime('%Y/%m/%d %H:%M:%S')}\n"
+                            f"  Mal: {mal_nub:5} | Size : {mal_opt:10}\tMaltime : {mal_time:10}\n"
+                            f"{'=' * 30}\n")
                     f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
                 else:
                     f.write(f"{ep:5} | {ep_iter:5} | {x}\n")
 
-            with open(file_name, 'a') as f:
-                f.write(f"\t{ep:5} | Size : {x[0]:10}\tMaltime : {x[1]:10}\n")
         else:
             pass
         pass

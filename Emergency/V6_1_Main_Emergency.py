@@ -141,6 +141,9 @@ class Agent(mp.Process):
             self.S_Comp = torch.tensor(S_Comp_list)
             self.S_Comp = self.S_Comp.reshape(1, self.S_Comp.shape[0], self.S_Comp.shape[1])
 
+    def UpdateActInfoToCNSMEM(self):
+        self.CNS.mem['vBPV122C']['Val'] = 2
+
     def CNSStep(self):
         self.CNS.run_freeze_CNS()   # CNS에 취득한 값을 메모리에 업데이트
         self.PreProcessing()        # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
@@ -153,8 +156,10 @@ class Agent(mp.Process):
             self.mem['Iter'] += 1
             # Mal function initial
             size, maltime = ran.randint(10010, 10020), ran.randint(2, 10) * 5
+            malnub = 13
             # CNS initial
-            self.CNS.reset(initial_nub=1, mal=True, mal_case=13, mal_opt=size, mal_time=maltime, file_name=self.CurrentIter)
+            self.CNS.reset(initial_nub=1, mal=True, mal_case=malnub, mal_opt=size, mal_time=maltime,
+                           file_name=self.CurrentIter)
             print(f'DONE initial {size}, {maltime}')
 
             # 진단 모듈 Tester !    # TODO 수정할 것
@@ -287,7 +292,12 @@ class Agent(mp.Process):
 
                     # Time Leg 만큼 데이터 수집만 수행
                     for t in range(self.W.TimeLeg + 1):
-                        self.CNSStep()
+                        if t == self.W.TimeLeg:
+                            # 마지막 부분으로 이전까지 s s' 저장 s s' 저장 ... 을 s s' a 저장을 위해서 저장까지 돌지 않음.
+                            self.CNS.run_freeze_CNS()  # CNS에 취득한 값을 메모리에 업데이트
+                            self.PreProcessing()  # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
+                        else:
+                            self.CNSStep()
 
                     # 실제 훈련 시작 부분
                     for __ in range(fulltime):
@@ -339,8 +349,12 @@ class Agent(mp.Process):
                             #                  BFV122=self.RLMem.GetAct(6),
                             #                  PV145=self.RLMem.GetAct(7))
 
+                            self.UpdateActInfoToCNSMEM()    # 액션 값을 메모리에 업데이트
+                            self.CNS._append_val_to_list()  # 최종 값['Val']를 ['List']에 저장
+
                             # CNS + 1 Step
                             self.CNS.run_freeze_CNS()
+                            self.PreProcessing()  # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
 
                             self.new_phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
                             self.new_comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
@@ -391,7 +405,8 @@ class Agent(mp.Process):
                             print(DIS)
 
                             # Logger
-                            TOOL.log_add(file_name=f"{self.name}.txt", ep=self.CurrentIter, ep_iter=ep_iter, x=self.old_cns)
+                            TOOL.log_add(file_name=f"{self.name}.txt", ep=self.CurrentIter,
+                                         ep_iter=ep_iter, x=self.old_cns, mal_nub=malnub, mal_opt=size, mal_time=maltime)
                             ep_iter += 1
 
                         # ==================================================================================================
