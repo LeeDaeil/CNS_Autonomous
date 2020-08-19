@@ -18,7 +18,7 @@ class CNS:
             # Send Socket
             self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             # SIZE BUFFER
-            self.size_buffer_mem = 2008
+            self.size_buffer_mem = 46008
             # SEND TICK
             self.want_tick = 5
 

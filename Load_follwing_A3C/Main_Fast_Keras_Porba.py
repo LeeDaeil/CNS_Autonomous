@@ -32,7 +32,9 @@ episode = 0             # Global EP
 Parameters_noise = False
 GAE = True
 MULTTACT = False
-MANUAL = True
+MANUAL = False
+
+MAXSCORE = 0
 
 class MainModel:
     def __init__(self):
@@ -41,7 +43,7 @@ class MainModel:
         if MULTTACT:
             self.main_net = MainNet(net_type='CLSTM', input_pa=8, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=3, time_leg=10)
+            self.main_net = MainNet(net_type='LSTM', input_pa=10, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
         self.build_info = {
@@ -354,11 +356,25 @@ class A3Cagent(threading.Thread):
 
         self.ax_off = self.CNS.mem['CAXOFF']['Val']  # -0.63
 
+        self.C_7Sig = self.CNS.mem['KLAMPO206']['Val']  #
+        self.C_5Sig = self.CNS.mem['KLAMPO205']['Val']  #
+
+        self.TRIP = self.CNS.mem['KRXTRIP']['Val']
+
+        if self.TRIP == 1:
+            print('STOP_______________________')
+            sleep(10000000000)
+
         # NEt 입력 작성
         # TODO ..
+        power_rate = ((98/18000) * self.Time_tick + 2)/100  # 0.02 => 2%
+        power_up_bound = power_rate + 0.02
+        power_down_bound = power_rate - 0.02
+
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
             self.Reactor_power, self.Mwe_power / 1000, self.load_set / 100, self.Tavg / 1000,
+            power_up_bound, power_down_bound,
             self.rod_pos[0] / 1000, self.rod_pos[1] / 1000, self.rod_pos[2] / 1000, self.rod_pos[3] / 1000,
         ]
 
@@ -373,27 +389,38 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
-                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
+                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
+                                                                     'KLAMPO206', 'KLAMPO205'   # C-7, C-5
                                                                      ]}
 
         ## --------------------------------------------------------------
         # 보상 로직 및 종료 조건 계산 Part
         if True:
-            Reactivity_control = [0, 0, 0]
-
             done = False
             success = False
-            r = sum(Reactivity_control)
+            r = 0
+
+            if self.Reactor_power > power_up_bound:
+                done, r = True, -1
+            if self.Reactor_power < power_down_bound:
+                done, r = True, -1
 
             # 최종 시간
-            if self.CNS.mem['KCNTOMS']['Val'] > 140:
+            if self.CNS.mem['KCNTOMS']['Val'] > 20000:  # tick
                 # print('DONE')
                 done = True
                 success = False
-                r = -1
-
-            self.save_state['R'] = r
+                r = 1
         ## --------------------------------------------------------------
+
+        ## Save State
+        self.save_state['R'] = r
+        self.save_state['A'] = A
+        self.save_state['power_rate'] = power_rate
+        self.save_state['power_up_bound'] = power_up_bound
+        self.save_state['power_down_bound'] = power_down_bound
+
+        self.logger.info(f'[{datetime.datetime.now()}] R: {r} A: {A} Done: {done}')
 
         return done, r, success
 
@@ -520,24 +547,32 @@ class A3Cagent(threading.Thread):
             # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
             if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
                 self.send_action_append(['KSWO244'], [1])
-            # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, steam dump auto로 전향
-            if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.steam_dump_condition == 1:
-                self.send_action_append(['KSWO176'], [0])
-            # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, heat drain pump on
-            if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
-                self.send_action_append(['KSWO205'], [1])
-            # 5) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
-            if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
-                self.send_action_append(['KSWO205'], [1])
-            # 6) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
-            if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
-                self.send_action_append(['KSWO193'], [1])
-            # 7) 출력 50% 이상 및 전기 출력이 475Mwe
-            if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
-                self.send_action_append(['KSWO206'], [1])
-            # 8) 출력 80% 이상 및 전기 출력이 765Mwe
-            if self.Reactor_power >= 0.80 and self.Mwe_power >= 600 and self.main_feed_pump_3 == 0:
-                self.send_action_append(['KSWO192'], [1])
+
+            # 3.1) C-5 점등, C-7 점등
+            if self.C_5Sig == 0 and self.C_7Sig == 0:
+                # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, steam dump auto로 전향
+                if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.steam_dump_condition == 1:
+                    self.send_action_append(['KSWO176'], [0])
+                # 5) 출력 15% 이상 및 전기 출력이 존재하는 경우, heat drain pump on
+                if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
+                    self.send_action_append(['KSWO195'], [1])
+                # 6) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
+                # if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
+                if self.Reactor_power >= 0.20 and self.cond_pump_2 == 0:
+                    self.send_action_append(['KSWO205'], [1])
+                # 7) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
+                # if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+                if self.Reactor_power >= 0.40 and self.main_feed_pump_2 == 0:
+                    self.send_action_append(['KSWO193'], [1])
+                # 8) 출력 50% 이상 및 전기 출력이 475Mwe
+                # if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+                if self.Reactor_power >= 0.50 and self.cond_pump_3 == 0:
+                    self.send_action_append(['KSWO206'], [1])
+                # 9) 출력 80% 이상 및 전기 출력이 765Mwe
+                # if self.Reactor_power >= 0.80 and self.Mwe_power >= 600 and self.main_feed_pump_3 == 0:
+                if self.Reactor_power >= 0.80 and self.main_feed_pump_3 == 0:
+                    self.send_action_append(['KSWO192'], [1])
+
             # 9) 제어봉 조작 신호를 보내기
             if action == 0:
                 self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
@@ -679,6 +714,9 @@ class A3Cagent(threading.Thread):
 
                 # 2.7 done에 도달함.
                 if done:
+                    # 반복을 하지 않음으로 저장해야한다.
+                    self.db.save_state(self.save_state)
+
                     self.logger.info(f'[{datetime.datetime.now()}] Training Done - {start_ep_time}~'
                                      f'{datetime.datetime.now()}')
                     episode += 1
@@ -698,8 +736,14 @@ class A3Cagent(threading.Thread):
 
                     self.logger.info(f'[{datetime.datetime.now()}] Save img')
 
-                    if self.db.train_DB['Step'] > -1:
+                    if self.db.train_DB['Step'] > MAXSCORE:
                         self.db.draw_img(current_ep=episode)
+                        MAXSCORE = self.db.train_DB['Step']
+                    else:
+                        self.db.save_db_file(current_ep=episode)
+
+                    # if self.db.train_DB['Step'] > -1:
+                    #     self.db.draw_img(current_ep=episode)
 
                     self.save_tick = deque([0, 0], maxlen=2)
                     self.save_st = deque([False, False], maxlen=2)
@@ -777,22 +821,24 @@ class DB:
             _.clear()
         #
         self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['QPROREL'], 'g', label='Power')
+        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['power_up_bound'], 'r', label='Up')
+        self.axs[0].plot(self.gp_db['KCNTOMS'], self.gp_db['power_down_bound'], 'b', label='Down')
         self.axs[0].legend(loc=2, fontsize=5)
-        self.axs[0].set_ylabel('PZR pressure [%]')
+        self.axs[0].set_ylabel('Power')
         self.axs[0].grid()
         #
         self.axs[1].plot(self.gp_db['KCNTOMS'], self.gp_db['R'], 'g', label='Reward')
         self.axs[1].legend(loc=2, fontsize=5)
-        self.axs[1].set_ylabel('PZR level')
+        self.axs[1].set_ylabel('Reward')
         self.axs[1].grid()
         #
         self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
-        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_O'], 'g', label='DOWN_O', color='blue', lw=1)
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
+        # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_O'], 'g', label='DOWN_O', color='blue', lw=1)
         self.axs[2].legend(loc=2, fontsize=5)
-        self.axs[2].set_ylabel('PZR level')
+        self.axs[2].set_ylabel('Temp')
         self.axs[2].grid()
         #
         self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
@@ -802,21 +848,24 @@ class DB:
         self.axs[3].set_ylabel('PZR level')
         self.axs[3].grid()
         #
-        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['TOT_ROD'], 'g', label='ROD_POS')
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO10'], label='ROD_POS')
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO9'],  label='ROD_POS')
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO8'],  label='ROD_POS')
+        self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO7'],  label='ROD_POS')
         self.axs[4].legend(loc=2, fontsize=5)
         self.axs[4].set_ylabel('ROD pos')
         self.axs[4].grid()
 
         self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO17'], 'g', label='Set')
-        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'g', label='Acc')
-        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'g', label='Real')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO18'], 'r', label='Acc')
+        self.axs[5].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO19'], 'b', label='Real')
         self.axs[5].legend(loc=2, fontsize=5)
         self.axs[5].set_ylabel('Turbine Real')
         self.axs[5].grid()
 
-        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'g', label='PZR_temp')
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['A'], 'g', label='act')
         self.axs[6].legend(loc=2, fontsize=5)
-        self.axs[6].set_ylabel('PZR temp')
+        self.axs[6].set_ylabel('Act')
         self.axs[6].grid()
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
@@ -854,6 +903,9 @@ class DB:
 
         self.fig.savefig(fname='{}/img/{}_{}.png'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep), dpi=300,
                          facecolor=None)
+        self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
+
+    def save_db_file(self, current_ep):
         self.gp_db.to_csv('{}/log/{}_{}.csv'.format(MAKE_FILE_PATH, self.train_DB['Step'], current_ep))
 
 
