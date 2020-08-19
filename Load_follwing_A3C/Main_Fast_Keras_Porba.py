@@ -391,6 +391,7 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                      'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
                                                                      'KLAMPO206', 'KLAMPO205'   # C-7, C-5
+                                                                     'KBCDO16', 'CXEMPCM' # 보론, 제논
                                                                      ]}
 
         ## --------------------------------------------------------------
@@ -771,14 +772,15 @@ class DB:
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
-        self.gs = self.fig.add_gridspec(21, 3)
-        self.axs = [self.fig.add_subplot(self.gs[0:3, :]),  # 1
-                    self.fig.add_subplot(self.gs[3:6, :]),  # 2
-                    self.fig.add_subplot(self.gs[6:9, :]),  # 3
-                    self.fig.add_subplot(self.gs[9:12, :]),  # 4
-                    self.fig.add_subplot(self.gs[12:15, :]),  # 5
-                    self.fig.add_subplot(self.gs[15:18, :]),  # 6
-                    self.fig.add_subplot(self.gs[18:21, :]),  # 7
+        self.gs = self.fig.add_gridspec(11, 2)
+        self.axs = [self.fig.add_subplot(self.gs[0:3, 0:1]),  # 1
+                    self.fig.add_subplot(self.gs[0:3, 1:2]),  # 2
+                    self.fig.add_subplot(self.gs[3:6, 0:1]),  # 3
+                    self.fig.add_subplot(self.gs[3:6, 1:2]),  # 4
+                    self.fig.add_subplot(self.gs[6:9, 0:1]),  # 5
+                    self.fig.add_subplot(self.gs[6:9, 1:2]),  # 6
+                    self.fig.add_subplot(self.gs[9:11, 0:1]),  # 7
+                    self.fig.add_subplot(self.gs[9:11, 1:2]),  # 8
                     # self.fig.add_subplot(self.gs[21:24, :]),  # 8
                     # self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     ]
@@ -841,11 +843,11 @@ class DB:
         self.axs[2].set_ylabel('Temp')
         self.axs[2].grid()
         #
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='Reward')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='Reward')
-        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='Reward')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO20'], 'g', label='LoadSetPoint')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO21'], 'b', label='LoadRate')
+        self.axs[3].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO22'], 'r', label='MWe')
         self.axs[3].legend(loc=2, fontsize=5)
-        self.axs[3].set_ylabel('PZR level')
+        self.axs[3].set_ylabel('MWe')
         self.axs[3].grid()
         #
         self.axs[4].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO10'], label='ROD_POS')
@@ -863,10 +865,26 @@ class DB:
         self.axs[5].set_ylabel('Turbine Real')
         self.axs[5].grid()
 
-        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['A'], 'g', label='act')
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['A'], label='act', linewidth=3)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO206'], label='C-7', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO205'], label='C-5', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO244'], label='Heatdump', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO241'], label='MainFP1', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO242'], label='MainFP2', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO243'], label='MainFP3', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO181'], label='CMP1', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO182'], label='CMP2', linewidth=1)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO183'], label='CMP3', linewidth=1)
         self.axs[6].legend(loc=2, fontsize=5)
         self.axs[6].set_ylabel('Act')
         self.axs[6].grid()
+
+        self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], label='Bron')
+        self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['CXEMPCM'], label='Ze')
+        self.axs[7].legend(loc=2, fontsize=5)
+        self.axs[7].set_ylabel('Act')
+        self.axs[7].grid()
+
         # #
         # self.axs[3].plot(self.gp_db['time'], self.gp_db['BFV122_pos'], 'g', label='BFV122_POS')
         # self.axs[3].legend(loc=2, fontsize=5)
