@@ -30,7 +30,7 @@ logging.basicConfig(filename='{}/test.log'.format(MAKE_FILE_PATH), format='%(asc
 #------------------------------------------------------------------
 episode = 0             # Global EP
 Parameters_noise = False
-GAE = False
+GAE = True
 MULTTACT = False
 MANUAL = True
 
@@ -39,13 +39,13 @@ class MainModel:
         self._make_folder()
         self._make_tensorboaed()
         if MULTTACT:
-            self.main_net = MainNet(net_type='CLSTM', input_pa=6, output_pa=3, time_leg=10)
+            self.main_net = MainNet(net_type='CLSTM', input_pa=8, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=9, time_leg=10)
+            self.main_net = MainNet(net_type='LSTM', input_pa=6, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
         self.build_info = {
-            'IP_list': ['192.168.0.9', '192.168.0.7', '192.168.0.4'],
+            'IP_list': ['192.168.0.7', '192.168.0.4', '192.168.0.2'],
             'PORT_list': [7100, 7200, 7300],
         }
         if MANUAL:
@@ -321,84 +321,79 @@ class A3Cagent(threading.Thread):
 
         # 사용되는 파라메터 전체 업데이트
         self.Time_tick = self.CNS.mem['KCNTOMS']['Val']
-        self.Critical = get_v('CRETIV')
-        self.MWe_power = get_v('ZINST124')/1000
-        self.Char_pump_2 = get_v('KLAMPO70')
-        self.BHV22 = get_v('BHV22')
-        self.RHR_pump = get_v('KLAMPO55')
-        self.Rx_Trip = get_v('KLAMPO9')
+        self.Reactor_power = self.CNS.mem['QPROREL']['Val']  # 0.02
+        self.Tavg = self.CNS.mem['UAVLEGM']['Val']  # 308.21
+        self.Tref = self.CNS.mem['UAVLEGS']['Val']  # 308.22
+        self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
 
+        self.charging_valve_state = self.CNS.mem['KLAMPO95']['Val']  # 0(Auto) - 1(Man)
+        self.main_feed_valve_1_state = self.CNS.mem['KLAMPO147']['Val']
+        self.main_feed_valve_2_state = self.CNS.mem['KLAMPO148']['Val']
+        self.main_feed_valve_3_state = self.CNS.mem['KLAMPO149']['Val']
+        self.vct_level = self.CNS.mem['ZVCT']['Val']  # 74.45
+        self.pzr_level = self.CNS.mem['ZINST63']['Val']  # 34.32
+        #
+        self.Turbine_setpoint = self.CNS.mem['KBCDO17']['Val']
+        self.Turbine_ac = self.CNS.mem['KBCDO18']['Val']  # Turbine ac condition
+        self.Turbine_real = self.CNS.mem['KBCDO19']['Val']  # 20
+        self.load_set = self.CNS.mem['KBCDO20']['Val']  # Turbine load set point
+        self.load_rate = self.CNS.mem['KBCDO21']['Val']  # Turbine load rate
+        self.Mwe_power = self.CNS.mem['KBCDO22']['Val']  # 0
+
+        self.Netbreak_condition = self.CNS.mem['KLAMPO224']['Val']  # 0 : Off, 1 : On
+        self.trip_block = self.CNS.mem['KLAMPO22']['Val']  # Trip block condition 0 : Off, 1 : On
+        #
+        self.steam_dump_condition = self.CNS.mem['KLAMPO150']['Val']  # 0: auto 1: man
+        self.heat_drain_pump_condition = self.CNS.mem['KLAMPO244']['Val']  # 0: off, 1: on
+        self.main_feed_pump_1 = self.CNS.mem['KLAMPO241']['Val']  # 0: off, 1: on
+        self.main_feed_pump_2 = self.CNS.mem['KLAMPO242']['Val']  # 0: off, 1: on
+        self.main_feed_pump_3 = self.CNS.mem['KLAMPO243']['Val']  # 0: off, 1: on
+        self.cond_pump_1 = self.CNS.mem['KLAMPO181']['Val']  # 0: off, 1: on
+        self.cond_pump_2 = self.CNS.mem['KLAMPO182']['Val']  # 0: off, 1: on
+        self.cond_pump_3 = self.CNS.mem['KLAMPO183']['Val']  # 0: off, 1: on
+
+        self.ax_off = self.CNS.mem['CAXOFF']['Val']  # -0.63
+
+        # NEt 입력 작성
+        # TODO ..
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Time_tick, self.Critical, self.MWe_power,self.Char_pump_2,self.BHV22,self.RHR_pump
-            ]
+            self.Reactor_power, self.Mwe_power / 1000, self.load_set / 100, self.Tavg / 1000,
+            self.rod_pos[0] / 1000, self.rod_pos[1] / 1000, self.rod_pos[2] / 1000, self.rod_pos[3] / 1000,
+        ]
 
-        self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS', # cns tick
-                                                                     'CRETIV', # power
-                                                                     'ZINST124', # Tavg
-                                                                     'KLAMPO70', # Tref
-                                                                     'BHV22', # charging vlave state
-                                                                     'KLAMPO55',  # charging vlave state
-                                                                     'KLAMPO9',  # Rx trip
+        self.save_state = {key: self.CNS.mem[key]['Val'] for key in ['KCNTOMS',  # cns tick
+                                                                     'QPROREL',  # power
+                                                                     'UAVLEGM',  # Tavg
+                                                                     'UAVLEGS',  # Tref
+                                                                     'KLAMPO95',  # charging vlave state
+                                                                     'KLAMPO147', 'KLAMPO148', 'KLAMPO149',
+                                                                     'ZVCT', 'ZINST63', 'KBCDO17', 'KBCDO18',
+                                                                     'KBCDO19', 'KBCDO20', 'KBCDO21', 'KBCDO22',
+                                                                     'KLAMPO224', 'KLAMPO22', 'KLAMPO150', 'KLAMPO244',
+                                                                     'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
+                                                                     'KLAMPO182', 'KLAMPO183', 'CAXOFF',
+                                                                     'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7'
                                                                      ]}
 
-        # 보상
-
-        Reactivity_control = [0, 0, 0]
+        ## --------------------------------------------------------------
+        # 보상 로직 및 종료 조건 계산 Part
         if True:
-            # 1) Reactivity
-            if self.CNS.mem['CRETIV']['Val'] < 0:
-                Reactivity_control[0] = 1
-            else:
-                Reactivity_control[0] = 0
-            # 2) Stabilize or reduce reactor power
-            if 0 <= self.CNS.mem['QPROREL']['Val'] < 0.02:
-                Reactivity_control[1] += 0.5
-            else:
-                Reactivity_control[1] += 0
-            if self.CNS.mem['ZINST124']['Val'] < 1:
-                Reactivity_control[1] += 0.5
-            else:
-                Reactivity_control[1] += 0
-            # 3) Boration addition rate
-            if True:
-                # 3-1) Charging Line Flow
-                if self.CNS.mem['KLAMPO70']['Val'] == 1 and self.CNS.mem['BHV22']['Val'] == 1:
-                    Reactivity_control[2] += 0.5
-                else:
-                    Reactivity_control[2] += 0
-                # 3-2) IRWST->HV8->RHR->HV603 Flow
-                if self.CNS.mem['KLAMPO55']['Val'] == 1 and self.CNS.mem['ZRWST']['Val'] > 0 \
-                        and self.CNS.mem['BHV8']['Val'] == 1 and self.CNS.mem['BHV603']['Val'] >= 1:
-                    Reactivity_control[2] += 0.5
-                else:
-                    Reactivity_control[2] += 0
+            Reactivity_control = [0, 0, 0]
 
-        done = False
-        success = False
-        r = sum(Reactivity_control)
+            done = False
+            success = False
+            r = sum(Reactivity_control)
 
-        if r == 2.5 and self.Rx_Trip == 1:
-            done = True
-            success = True
-            r = r / 20 + 0.5
-        else:
-            r = r / 20
-
-        if self.Rx_Trip == 0:
-            if self.BHV22 == 1 or self.Char_pump_2 == 1 or self.RHR_pump == 1:
+            # 최종 시간
+            if self.CNS.mem['KCNTOMS']['Val'] > 140:
+                # print('DONE')
                 done = True
                 success = False
                 r = -1
-            else:
-                pass
 
-        if self.CNS.mem['KCNTOMS']['Val'] > 140:
-            # print('DONE')
-            done = True
-            success = False
-            r = -1
-        self.save_state['R'] = r
+            self.save_state['R'] = r
+        ## --------------------------------------------------------------
 
         return done, r, success
 
@@ -458,7 +453,98 @@ class A3Cagent(threading.Thread):
                 else:
                     self.send_action_append([t_pa], [1])  # Stay
         else:
-            if action == 0: self.send_action_append(['KSWO70'], [0])  # Rod Stay
+            # 주급수 및 CVCS 자동
+            if self.charging_valve_state == 1:
+                self.send_action_append(['KSWO100'], [0])
+            if self.main_feed_valve_1_state == 1 or self.main_feed_valve_2_state == 1 or self.main_feed_valve_3_state == 1:
+                self.send_action_append(['KSWO171', 'KSWO165', 'KSWO159'], [0, 0, 0])
+
+            # self.rod_pos = [self.CNS.mem[nub_rod]['Val'] for nub_rod in ['KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7']]
+            if self.rod_pos[0] >= 228 and self.rod_pos[1] >= 228 and self.rod_pos[0] >= 100:
+                # 거의 많이 뽑혔을때 Makeup
+                self.send_action_append(['KSWO78', 'WDEWT'], [1, 1])  # Makeup
+
+            # 절차서 구성 순서로 진행
+            # 1) 출력이 4% 이상에서 터빈 set point를 맞춘다.
+            if self.Reactor_power >= 0.04 and self.Turbine_setpoint != 1800:
+                if self.Turbine_setpoint < 1790:  # 1780 -> 1872
+                    self.send_action_append(['KSWO213'], [1])
+                elif self.Turbine_setpoint >= 1790:
+                    self.send_action_append(['KSWO213'], [0])
+            # 1) 출력 4% 이상에서 터빈 acc 를 200 이하로 맞춘다.
+            if self.Reactor_power >= 0.04 and self.Turbine_ac != 210:
+                if self.Turbine_ac < 200:
+                    self.send_action_append(['KSWO215'], [1])
+                elif self.Turbine_ac >= 200:
+                    self.send_action_append(['KSWO215'], [0])
+            # 2) 출력 10% 이상에서는 Trip block 우회한다.
+            if self.Reactor_power >= 0.10 and self.trip_block != 1:
+                self.send_action_append(['KSWO22', 'KSWO21'], [1, 1])
+            # 2) 출력 10% 이상에서는 rate를 50까지 맞춘다.
+            if self.Reactor_power >= 0.10 and self.Mwe_power <= 0:
+                if self.load_set < 100:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                else:
+                    self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+                if self.load_rate < 5:
+                    self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
+                else:
+                    self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
+
+            def range_fun(st, end, goal):
+                if st <= self.Reactor_power < end:
+                    if self.load_set < goal:
+                        self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
+                    else:
+                        self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
+
+            range_fun(st=0.10, end=0.20, goal=100)
+            range_fun(st=0.20, end=0.25, goal=150)
+            range_fun(st=0.25, end=0.30, goal=200)
+            range_fun(st=0.30, end=0.35, goal=250)
+            range_fun(st=0.35, end=0.40, goal=300)
+            range_fun(st=0.40, end=0.45, goal=350)
+            range_fun(st=0.45, end=0.50, goal=400)
+            range_fun(st=0.50, end=0.55, goal=450)
+            range_fun(st=0.55, end=0.60, goal=500)
+            range_fun(st=0.60, end=0.65, goal=550)
+            range_fun(st=0.65, end=0.70, goal=600)
+            range_fun(st=0.70, end=0.75, goal=650)
+            range_fun(st=0.75, end=0.80, goal=700)
+            range_fun(st=0.80, end=0.85, goal=750)
+            range_fun(st=0.85, end=0.90, goal=800)
+            range_fun(st=0.90, end=0.95, goal=850)
+            range_fun(st=0.95, end=1.00, goal=900)
+            range_fun(st=1.00, end=1.50, goal=930)
+
+            # 3) 출력 15% 이상 및 터빈 rpm이 1800이 되면 netbreak 한다.
+            if self.Reactor_power >= 0.15 and self.Turbine_real >= 1790 and self.Netbreak_condition != 1:
+                self.send_action_append(['KSWO244'], [1])
+            # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, steam dump auto로 전향
+            if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.steam_dump_condition == 1:
+                self.send_action_append(['KSWO176'], [0])
+            # 4) 출력 15% 이상 및 전기 출력이 존재하는 경우, heat drain pump on
+            if self.Reactor_power >= 0.15 and self.Mwe_power > 0 and self.heat_drain_pump_condition == 0:
+                self.send_action_append(['KSWO205'], [1])
+            # 5) 출력 20% 이상 및 전기 출력이 190Mwe 이상 인경우
+            if self.Reactor_power >= 0.20 and self.Mwe_power >= 190 and self.cond_pump_2 == 0:
+                self.send_action_append(['KSWO205'], [1])
+            # 6) 출력 40% 이상 및 전기 출력이 380Mwe 이상 인경우
+            if self.Reactor_power >= 0.40 and self.Mwe_power >= 380 and self.main_feed_pump_2 == 0:
+                self.send_action_append(['KSWO193'], [1])
+            # 7) 출력 50% 이상 및 전기 출력이 475Mwe
+            if self.Reactor_power >= 0.50 and self.Mwe_power >= 475 and self.cond_pump_3 == 0:
+                self.send_action_append(['KSWO206'], [1])
+            # 8) 출력 80% 이상 및 전기 출력이 765Mwe
+            if self.Reactor_power >= 0.80 and self.Mwe_power >= 600 and self.main_feed_pump_3 == 0:
+                self.send_action_append(['KSWO192'], [1])
+            # 9) 제어봉 조작 신호를 보내기
+            if action == 0:
+                self.send_action_append(['KSWO33', 'KSWO32'], [0, 0])  # Stay
+            elif action == 1:
+                self.send_action_append(['KSWO33', 'KSWO32'], [1, 0])  # Out
+            elif action == 2:
+                self.send_action_append(['KSWO33', 'KSWO32'], [0, 1])  # In
 
         # 최종 파라메터 전송
         self.CNS._send_control_signal(self.para, self.val)
@@ -505,7 +591,7 @@ class A3Cagent(threading.Thread):
         def start_or_initial_cns(mal_time):
             self.db.initial_train_DB()
             self.save_operation_point = {}
-            self.CNS.init_cns(initial_nub=1)
+            self.CNS.init_cns(initial_nub=17)
             sleep(1)
             # self.CNS._send_malfunction_signal(12, 100100, 18)
             # sleep(1)
@@ -675,7 +761,7 @@ class DB:
         if MULTTACT:
             self.train_DB['Act'].append(A)
         else:
-            Temp_R_A = np.zeros(9)
+            Temp_R_A = np.zeros(3)
             Temp_R_A[A] = 1
             self.train_DB['Act'].append(Temp_R_A)
         self.train_DB['TotR'] += self.train_DB['Reward'][-1]

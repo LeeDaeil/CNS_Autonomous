@@ -155,7 +155,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # Mal function initial
-            size, maltime = ran.randint(10010, 10020), ran.randint(2, 10) * 5
+            size, maltime = ran.randint(10020, 10030), ran.randint(2, 10) * 5
             malnub = 13
             # CNS initial
             self.CNS.reset(initial_nub=1, mal=True, mal_case=malnub, mal_opt=size, mal_time=maltime,
