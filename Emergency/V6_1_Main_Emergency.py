@@ -15,7 +15,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.29'
         self.CNS_IP_LIST = ['192.168.0.103', '192.168.0.4', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [3, 0, 0]
+        self.CNS_NUMBERS = [1, 0, 0]
 
         self.TimeLeg = 15
 
@@ -95,11 +95,86 @@ class Agent(mp.Process):
         self.para = []
         self.val = []
 
+
         # if act == 0:
         #     self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
 
+        ## --- if then 절차서 로직 호출
+        self.IFTHENProcedures()
+
         # 최종 파라메터 전송
-        self.CNS._send_control_signal(self.para, self.val)
+        if self.para != []:
+            self.CNS._send_control_signal(self.para, self.val)
+
+    def IFTHENProcedures_Step_initial(self):
+        self.IFTHENProcedures_STEP = {
+            0: True,        # Trip check
+            1: False,       # Turbine check
+            2: False,       # SI Check
+            3: False,       # 주급수 잠김
+            4: False,       # 보조급수 펌프 운전 중인지 확인
+            5: False,       # 보조급수 유량 제어 시작
+            6: False,       # Last !!
+        }
+        self.IFTHENProcedures_ORDER = {
+            5: False, 'Goal_5': 'Set_up33',
+        }
+        pass
+
+    def IFTHENProcedures(self):
+        para, val = [], []
+
+        # 현재 절차서의 위치 확인
+        for NubPro in range(len(self.IFTHENProcedures_STEP)):
+            if self.IFTHENProcedures_STEP[NubPro]:
+                get_current_step = NubPro
+
+        while True:
+            # 1] 현재 위치가 마지막 부분인지 확인, 마지막이면 종료
+            if self.IFTHENProcedures_STEP[len(self.IFTHENProcedures_STEP) - 1]:
+                # print(f'모든 절차 수행 완료 {self.IFTHENProcedures_STEP}')
+                break
+            # 2] 현재 위치의 로직 수행
+            step_done = False
+            # print(f'{get_current_step}-체크')
+            if get_current_step == 0 and self.CNS.mem['KLAMPO9']['Val'] == 1: step_done = True
+            if get_current_step == 1 and self.CNS.mem['KLAMPO195']['Val'] == 1: step_done = True
+            if get_current_step == 2 and self.CNS.mem['KLAMPO6']['Val'] == 1: step_done = True
+            if get_current_step == 3:
+                if self.CNS.mem['BFV478']['Val'] == 0 and self.CNS.mem['BFV479']['Val'] == 0 and \
+                        self.CNS.mem['BFV488']['Val'] == 0 and self.CNS.mem['BFV489']['Val'] == 0 and \
+                        self.CNS.mem['BFV498']['Val'] == 0 and self.CNS.mem['BFV499']['Val'] == 0:
+                    step_done = True
+            if get_current_step == 4:
+                if self.CNS.mem['KLAMPO134']['Val'] == 1 and self.CNS.mem['KLAMPO135']['Val'] == 1 and \
+                        self.CNS.mem['KLAMPO136']['Val'] == 1:
+                    step_done = True
+                else:
+                    if self.CNS.mem['KLAMPO134']['Val'] == 0:
+                        para.append('KSWO141')
+                        val.append(1)
+                    if self.CNS.mem['KLAMPO135']['Val'] == 0:
+                        para.append('KSWO150')
+                        val.append(1)
+                    if self.CNS.mem['KLAMPO136']['Val'] == 0:
+                        para.append('KSWO153')
+                        val.append(1)
+            if get_current_step == 5:
+                self.IFTHENProcedures_ORDER[5] = True   # 강화학습 모듈 동작!
+
+                if (self.CNS.mem['WAFWS1']['Val'] + self.CNS.mem['WAFWS2']['Val'] + self.CNS.mem['WAFWS3']['Val']) > 33:
+                    step_done = True
+
+            # 3] 값 업데이트: 현재 수행한 절차가 성공적이면 이렇게 아니면 탈출
+            if step_done:
+                self.IFTHENProcedures_STEP[get_current_step] = False
+                self.IFTHENProcedures_STEP[get_current_step + 1] = True
+                # 4] 해당 절차를 수행하였음으로 다음 절차로 진입하기 위해 현재 바라보는 스텝의 번호를 +1 증가시킴
+                get_current_step += 1
+            else:
+                break
+        pass
+
     #
     # ==============================================================================================================
     # 입력 출력 값 생성
@@ -223,6 +298,8 @@ class Agent(mp.Process):
             self.CNS.reset(initial_nub=1, mal=True, mal_case=self.malnub, mal_opt=self.size, mal_time=self.maltime,
                            file_name=self.CurrentIter)
             print(f'DONE initial {self.size}, {self.maltime}')
+            # If-then 절차서 모니터링 변수 초기화
+            self.IFTHENProcedures_Step_initial()
 
             # 진단 모듈 Tester !    # TODO 수정할 것
             # if self.CurrentIter != 0 and self.CurrentIter % 100 == 0:
@@ -242,7 +319,7 @@ class Agent(mp.Process):
             # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 20 # 600 초? 10분..?
+                fulltime = 100 # 600 초? 10분..?
                 self.t_max = 5       # total iteration = fulltime * self.t_max # TODO 나중에 지울 것 Prognostic mode에 만 적용중...
                 self.ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
@@ -406,6 +483,7 @@ class Agent(mp.Process):
                         self.old_phys, self.old_comp, self.old_cns = self.SaveOldNew()
 
                         # 4] 네트워크 출력 값에 따라서 제어 신호 전송
+                        self.send_action()
                         # self.send_action(act=0,
                         #                  BFV122=self.RLMem.GetAct(6),
                         #                  PV145=self.RLMem.GetAct(7))
