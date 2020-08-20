@@ -43,7 +43,7 @@ class MainModel:
         if MULTTACT:
             self.main_net = MainNet(net_type='CLSTM', input_pa=8, output_pa=3, time_leg=10)
         else:
-            self.main_net = MainNet(net_type='LSTM', input_pa=10, output_pa=3, time_leg=10)
+            self.main_net = MainNet(net_type='LSTM', input_pa=11, output_pa=3, time_leg=10)
         #self.main_net.load_model('ROD')
 
         self.build_info = {
@@ -368,12 +368,16 @@ class A3Cagent(threading.Thread):
         # NEt 입력 작성
         # TODO ..
         power_rate = ((98/18000) * self.Time_tick + 2)/100  # 0.02 => 2%
-        power_up_bound = power_rate + 0.02
-        power_down_bound = power_rate - 0.02
+        if False: # +-0.02 밴드 모드
+            power_up_bound = power_rate + 0.02
+            power_down_bound = power_rate - 0.02
+        if True:
+            power_up_bound = ((99/18000) * self.Time_tick + 2)/100 + 0.02       # + 0.02 높은 기울기
+            power_down_bound = ((97/18000) * self.Time_tick + 2)/100 - 0.02     # - 0.02 낮은 기울기
 
         self.state = [
             # 네트워크의 Input 에 들어 가는 변수 들
-            self.Reactor_power, self.Mwe_power / 1000, self.load_set / 100, self.Tavg / 1000,
+            self.Reactor_power, self.Mwe_power / 1000, self.load_set / 100, self.Tavg / 1000, self.Tref / 1000,
             power_up_bound, power_down_bound,
             self.rod_pos[0] / 1000, self.rod_pos[1] / 1000, self.rod_pos[2] / 1000, self.rod_pos[3] / 1000,
         ]
@@ -390,8 +394,8 @@ class A3Cagent(threading.Thread):
                                                                      'KLAMPO241', 'KLAMPO242', 'KLAMPO243', 'KLAMPO181',
                                                                      'KLAMPO182', 'KLAMPO183', 'CAXOFF',
                                                                      'KBCDO10', 'KBCDO9', 'KBCDO8', 'KBCDO7',
-                                                                     'KLAMPO206', 'KLAMPO205'   # C-7, C-5
-                                                                     'KBCDO16', 'CXEMPCM' # 보론, 제논
+                                                                     'KLAMPO206', 'KLAMPO205',   # C-7, C-5
+                                                                     'KBCDO16', 'CXEMPCM', # 보론, 제논
                                                                      ]}
 
         ## --------------------------------------------------------------
@@ -400,6 +404,9 @@ class A3Cagent(threading.Thread):
             done = False
             success = False
             r = 0
+
+            if A == 0:      # 제어가 없다면 + 0.01 보상
+                r += 0.01
 
             if self.Reactor_power > power_up_bound:
                 done, r = True, -1
@@ -514,7 +521,7 @@ class A3Cagent(threading.Thread):
                     self.send_action_append(['KSWO225', 'KSWO224'], [1, 0])  # 터빈 load를 150 Mwe 까지,
                 else:
                     self.send_action_append(['KSWO225', 'KSWO224'], [0, 0])
-                if self.load_rate < 5:
+                if self.load_rate < 25:
                     self.send_action_append(['KSWO227', 'KSWO226'], [1, 0])
                 else:
                     self.send_action_append(['KSWO227', 'KSWO226'], [0, 0])
@@ -621,7 +628,7 @@ class A3Cagent(threading.Thread):
         self.db.initial_each_trian_DB()
 
     def run(self):
-        global episode
+        global episode, MAXSCORE
         self.cns_speed = 1  # x 배속
 
         def start_or_initial_cns(mal_time):
@@ -767,20 +774,20 @@ class DB:
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0,
                          'T_Avg_q_max': 0, 'T_Avg_max_step': 0, 'Loss': 0,
-                         'Up_t': 0, 'Up_t_end': 10,
+                         'Up_t': 0, 'Up_t_end': 20,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
         self.fig = plt.figure(constrained_layout=True, figsize=(10, 9))
-        self.gs = self.fig.add_gridspec(11, 2)
+        self.gs = self.fig.add_gridspec(12, 2)
         self.axs = [self.fig.add_subplot(self.gs[0:3, 0:1]),  # 1
                     self.fig.add_subplot(self.gs[0:3, 1:2]),  # 2
                     self.fig.add_subplot(self.gs[3:6, 0:1]),  # 3
                     self.fig.add_subplot(self.gs[3:6, 1:2]),  # 4
                     self.fig.add_subplot(self.gs[6:9, 0:1]),  # 5
                     self.fig.add_subplot(self.gs[6:9, 1:2]),  # 6
-                    self.fig.add_subplot(self.gs[9:11, 0:1]),  # 7
-                    self.fig.add_subplot(self.gs[9:11, 1:2]),  # 8
+                    self.fig.add_subplot(self.gs[9:12, 0:1]),  # 7
+                    self.fig.add_subplot(self.gs[9:12, 1:2]),  # 8
                     # self.fig.add_subplot(self.gs[21:24, :]),  # 8
                     # self.fig.add_subplot(self.gs[24:27, :]),  # 9
                     ]
@@ -789,7 +796,7 @@ class DB:
         self.train_DB = {'Now_S': [], 'S': [], 'Reward': [], 'Act': [],
                          'TotR': 0, 'Step': 0,
                          'Avg_q_max': 0, 'Avg_max_step': 0, 'Loss': 0,
-                         'Up_t': 0, 'Up_t_end': 60,
+                         'Up_t': 0, 'Up_t_end': 20,
                          'Net_triger': False, 'Net_triger_time': []}
         self.gp_db = pd.DataFrame()
 
@@ -835,6 +842,7 @@ class DB:
         self.axs[1].grid()
         #
         self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGM'], 'g', label='Average')
+        self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UAVLEGS'], 'g', label='Ref')
         # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_D'], 'g', label='UP_D', color='red', lw=1)
         # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['UP_O'], 'g', label='UP_O', color='blue', lw=1)
         # self.axs[2].plot(self.gp_db['KCNTOMS'], self.gp_db['DOWN_D'], 'g', label='DOWN_D', color='red', lw=1)
@@ -865,7 +873,7 @@ class DB:
         self.axs[5].set_ylabel('Turbine Real')
         self.axs[5].grid()
 
-        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['A'], label='act', linewidth=3)
+        self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['A'], label='act', linewidth=1)
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO206'], label='C-7', linewidth=1)
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO205'], label='C-5', linewidth=1)
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO244'], label='Heatdump', linewidth=1)
@@ -875,14 +883,14 @@ class DB:
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO181'], label='CMP1', linewidth=1)
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO182'], label='CMP2', linewidth=1)
         self.axs[6].plot(self.gp_db['KCNTOMS'], self.gp_db['KLAMPO183'], label='CMP3', linewidth=1)
-        self.axs[6].legend(loc=2, fontsize=5)
+        self.axs[6].legend(loc=2, fontsize=4)
         self.axs[6].set_ylabel('Act')
         self.axs[6].grid()
 
         self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['KBCDO16'], label='Bron')
         self.axs[7].plot(self.gp_db['KCNTOMS'], self.gp_db['CXEMPCM'], label='Ze')
         self.axs[7].legend(loc=2, fontsize=5)
-        self.axs[7].set_ylabel('Act')
+        self.axs[7].set_ylabel('Bron_Ze')
         self.axs[7].grid()
 
         # #
