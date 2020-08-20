@@ -1,4 +1,5 @@
 import random as ran
+import matplotlib.pyplot as plt
 from torch import multiprocessing as mp
 
 from CNS_UDP_FAST import CNS
@@ -193,6 +194,23 @@ class Agent(mp.Process):
         ]
         return phys, comp, cns
 
+    def DrawFig(self):
+        fig = plt.figure(figsize=(10, 9), constrained_layout=True)
+        gs = fig.add_gridspec(3, 2)
+        axs = [fig.add_subplot(gs[0:3, 0:1]),   # 0
+               fig.add_subplot(gs[0:3, 1:2]),   # 1
+               ]
+
+        # 원하는 값에 정보를 입력
+        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['QPROREL']['List'], label='Power')
+        axs[0].grid()
+
+        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['UAVLEGM']['List'], label='Temp')
+        axs[1].grid()
+
+        fig.savefig(fname=f'{self.CNS.LoggerPath}/{self.CurrentIter}.png', dpi=300, facecolor=None)
+        pass
+
     def run(self):
         while True:
             # Get iter
@@ -224,8 +242,8 @@ class Agent(mp.Process):
             # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 30
-                self.t_max = 5       # total iteration = fulltime * self.t_max
+                fulltime = 20 # 600 초? 10분..?
+                self.t_max = 5       # total iteration = fulltime * self.t_max # TODO 나중에 지울 것 Prognostic mode에 만 적용중...
                 self.ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
                 ro = [5, 4, 4, 2, 2]
@@ -435,9 +453,9 @@ class Agent(mp.Process):
                                 # r_dict[nubNet]: (5,) -> (5,1)
                                 # Netout : (5,1)
                                 # done_dict[nubNet]: (5,) -> (5,1)
-                                td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(self.t_max, 1) + \
+                                td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(UpCountLimit, 1) + \
                                             gamma * self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_fin, scomp_fin) * \
-                                            torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(self.t_max, 1)
+                                            torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(UpCountLimit, 1)
                                 delta = td_target - self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch)
                                 delta = delta.detach().numpy()
 
@@ -488,7 +506,10 @@ class Agent(mp.Process):
                             # UpCount 초기화 및 훈련용 메모리 초기화
                             UpCount = 0
                             self.RLMem.CleanTrainMem()
-                print('DONE EP')
+
+                # END
+                self.DrawFig()
+                print(f'{self.CurrentIter}--DONE EP')
                 break
 
 
