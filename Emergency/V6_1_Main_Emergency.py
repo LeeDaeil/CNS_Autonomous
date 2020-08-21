@@ -90,14 +90,36 @@ class Agent(mp.Process):
             self.para.append(pa[_])
             self.val.append(va[_])
 
-    def send_action(self, act=0, BFV122=0, PV145=0):
+    def send_Control(self, Order):
+        return self.send_action_append(self.OrderBook[Order]['pa'], self.OrderBook[Order]['va'])
+
+    def send_action(self, act=0, AuxVal=[0, 0, 0]):
+        # Order Book
+        self.OrderBook = {
+            'Aux1ValveStay': {'pa': ["KSWO142", "KSWO143"], 'va': [0, 0]},
+            'Aux1ValveDown': {'pa': ["KSWO142", "KSWO143"], 'va': [1, 0]},
+            'Aux1ValveUp':   {'pa': ["KSWO142", "KSWO143"], 'va': [0, 1]},
+            'Aux2ValveStay': {'pa': ["KSWO151", "KSWO152"], 'va': [0, 0]},
+            'Aux2ValveDown': {'pa': ["KSWO151", "KSWO152"], 'va': [1, 0]},
+            'Aux2ValveUp':   {'pa': ["KSWO151", "KSWO152"], 'va': [0, 1]},
+            'Aux3ValveStay': {'pa': ["KSWO154", "KSWO155"], 'va': [0, 0]},
+            'Aux3ValveDown': {'pa': ["KSWO154", "KSWO155"], 'va': [1, 0]},
+            'Aux3ValveUp':   {'pa': ["KSWO154", "KSWO155"], 'va': [0, 1]},
+        }
+
         # 전송될 변수와 값 저장하는 리스트
         self.para = []
         self.val = []
 
-
         # if act == 0:
         #     self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
+
+        # 1] Aux valve control logic
+        if True:
+            for _ in range(0, 3):
+                if AuxVal[_] == 0: self.send_Control(f'Aux{_ + 1}ValveStay')
+                if AuxVal[_] == 1: self.send_Control(f'Aux{_ + 1}ValveDown')
+                if AuxVal[_] == 2: self.send_Control(f'Aux{_ + 1}ValveUp')
 
         ## --- if then 절차서 로직 호출
         self.IFTHENProcedures()
@@ -117,7 +139,7 @@ class Agent(mp.Process):
             6: False,       # Last !!
         }
         self.IFTHENProcedures_ORDER = {
-            5: False, 'Goal_5': 'Set_up33',
+            5: False, 'Goal_5': 'Set_up33', # Goal_5= 'Set_up33', 'StayIn50'
         }
         pass
 
@@ -161,9 +183,9 @@ class Agent(mp.Process):
                         val.append(1)
             if get_current_step == 5:
                 self.IFTHENProcedures_ORDER[5] = True   # 강화학습 모듈 동작!
-
                 if (self.CNS.mem['WAFWS1']['Val'] + self.CNS.mem['WAFWS2']['Val'] + self.CNS.mem['WAFWS3']['Val']) > 33:
                     step_done = True
+                    self.IFTHENProcedures_ORDER['Goal_5'] = 'StayIn50'  # 강화학습 모듈 모드 변경.
 
             # 3] 값 업데이트: 현재 수행한 절차가 성공적이면 이렇게 아니면 탈출
             if step_done:
@@ -214,7 +236,7 @@ class Agent(mp.Process):
     def CalculateReward(self):
         for nubNet in range(0, self.LocalNet.NubNET):  # 보상 네트워크별로 계산 및 저장
             if nubNet in [0]:
-                if self.CNS.mem['KCNTOMS']['Val'] < self.maltime:
+                if self.CNS.mem['KCNTOMS']['Val'] < self.maltime: # 비상 주입 전
                     if self.RLMem.int_mod_action[nubNet] == 1:  # Malfunction
                         self.RLMem.SaveReward(nubNet, -1)
                     else:
@@ -224,6 +246,27 @@ class Agent(mp.Process):
                         self.RLMem.SaveReward(nubNet, 1)
                     else:
                         self.RLMem.SaveReward(nubNet, -1)
+            if nubNet in [1]:
+                if self.CNS.mem['KCNTOMS']['Val'] < self.maltime:   # 비상 주입 전
+                    self.RLMem.SaveReward(nubNet, 0)
+                else:
+                    r_ = 0
+                    if self.IFTHENProcedures_ORDER['Goal_5'] == 'Set_up33':
+                        if (self.CNS.mem['WAFWS1']['Val']+self.CNS.mem['WAFWS2']['Val']+self.CNS.mem['WAFWS3']['Val']) > 33:
+                            r_ += 0.01
+                        else:
+                            r_ -= 0.01
+
+                    elif self.IFTHENProcedures_ORDER['Goal_5'] == 'StayIn50':
+                        for sg in ['ZINST78', 'ZINST77', 'ZINST76']:    # 증기 발생기 Naro 범위 6~50퍼 유지
+                            if 6 < self.CNS.mem[sg]['Val'] < 50:
+                                r_ += 0.01
+                            else:
+                                r_ -= 0.01
+                    else:
+                        print('ERROR!!-SG')
+
+                    self.RLMem.SaveReward(nubNet, r_)
 
             # 종료 조건 계산
             # TODO 종료 조건 입력하기
@@ -460,6 +503,16 @@ class Agent(mp.Process):
                             # act 계산 이때 act는 int 값.
                             act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
                             # TOOL.ALLP(act, 'act')
+
+                            #-------------------------------------------------------
+                            # 특정 모델이 어떤 조건에서는 특정 값만 만들도록 하는 부분
+                            if nubNet == 1: # AUX Controller
+                                if self.IFTHENProcedures_ORDER[5]: # 해당 액션이 수행이 가능한 부분
+                                    pass
+                                else:
+                                    act = 0
+                            #
+                            # -------------------------------------------------------
 
                             # act의 확률 값을 반환
                             NetOut = NetOut.tolist()[act]

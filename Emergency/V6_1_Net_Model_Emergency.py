@@ -13,6 +13,7 @@ class NETBOX:
         self.NET = {
             # 0번 비상이 발생하였는지? 아니면 발생하지 않았는지 판단
             0: PPOModel(name="Dig", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1, 0], ActCase=2),
+            1: PPOModel(name="Aux", NubPhyPara=3, NubComPara=2, NubTimeSeq=15, ClipNetOut=[-1, 0], ActCase=9),
         }
         self.NubNET = len(self.NET)
 
