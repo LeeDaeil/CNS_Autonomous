@@ -1,5 +1,8 @@
 import random as ran
+import os
+import shutil
 import matplotlib.pyplot as plt
+import numpy as np
 from torch import multiprocessing as mp
 
 from CNS_UDP_FAST import CNS
@@ -8,7 +11,10 @@ from Emergency.V6_1_Net_Model_Emergency import *
 
 import time
 import copy
-
+# =======================================================
+MAKE_FILE_PATH = './V6_1_EOP'
+# os.mkdir(MAKE_FILE_PATH)
+# =======================================================
 
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
@@ -33,6 +39,8 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
 class Agent(mp.Process):
     def __init__(self, GlobalNet, MEM, CNS_ip, CNS_port, Remote_ip, Remote_port):
         mp.Process.__init__(self)
+        global MAKE_FILE_PATH
+
         # Network info
         self.GlobalNet = GlobalNet
         self.LocalNet = NETBOX()
@@ -44,12 +52,10 @@ class Agent(mp.Process):
 
         # Work info
         self.W = Work_info()
-        # RLMem info
-        self.RLMem = RLMem(net_nub=self.LocalNet.NubNET)
 
         # CNS
         self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
-        self.CNS.LoggerPath = 'V6_1_EOP'
+        self.CNS.LoggerPath = MAKE_FILE_PATH
         # SharedMem
         self.mem = MEM
         self.LocalMem = copy.deepcopy(self.mem)
@@ -74,7 +80,18 @@ class Agent(mp.Process):
 
             'BPV122C': {'Div': 2, 'Round': 2, 'Type': 'C'},
             'BPV145C': {'Div': 2, 'Round': 2, 'Type': 'C'},
+
+            'Reward0': {'Div': 1, 'Round': 2, 'Type': 'C'},
+            'Reward1': {'Div': 1, 'Round': 2, 'Type': 'C'},
         }
+        self.PARA_info_For_save = [
+            'KCNTOMS',
+            # P
+            'ZINST78',  'ZINST77',  'ZINST76',      'vZINST78',  'vZINST77',  'vZINST76',
+            'ZINST75',  'ZINST74',  'ZINST73',      'vZINST75',  'vZINST74',  'vZINST73',
+            # F
+            'WAFWS1',   'WAFWS2',   'WAFWS3',       'vWAFWS1',   'vWAFWS2',   'vWAFWS3',
+        ]
         ## 사용되는 파라메터가 db_add.txt에 있는지 확인하는 모듈
         if self.mem['Iter'] == 0:
             # 사용되는 파라메터가 db_add.txt에 있는지 체크
@@ -87,6 +104,9 @@ class Agent(mp.Process):
                     if not _[1:] in self.PARA_info.keys():
                         print(f'{_} 값이 없음 self.PARA_info에 추가할 것')
         ## -----------------------------------------------
+
+        # RLMem info
+        self.RLMem = RLMem(net_nub=self.LocalNet.NubNET, para_info=self.PARA_info_For_save)
 
         # GP Setting
         # self.fig_dict = {i_: plt.figure(figsize=(13, 13)) for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]}
@@ -245,6 +265,10 @@ class Agent(mp.Process):
     def UpdateActInfoToCNSMEM(self):
         self.CNS.mem['vBPV122C']['Val'] = 2
 
+        # 보상 결과를 저장
+        for nubNet in range(self.LocalNet.NubNET):
+            self.CNS.mem[f'vReward{nubNet}']['Val'] = self.RLMem.GetReward(nubNet)
+
     def CNSStep(self):
         self.CNS.run_freeze_CNS()   # CNS에 취득한 값을 메모리에 업데이트
         self.PreProcessing()        # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
@@ -324,8 +348,13 @@ class Agent(mp.Process):
         print(DIS)
 
     def SaveOldNew(self):
-        phys = self.S_Py[:, :, -1:].data.reshape(6).tolist()  # (3,)                            # 변수 수정 시 고쳐야함
-        comp = self.S_Comp[:, :, -1:].data.reshape(7).tolist()  # (3,)                          # 변수 수정 시 고쳐야함
+
+        nub_phy_val = np.shape(self.S_Py)[1]
+        nub_comp_val = np.shape(self.S_Comp)[1]
+
+        phys = self.S_Py[:, :, -1:].data.reshape(nub_phy_val).tolist()  # (3,)
+        comp = self.S_Comp[:, :, -1:].data.reshape(nub_comp_val).tolist()  # (3,)
+
         cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
             phys[0], phys[1], phys[2], phys[3], phys[4], phys[5],
             comp[0], comp[1], comp[2], comp[3], comp[4], comp[5], comp[6],
@@ -336,35 +365,53 @@ class Agent(mp.Process):
 
     def DrawFig(self):
         fig = plt.figure(figsize=(10, 9), constrained_layout=True)
-        gs = fig.add_gridspec(4, 2)
+        gs = fig.add_gridspec(5, 2)
         axs = [fig.add_subplot(gs[0:2, 0:1]),   # 0
-               fig.add_subplot(gs[0:2, 1:2]),   # 1
-               fig.add_subplot(gs[2:4, 0:1]),   # 2
-               fig.add_subplot(gs[2:4, 1:2]),   # 3
+               fig.add_subplot(gs[2:5, 0:1]),   # 1
+
+               fig.add_subplot(gs[0:1, 1:2]),   # 2
+               fig.add_subplot(gs[1:2, 1:2]),   # 3
+               fig.add_subplot(gs[2:3, 1:2]),   # 4
+               fig.add_subplot(gs[3:4, 1:2]),   # 5
+               fig.add_subplot(gs[4:5, 1:2]),   # 6
                ]
 
+        print('=' * 20)
+        print(self.RLMem.GetGPAllAProb(0))
+
         # 원하는 값에 정보를 입력
-        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS1']['List'], label='Aux1')
-        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS2']['List'], label='Aux2')
-        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS3']['List'], label='Aux3')
+        axs[0].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('WAFWS1'), label='Aux1')
+        axs[0].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('WAFWS2'), label='Aux2')
+        axs[0].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('WAFWS3'), label='Aux3')
         axs[0].grid()
 
-        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST78']['List'], label='Sg1')
-        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST77']['List'], label='Sg2')
-        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST76']['List'], label='Sg3')
+        axs[1].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('ZINST78'), label='Sg1')
+        axs[1].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('ZINST77'), label='Sg2')
+        axs[1].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('ZINST76'), label='Sg3')
         axs[1].grid()
-
-        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS1']['List'], label='Aux1')
-        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS2']['List'], label='Aux2')
-        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS3']['List'], label='Aux3')
+        #
+        axs[2].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAct(0), label='Agent0')
+        axs[2].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAct(1), label='Agent1')
         axs[2].grid()
 
-        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST78']['List'], label='Sg1')
-        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST77']['List'], label='Sg2')
-        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST76']['List'], label='Sg3')
+        axs[3].plot(self.RLMem.GetGPX(), self.RLMem.GetGPR(0), label='Agent0')
+        axs[3].plot(self.RLMem.GetGPX(), self.RLMem.GetGPR(1), label='Agent1')
         axs[3].grid()
 
-        fig.savefig(fname=f'{self.CNS.LoggerPath}/{self.CurrentIter}.png', dpi=300, facecolor=None)
+        axs[4].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAProb(0), label='Agent0')
+        axs[4].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAProb(1), label='Agent1')
+        axs[4].grid()
+
+        axs[5].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAllAProb(0), label='Agent0')
+        axs[5].grid()
+
+        axs[6].plot(self.RLMem.GetGPX(), self.RLMem.GetGPAllAProb(1), label='Agent1')
+        axs[6].grid()
+
+        fig.savefig(fname=f'{self.CNS.LoggerPath}/img/{self.CurrentIter}.png', dpi=300, facecolor=None)
+
+        # 그래프 정보 및 저장용 정보 덤프
+        self.RLMem.DumpAllData(log_path=f'{self.CNS.LoggerPath}/log/{self.CurrentIter}.txt')
         pass
 
     def run(self):
@@ -400,7 +447,7 @@ class Agent(mp.Process):
             # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 100 # 600 초? 10분..?
+                fulltime = 3 # 600 초? 10분..?
                 self.t_max = 5       # total iteration = fulltime * self.t_max # TODO 나중에 지울 것 Prognostic mode에 만 적용중...
                 self.ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
@@ -553,11 +600,12 @@ class Agent(mp.Process):
                             # -------------------------------------------------------
 
                             # act의 확률 값을 반환
+                            AllNetOut = NetOut.tolist()
                             NetOut = NetOut.tolist()[act]
                             # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
 
                             # act와 확률 값 저장
-                            self.RLMem.SaveNetOut(nubNet, NetOut, act)
+                            self.RLMem.SaveNetOut(nubNet, AllNetOut, NetOut, act)
                             # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
                             # act의 값 수정. ==========================================
@@ -570,6 +618,9 @@ class Agent(mp.Process):
 
                         # 2] 훈련용 상태 저장
                         self.RLMem.SaveState(self.S_Py, self.S_Comp)
+
+                        # 2.1] 그래프용 상태 저장
+                        self.RLMem.SaveGPState(self.CNS.mem)
 
                         # 3] 보상 계산을 위해 이전 값을 저장
                         self.old_phys, self.old_comp, self.old_cns = self.SaveOldNew()
@@ -684,6 +735,23 @@ class Agent(mp.Process):
 
 
 if __name__ == '__main__':
+
+    os.mkdir(MAKE_FILE_PATH)
+
+    fold_list = ['{}/log'.format(MAKE_FILE_PATH),
+                 '{}/img'.format(MAKE_FILE_PATH),
+                 ]
+    # '{}/log/each_log'.format(MAKE_FILE_PATH),
+    # '{}/log'.format(MAKE_FILE_PATH),
+    # '{}/img'.format(MAKE_FILE_PATH)]
+    for __ in fold_list:
+        if os.path.isdir(__):
+            shutil.rmtree(__)
+            time.sleep(1)
+            os.mkdir(__)
+        else:
+            os.mkdir(__)
+
     W_info = Work_info()
     GlobalModel = NETBOX()
     [GlobalModel.NET[_].share_memory() for _ in range(0, GlobalModel.NubNET)]   # Net 들을 Shared memory 에 선언
