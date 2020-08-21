@@ -57,11 +57,21 @@ class Agent(mp.Process):
         # 사용되는 파라메터
         self.PARA_info = {
             # 변수명 : {'Div': 몇으로 나눌 것인지, 'Round': 반올림, 'Type': 어디에 저장할 것인지.}
-            'ZINST58': {'Div': 1000, 'Round': 5, 'Type': 'P'},
-            'ZINST63': {'Div': 100, 'Round': 4, 'Type': 'P'},
-            'ZVCT': {'Div': 100, 'Round': 4, 'Type': 'P'},
-            'BFV122': {'Div': 1, 'Round': 2, 'Type': 'F'},
-            'BPV145': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'ZINST78': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST77': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST76': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST75': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST74': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+            'ZINST73': {'Div': 1000, 'Round': 5, 'Type': 'P'},
+
+            'KLAMPO134': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'KLAMPO135': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'KLAMPO136': {'Div': 1, 'Round': 2, 'Type': 'F'},
+            'WAFWS1': {'Div': 100, 'Round': 4, 'Type': 'F'},
+            'WAFWS2': {'Div': 100, 'Round': 4, 'Type': 'F'},
+            'WAFWS3': {'Div': 100, 'Round': 4, 'Type': 'F'},
+            'KLAMPO9': {'Div': 1, 'Round': 2, 'Type': 'F'},
+
             'BPV122C': {'Div': 2, 'Round': 2, 'Type': 'C'},
             'BPV145C': {'Div': 2, 'Round': 2, 'Type': 'C'},
         }
@@ -93,7 +103,7 @@ class Agent(mp.Process):
     def send_Control(self, Order):
         return self.send_action_append(self.OrderBook[Order]['pa'], self.OrderBook[Order]['va'])
 
-    def send_action(self, act=0, AuxVal=[0, 0, 0]):
+    def send_action(self, act=0, AuxVal=0):
         # Order Book
         self.OrderBook = {
             'Aux1ValveStay': {'pa': ["KSWO142", "KSWO143"], 'va': [0, 0]},
@@ -105,6 +115,9 @@ class Agent(mp.Process):
             'Aux3ValveStay': {'pa': ["KSWO154", "KSWO155"], 'va': [0, 0]},
             'Aux3ValveDown': {'pa': ["KSWO154", "KSWO155"], 'va': [1, 0]},
             'Aux3ValveUp':   {'pa': ["KSWO154", "KSWO155"], 'va': [0, 1]},
+            'Aux1PumpOn':   {'pa': ["KSWO141"], 'va': [1]},
+            'Aux2PumpOn':   {'pa': ["KSWO150"], 'va': [1]},
+            'Aux3PumpOn':   {'pa': ["KSWO153"], 'va': [1]},
         }
 
         # 전송될 변수와 값 저장하는 리스트
@@ -116,10 +129,17 @@ class Agent(mp.Process):
 
         # 1] Aux valve control logic
         if True:
-            for _ in range(0, 3):
-                if AuxVal[_] == 0: self.send_Control(f'Aux{_ + 1}ValveStay')
-                if AuxVal[_] == 1: self.send_Control(f'Aux{_ + 1}ValveDown')
-                if AuxVal[_] == 2: self.send_Control(f'Aux{_ + 1}ValveUp')
+            AuxCaseBox, AuxCaseBoxCount = {}, 0
+            for Aux1 in ['Aux1ValveStay', 'Aux1ValveDown', 'Aux1ValveUp']:
+                for Aux2 in ['Aux2ValveStay', 'Aux2ValveDown', 'Aux2ValveUp']:
+                    for Aux3 in ['Aux3ValveStay', 'Aux3ValveDown', 'Aux3ValveUp']:
+                        AuxCaseBox[AuxCaseBoxCount] = [Aux1, Aux2, Aux3]
+                        AuxCaseBoxCount += 1
+            GetAux1, GetAux2, GetAux3 = AuxCaseBox[AuxVal]
+            print(GetAux1, GetAux2, GetAux3,  AuxVal)
+            self.send_Control(GetAux1)
+            self.send_Control(GetAux2)
+            self.send_Control(GetAux3)
 
         ## --- if then 절차서 로직 호출
         self.IFTHENProcedures()
@@ -145,7 +165,7 @@ class Agent(mp.Process):
 
     def IFTHENProcedures(self):
         para, val = [], []
-
+        print(f'현재 절차 {self.IFTHENProcedures_STEP}')
         # 현재 절차서의 위치 확인
         for NubPro in range(len(self.IFTHENProcedures_STEP)):
             if self.IFTHENProcedures_STEP[NubPro]:
@@ -154,7 +174,7 @@ class Agent(mp.Process):
         while True:
             # 1] 현재 위치가 마지막 부분인지 확인, 마지막이면 종료
             if self.IFTHENProcedures_STEP[len(self.IFTHENProcedures_STEP) - 1]:
-                # print(f'모든 절차 수행 완료 {self.IFTHENProcedures_STEP}')
+                print(f'모든 절차 수행 완료 {self.IFTHENProcedures_STEP}')
                 break
             # 2] 현재 위치의 로직 수행
             step_done = False
@@ -173,17 +193,14 @@ class Agent(mp.Process):
                     step_done = True
                 else:
                     if self.CNS.mem['KLAMPO134']['Val'] == 0:
-                        para.append('KSWO141')
-                        val.append(1)
+                        self.send_Control('Aux1PumpOn')
                     if self.CNS.mem['KLAMPO135']['Val'] == 0:
-                        para.append('KSWO150')
-                        val.append(1)
+                        self.send_Control('Aux2PumpOn')
                     if self.CNS.mem['KLAMPO136']['Val'] == 0:
-                        para.append('KSWO153')
-                        val.append(1)
+                        self.send_Control('Aux3PumpOn')
             if get_current_step == 5:
                 self.IFTHENProcedures_ORDER[5] = True   # 강화학습 모듈 동작!
-                if (self.CNS.mem['WAFWS1']['Val'] + self.CNS.mem['WAFWS2']['Val'] + self.CNS.mem['WAFWS3']['Val']) > 33:
+                if self.CNS.mem['WAFWS1']['Val'] > 10 and self.CNS.mem['WAFWS2']['Val'] > 10 and self.CNS.mem['WAFWS3']['Val'] > 10:
                     step_done = True
                     self.IFTHENProcedures_ORDER['Goal_5'] = 'StayIn50'  # 강화학습 모듈 모드 변경.
 
@@ -216,9 +233,9 @@ class Agent(mp.Process):
             S_py_list, S_Comp_list = [], []
             for k in self.PARA_info.keys():
                 if self.PARA_info[f'{k}']['Type'] == 'P':
-                    S_py_list.append(self.CNS.mem[f'{k}']['List'])
+                    S_py_list.append(self.CNS.mem[f'v{k}']['List'])
                 if self.PARA_info[f'{k}']['Type'] == 'F':
-                    S_Comp_list.append(self.CNS.mem[f'{k}']['List'])
+                    S_Comp_list.append(self.CNS.mem[f'v{k}']['List'])
 
             self.S_Py = torch.tensor(S_py_list)
             self.S_Py = self.S_Py.reshape(1, self.S_Py.shape[0], self.S_Py.shape[1])
@@ -247,25 +264,28 @@ class Agent(mp.Process):
                     else:
                         self.RLMem.SaveReward(nubNet, -1)
             if nubNet in [1]:
-                if self.CNS.mem['KCNTOMS']['Val'] < self.maltime:   # 비상 주입 전
+                if not self.IFTHENProcedures_ORDER[5]:   # 비상 주입 전
                     self.RLMem.SaveReward(nubNet, 0)
                 else:
                     r_ = 0
+                    r_1, r_2, r_3, r_4 = 0, 0, 0, 0
                     if self.IFTHENProcedures_ORDER['Goal_5'] == 'Set_up33':
-                        if (self.CNS.mem['WAFWS1']['Val']+self.CNS.mem['WAFWS2']['Val']+self.CNS.mem['WAFWS3']['Val']) > 33:
-                            r_ += 0.01
+                        if self.CNS.mem['WAFWS1']['Val'] > 10 and self.CNS.mem['WAFWS2']['Val'] > 10 and self.CNS.mem['WAFWS3']['Val'] > 10:
+                            r_1 = 0.01
                         else:
-                            r_ -= 0.01
+                            r_2 = -0.01
 
                     elif self.IFTHENProcedures_ORDER['Goal_5'] == 'StayIn50':
                         for sg in ['ZINST78', 'ZINST77', 'ZINST76']:    # 증기 발생기 Naro 범위 6~50퍼 유지
                             if 6 < self.CNS.mem[sg]['Val'] < 50:
-                                r_ += 0.01
+                                # if self.RLMem.GetAct(1) != 0: # TODO 굳이 움직일 필요가 없는데 제어하는 것이 좋은 방향일지 생각해보기
+                                r_3 = 0.01
                             else:
-                                r_ -= 0.01
+                                r_4 = -0.01
                     else:
                         print('ERROR!!-SG')
-
+                    r_ = r_1 + r_2 + r_3 + r_4
+                    print(r_1, r_2, r_3, r_4)
                     self.RLMem.SaveReward(nubNet, r_)
 
             # 종료 조건 계산
@@ -287,13 +307,13 @@ class Agent(mp.Process):
         DIS = f"[{self.CurrentIter:3}]" + f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}|"
         DIS += "[Reward "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.float_reward[_]:6}"
+            DIS += f"{self.RLMem.float_reward[_]:6} "
         DIS += "][Prob "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.float_porb_action[_]:6}"
+            DIS += f"{self.RLMem.float_porb_action[_]:2.4f} "
         DIS += "][Act "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.int_action[_]:6}"
+            DIS += f"{self.RLMem.int_action[_]:6} "
         DIS += "]"
         # for _ in r.keys():
         #     DIS += f"{r[_]:6} |"
@@ -304,27 +324,45 @@ class Agent(mp.Process):
         print(DIS)
 
     def SaveOldNew(self):
-        phys = self.S_Py[:, :, -1:].data.reshape(3).tolist()  # (3,)
-        comp = self.S_Comp[:, :, -1:].data.reshape(2).tolist()  # (3,)
+        phys = self.S_Py[:, :, -1:].data.reshape(6).tolist()  # (3,)                            # 변수 수정 시 고쳐야함
+        comp = self.S_Comp[:, :, -1:].data.reshape(7).tolist()  # (3,)                          # 변수 수정 시 고쳐야함
         cns = [  # "ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145"
-            round(phys[0], 5), round(phys[1], 4), round(phys[2], 4),
-            round(comp[0], 2), round(comp[1], 2)
+            phys[0], phys[1], phys[2], phys[3], phys[4], phys[5],
+            comp[0], comp[1], comp[2], comp[3], comp[4], comp[5], comp[6],
+            # round(phys[0], 5), round(phys[1], 4), round(phys[2], 4),
+            # round(comp[0], 2), round(comp[1], 2)
         ]
         return phys, comp, cns
 
     def DrawFig(self):
         fig = plt.figure(figsize=(10, 9), constrained_layout=True)
-        gs = fig.add_gridspec(3, 2)
-        axs = [fig.add_subplot(gs[0:3, 0:1]),   # 0
-               fig.add_subplot(gs[0:3, 1:2]),   # 1
+        gs = fig.add_gridspec(4, 2)
+        axs = [fig.add_subplot(gs[0:2, 0:1]),   # 0
+               fig.add_subplot(gs[0:2, 1:2]),   # 1
+               fig.add_subplot(gs[2:4, 0:1]),   # 2
+               fig.add_subplot(gs[2:4, 1:2]),   # 3
                ]
 
         # 원하는 값에 정보를 입력
-        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['QPROREL']['List'], label='Power')
+        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS1']['List'], label='Aux1')
+        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS2']['List'], label='Aux2')
+        axs[0].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS3']['List'], label='Aux3')
         axs[0].grid()
 
-        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['UAVLEGM']['List'], label='Temp')
+        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST78']['List'], label='Sg1')
+        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST77']['List'], label='Sg2')
+        axs[1].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST76']['List'], label='Sg3')
         axs[1].grid()
+
+        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS1']['List'], label='Aux1')
+        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS2']['List'], label='Aux2')
+        axs[2].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['WAFWS3']['List'], label='Aux3')
+        axs[2].grid()
+
+        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST78']['List'], label='Sg1')
+        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST77']['List'], label='Sg2')
+        axs[3].plot(self.CNS.mem['KCNTOMS']['List'], self.CNS.mem['ZINST76']['List'], label='Sg3')
+        axs[3].grid()
 
         fig.savefig(fname=f'{self.CNS.LoggerPath}/{self.CurrentIter}.png', dpi=300, facecolor=None)
         pass
@@ -335,7 +373,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # Mal function initial
-            self.size, self.maltime = ran.randint(10020, 10030), ran.randint(2, 10) * 5
+            self.size, self.maltime = 10010, 20 #ran.randint(10020, 10030), ran.randint(2, 10) * 5
             self.malnub = 13
             # CNS initial
             self.CNS.reset(initial_nub=1, mal=True, mal_case=self.malnub, mal_opt=self.size, mal_time=self.maltime,
@@ -522,8 +560,9 @@ class Agent(mp.Process):
                             self.RLMem.SaveNetOut(nubNet, NetOut, act)
                             # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
+                            # act의 값 수정. ==========================================
                             modify_act = 0
-                            if nubNet in [0]:
+                            if nubNet in [0, 1]:
                                 modify_act = act
 
                             # 수정된 act 저장 <- 주로 실제 CNS의 제어 변수에 이용하기 위해서 사용
@@ -536,7 +575,7 @@ class Agent(mp.Process):
                         self.old_phys, self.old_comp, self.old_cns = self.SaveOldNew()
 
                         # 4] 네트워크 출력 값에 따라서 제어 신호 전송
-                        self.send_action()
+                        self.send_action(AuxVal=self.RLMem.GetAct(1))
                         # self.send_action(act=0,
                         #                  BFV122=self.RLMem.GetAct(6),
                         #                  PV145=self.RLMem.GetAct(7))
