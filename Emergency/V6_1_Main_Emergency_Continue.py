@@ -123,7 +123,7 @@ class Agent(mp.Process):
     def send_Control(self, Order):
         return self.send_action_append(self.OrderBook[Order]['pa'], self.OrderBook[Order]['va'])
 
-    def send_action(self, act=0, AuxVal=0):
+    def send_action(self, act=0, AuxVal=[0, 0, 0]):
         # Order Book
         self.OrderBook = {
             'Aux1ValveStay': {'pa': ["KSWO142", "KSWO143"], 'va': [0, 0]},
@@ -148,8 +148,8 @@ class Agent(mp.Process):
         #     self.send_action_append(["KSWO100", "KSWO89"], [1, 1])   # BFV122 Man,  PV145 Man
 
         # 1] Aux valve control logic
-        if True:
-            self.send_action_append(["WAFWS1", "WAFWS2", "WAFWS3"], [AuxVal, AuxVal, AuxVal])
+        if self.IFTHENProcedures_ORDER[5]:
+            self.send_action_append(["WAFWS1", "WAFWS2", "WAFWS3"], AuxVal)
             # AuxCaseBox, AuxCaseBoxCount = {}, 0
             # for Aux1 in ['Aux1ValveStay', 'Aux1ValveDown', 'Aux1ValveUp']:
             #     for Aux2 in ['Aux2ValveStay', 'Aux2ValveDown', 'Aux2ValveUp']:
@@ -267,8 +267,8 @@ class Agent(mp.Process):
         self.CNS.mem['vBPV122C']['Val'] = 2
 
         # 보상 결과를 저장
-        for nubNet in range(self.LocalNet.NubNET):
-            self.CNS.mem[f'vReward{nubNet}']['Val'] = self.RLMem.GetReward(nubNet)
+        # for nubNet in range(self.LocalNet.NubNET):
+        #     self.CNS.mem[f'vReward{nubNet}']['Val'] = self.RLMem.GetReward(nubNet)
 
     def CNSStep(self):
         self.CNS.run_freeze_CNS()   # CNS에 취득한 값을 메모리에 업데이트
@@ -288,11 +288,12 @@ class Agent(mp.Process):
                         self.RLMem.SaveReward(nubNet, 1)
                     else:
                         self.RLMem.SaveReward(nubNet, -1)
-            if nubNet in [1]:
+            if nubNet in [1]:   # Actor net
                 if not self.IFTHENProcedures_ORDER[5]:   # 비상 주입 전
-                    self.RLMem.SaveReward(nubNet, 0)
+                    self.RLMem.SaveReward(nubNet, 0.01)
                 else:
                     r_ = 0
+                    r_0 = 0.01
                     r_1, r_2, r_3, r_4 = 0, 0, 0, 0
                     if self.IFTHENProcedures_ORDER['Goal_5'] == 'Set_up33':
                         if self.CNS.mem['WAFWS1']['Val'] > 10 and self.CNS.mem['WAFWS2']['Val'] > 10 and self.CNS.mem['WAFWS3']['Val'] > 10:
@@ -309,9 +310,13 @@ class Agent(mp.Process):
                                 r_4 = -0.01
                     else:
                         print('ERROR!!-SG')
-                    r_ = r_1 + r_2 + r_3 + r_4
-                    print(r_1, r_2, r_3, r_4)
+                    r_ = r_0 + r_1 + r_2 + r_3 + r_4
+                    print("보상!!--", r_0, r_1, r_2, r_3, r_4)
+
                     self.RLMem.SaveReward(nubNet, r_)
+                    self.RLMem.SaveReward(nubNet + 1, r_)   # 1, 2 보상이 동일함.
+            if nubNet in [2]:   # Critic net
+                pass
 
             # 종료 조건 계산
             # TODO 종료 조건 입력하기
@@ -332,13 +337,24 @@ class Agent(mp.Process):
         DIS = f"[{self.CurrentIter:3}]" + f"TIME: {self.CNS.mem['KCNTOMS']['Val']:5}|"
         DIS += "[Reward "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.float_reward[_]:6} "
+            if _ in [0, 1]:
+                DIS += f"{self.RLMem.float_reward[_]:6} "
         DIS += "][Prob "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.float_porb_action[_]:2.4f} "
+            if _ in [1]:
+                # continuouse
+                for i in range(0, len(self.RLMem.float_porb_action)):
+                    DIS += f"{self.RLMem.float_porb_action[_][i]:2.4f} "
+            elif _ in [0]:
+                DIS += f"{self.RLMem.float_porb_action[_]:2.4f} "
         DIS += "][Act "
         for _ in range(self.RLMem.net_nub):
-            DIS += f"{self.RLMem.int_action[_]:6} "
+            if _ in [1]:
+                # continuouse
+                for i in range(0, len(self.RLMem.int_action)):
+                    DIS += f"{self.RLMem.int_action[_][i]:6} "
+            elif _ in [0]:
+                DIS += f"{self.RLMem.int_action[_]:6} "
         DIS += "]"
         # for _ in r.keys():
         #     DIS += f"{r[_]:6} |"
@@ -377,8 +393,8 @@ class Agent(mp.Process):
                fig.add_subplot(gs[4:5, 1:2]),   # 6
                ]
 
-        print('=' * 20)
-        print(self.RLMem.GetGPAllAProb(0))
+        # print('=' * 20)
+        # print(self.RLMem.GetGPAllAProb(0))
 
         # 원하는 값에 정보를 입력
         axs[0].plot(self.RLMem.GetGPX(), self.RLMem.GetGPY('WAFWS1'), label='Aux1')
@@ -421,7 +437,7 @@ class Agent(mp.Process):
             self.CurrentIter = self.mem['Iter']
             self.mem['Iter'] += 1
             # Mal function initial
-            self.size, self.maltime = 10010, 20 #ran.randint(10020, 10030), ran.randint(2, 10) * 5
+            self.size, self.maltime = 10050, 20 #ran.randint(10020, 10030), ran.randint(2, 10) * 5
             self.malnub = 13
             # CNS initial
             self.CNS.reset(initial_nub=1, mal=True, mal_case=self.malnub, mal_opt=self.size, mal_time=self.maltime,
@@ -448,7 +464,7 @@ class Agent(mp.Process):
             # [self.ax_dict[i_].clear() for i_ in ["ZINST58", "ZINST63", "ZVCT", "BFV122", "BPV145", "BFV122_CONT", "BPV145_CONT"]]
 
             while not done:
-                fulltime = 600 # 600 초? 10분..?
+                fulltime = 1 # 600 초? 10분..?
                 self.t_max = 5       # total iteration = fulltime * self.t_max # TODO 나중에 지울 것 Prognostic mode에 만 적용중...
                 self.ep_iter = 0
                 tun = [1000, 100, 100, 1, 1]
@@ -577,42 +593,74 @@ class Agent(mp.Process):
                     for __ in range(fulltime):
 
                         # 1] 현 상태에 대한 정보를 토대로 네트워크 출력 값 계산
-                        for nubNet in range(0, self.LocalNet.NubNET):
+                        for nubNet in [0, 1]:
                             # TOOL.ALLP(self.S_Py, 'S_Py')
                             # TOOL.ALLP(self.S_Comp, 'S_Comp')
 
                             # 입력 변수들에서 Actor 네트워크의 출력을 받음.
-                            NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
-                            NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
-                            # TOOL.ALLP(NetOut, 'Netout before Categorical')
+                            if self.LocalNet.NET[nubNet].ModelName == 'Dig':
+                                NetOut = self.LocalNet.NET[nubNet].GetPredictActorOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                                NetOut = NetOut.view(-1)    # (1, 2) -> (2, )
+                                # TOOL.ALLP(NetOut, 'Netout before Categorical')
 
-                            # act 계산 이때 act는 int 값.
-                            act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
-                            # TOOL.ALLP(act, 'act')
+                                # act 계산 이때 act는 int 값.
+                                act = torch.distributions.Categorical(NetOut).sample().item()  # 2개 중 샘플링해서 값 int 반환
+                                # TOOL.ALLP(act, 'act_dist')
+
+                                #
+                                NetOut = NetOut.tolist()
+
+                            else:   # PPOModel2
+                                NetOut = self.LocalNet.NET[nubNet].GetPredictOut(x_py=self.S_Py, x_comp=self.S_Comp)
+                                mu, sigma = NetOut
+
+                                # act 계산 이때 act는 float 값.
+                                dist = torch.distributions.Normal(mu, sigma)
+                                act = dist.sample()
+                                # TOOL.ALLP(act, 'act_contin')
+
+                                NetOut = dist.log_prob(act).tolist()[0]         # [1, 3] -> [3]
+                                # TOOL.ALLP(NetOut, 'act-log-prob')
+
+                                act = act.clamp(min=0, max=0.25).tolist()[0]    # [1, 3] -> [3]
+                                act = [round(_, 3) for _ in act]
+                                # TOOL.ALLP(act, 'act_clamp')
 
                             #-------------------------------------------------------
                             # 특정 모델이 어떤 조건에서는 특정 값만 만들도록 하는 부분
-                            if nubNet == 1: # AUX Controller
-                                if self.IFTHENProcedures_ORDER[5]: # 해당 액션이 수행이 가능한 부분
-                                    pass
-                                else:
-                                    act = 0
+                            # if nubNet == 1: # AUX Controller
+                            #     if self.IFTHENProcedures_ORDER[5]: # 해당 액션이 수행이 가능한 부분
+                            #         pass
+                            #     else:
+                            #         act = [0, 0, 0]
                             #
                             # -------------------------------------------------------
 
-                            # act의 확률 값을 반환
-                            AllNetOut = NetOut.tolist()
-                            NetOut = NetOut.tolist()[act]
-                            # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
-
-                            # act와 확률 값 저장
-                            self.RLMem.SaveNetOut(nubNet, AllNetOut, NetOut, act)
-                            # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
+                            if self.LocalNet.NET[nubNet].ModelName == 'Dig':
+                                # act의 확률 값을 반환
+                                AllNetOut = NetOut
+                                NetOut = NetOut[act]
+                                # TOOL.ALLP(NetOut, f'NetOut{nubNet}')
+                                # act와 확률 값 저장
+                                self.RLMem.SaveNetOut(nubNet, AllNetOut, NetOut, act, NetType=True)
+                                # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
+                            else:
+                                # act의 확률 값을 반환
+                                AllNetOut = NetOut
+                                # NetOut = NetOut[act]
+                                # act와 확률 값 저장
+                                self.RLMem.SaveNetOut(nubNet, AllNetOut, NetOut, act, NetType=False)
+                                # TOOL.ALLP(NetOut_dict, f'NetOut{nubNet}')
 
                             # act의 값 수정. ==========================================
                             modify_act = 0
-                            if nubNet in [0, 1]:
+                            if nubNet in [0]:
                                 modify_act = act
+                            elif nubNet in [1]: # AUX Controller
+                                if self.IFTHENProcedures_ORDER[5]: # 해당 액션이 수행이 가능한 부분
+                                    modify_act = [_ * 100 for _ in act]
+                                else:
+                                    modify_act = [0, 0, 0]
 
                             # 수정된 act 저장 <- 주로 실제 CNS의 제어 변수에 이용하기 위해서 사용
                             self.RLMem.SaveModNetOut(nubNet, modify_act)
@@ -670,15 +718,21 @@ class Agent(mp.Process):
     
                             # 3] 각 네트워크 별 Advantage 계산
                             # for nubNet in range(0, 6):
-                            for nubNet in range(0, self.LocalNet.NubNET):
+                            for nubNet in [0, 1]:
                                 # 3.1] GAE 방법 사용
                                 # r_dict[nubNet]: (5,) -> (5,1)
                                 # Netout : (5,1)
                                 # done_dict[nubNet]: (5,) -> (5,1)
-                                td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(UpCountLimit, 1) + \
-                                            gamma * self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_fin, scomp_fin) * \
-                                            torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(UpCountLimit, 1)
-                                delta = td_target - self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch)
+                                if self.LocalNet.NET[nubNet].ModelName == 'Dig':
+                                    td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(UpCount, 1) + \
+                                                gamma * self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_fin, scomp_fin) * \
+                                                torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(UpCount, 1)
+                                    delta = td_target - self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch)
+                                else:
+                                    td_target = torch.tensor(self.RLMem.list_reward_temp[nubNet], dtype=torch.float).view(UpCount, 1) + \
+                                                gamma * self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_fin, scomp_fin) * \
+                                                torch.tensor(self.RLMem.list_done_temp[nubNet], dtype=torch.float).view(UpCount, 1)
+                                    delta = td_target - self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_batch, scomp_batch)
                                 delta = delta.detach().numpy()
 
                                 # 3.2] Advantage 계산
@@ -689,36 +743,72 @@ class Agent(mp.Process):
                                     adv_list.append([adv_])
                                 adv_list.reverse()
                                 adv = torch.tensor(adv_list, dtype=torch.float)
-    
-                                PreVal = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
-                                PreVal = PreVal.gather(1, torch.tensor(self.RLMem.list_action_temp[nubNet])) # PreVal_a
-                                # TOOL.ALLP(PreVal, f"Preval {nubNet}")
-    
+
+                                if self.LocalNet.NET[nubNet].ModelName == 'Dig':
+                                    PreVal = self.LocalNet.NET[nubNet].GetPredictActorOut(spy_batch, scomp_batch)
+                                    PreVal = PreVal.gather(1, torch.tensor(self.RLMem.list_action_temp[nubNet]))  # PreVal_a
+                                    # TOOL.ALLP(PreVal, f"Preval {nubNet}")
+                                    action_log_probs = torch.log(PreVal)
+                                else:
+                                    (mu, sigma) = self.LocalNet.NET[nubNet].GetPredictOut(spy_batch, scomp_batch)
+                                    dist = Normal(mu, sigma)
+                                    action_log_probs = dist.log_prob(torch.tensor(self.RLMem.list_action_temp[nubNet]))
+
                                 # 3.3] Ratio 계산 a/b == exp(log(a) - log(b))
                                 # TOOL.ALLP(a_prob[nubNet], f"a_prob {nubNet}")
-                                Preval_old_a_prob = torch.tensor(self.RLMem.list_porb_action_temp[nubNet], dtype=torch.float)
-                                ratio = torch.exp(torch.log(PreVal) - torch.log(Preval_old_a_prob))
+                                Preval_old_a_prob = torch.tensor(self.RLMem.list_porb_action_temp[nubNet],dtype=torch.float)
+                                ratio = torch.exp(action_log_probs - torch.log(Preval_old_a_prob))
                                 # TOOL.ALLP(ratio, f"ratio {nubNet}")
     
                                 # surr1, 2
                                 eps_clip = 0.1
                                 surr1 = ratio * adv
                                 surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * adv
-    
-                                min_val = torch.min(surr1, surr2)
-                                smooth_l1_loss = nn.functional.smooth_l1_loss(self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch), td_target.detach())
-    
-                                loss = - min_val + smooth_l1_loss
 
-                                # 3.4] 최종 Global Net에 가중치를 업데이트  # TODO 이부분에 비율적으로 업데이트 고려할 것.
-                                self.LocalOPT.NETOPT[nubNet].zero_grad()
-                                loss.mean().backward()
-                                for global_param, local_param in zip(self.GlobalNet.NET[nubNet].parameters(),
-                                                                     self.LocalNet.NET[nubNet].parameters()):
-                                    global_param._grad = local_param.grad
-                                self.LocalOPT.NETOPT[nubNet].step()
-                                self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
-    
+                                if self.LocalNet.NET[nubNet].ModelName == 'Dig':
+                                    min_val = torch.min(surr1, surr2)
+                                    smooth_l1_loss = nn.functional.smooth_l1_loss(self.LocalNet.NET[nubNet].GetPredictCrticOut(spy_batch, scomp_batch), td_target.detach())
+                                    # TOOL.ALLP(- min_val.mean(), comt="Des val")
+                                    loss = - min_val + smooth_l1_loss
+
+                                    # 3.4] 최종 Global Net에 가중치를 업데이트  # TODO 이부분에 비율적으로 업데이트 고려할 것.
+                                    self.LocalOPT.NETOPT[nubNet].zero_grad()
+                                    loss.mean().backward()
+                                    # for global_param, local_param in zip(self.GlobalNet.NET[nubNet].parameters(),
+                                    #                                      self.LocalNet.NET[nubNet].parameters()):
+                                    #     global_param._grad = local_param.grad
+                                    self.LocalOPT.NETOPT[nubNet].step()
+                                    # self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
+
+                                else:
+                                    action_loss = -torch.min(surr1, surr2).mean()
+                                    # TOOL.ALLP(action_loss, comt=f'{nubNet}Actor loss')
+                                    # 3.4] 최종 Global Net에 가증치를 업데이트
+                                    # max_grad_norm = 0.5
+                                    # 3.4.1] act 업데이트
+                                    self.LocalOPT.NETOPT[nubNet].zero_grad()
+                                    action_loss.backward()
+                                    # nn.utils.clip_grad_norm_(self.LocalNet.NET[nubNet].parameters(), max_grad_norm)
+                                    # for global_param, local_param in zip(self.GlobalNet.NET[nubNet].parameters(),
+                                    #                                      self.LocalNet.NET[nubNet].parameters()):
+                                    #     global_param._grad = local_param.grad
+                                    self.LocalOPT.NETOPT[nubNet].step()
+                                    # self.LocalNet.NET[nubNet].load_state_dict(self.GlobalNet.NET[nubNet].state_dict())
+
+                                    # 3.4.2] cri 업데이트
+                                    smooth_l1_loss = nn.functional.smooth_l1_loss(self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_batch, scomp_batch), td_target.detach())
+                                    # smooth_l1_loss = nn.functional.smooth_l1_loss(td_target.detach(), self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_batch, scomp_batch))
+                                    # smooth_l1_loss = nn.functional.mse_loss(self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_batch, scomp_batch), td_target.detach())
+                                    # smooth_l1_loss = nn.functional.mse_loss(td_target.detach(), self.LocalNet.NET[nubNet + 1].GetPredictOut(spy_batch, scomp_batch))
+                                    # TOOL.ALLP(smooth_l1_loss, comt=f'{nubNet + 1}Critic loss')
+                                    self.LocalOPT.NETOPT[nubNet + 1].zero_grad()
+                                    smooth_l1_loss.backward()
+                                    # for global_param, local_param in zip(self.GlobalNet.NET[nubNet + 1].parameters(),
+                                    #                                      self.LocalNet.NET[nubNet + 1].parameters()):
+                                    #     global_param._grad = local_param.grad
+                                    self.LocalOPT.NETOPT[nubNet + 1].step()
+                                    # self.LocalNet.NET[nubNet + 1].load_state_dict(self.GlobalNet.NET[nubNet + 1].state_dict())
+
                                 # TOOL.ALLP(advantage.mean())
                                 # print(self.CurrentIter, 'AgentNub: ', nubNet,
                                 #       'adv: ', adv.mean().item(), 'loss: ', loss.mean().item(),

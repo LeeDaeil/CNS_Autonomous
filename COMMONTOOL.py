@@ -150,16 +150,24 @@ class RLMem:
         self.list_done = {_: [] for _ in range(self.net_nub)}
         self.list_done_temp = {_: [] for _ in range(self.net_nub)}
 
-    def SaveNetOut(self, NetNub, AllNetOut, NetOut, Act):
+    def SaveNetOut(self, NetNub, AllNetOut, NetOut, Act, NetType):
+        # print(NetNub, AllNetOut, NetOut, Act)
+        # print(NetNub, np.shape(AllNetOut), np.shape(NetOut), np.shape(Act))
         # 액션
         self.int_action[NetNub] = Act
         self.list_action[NetNub].append(Act)            # 저장용 변수
-        self.list_action_temp[NetNub].append([Act])     # 훈련용 변수
+        if NetType:
+            self.list_action_temp[NetNub].append([Act])     # 훈련용 변수
+        else:
+            self.list_action_temp[NetNub].append(Act)     # 훈련용 변수
 
         # 액션 확률
         self.float_porb_action[NetNub] = NetOut
         self.list_porb_action[NetNub].append(NetOut)        # 저장용 변수
-        self.list_porb_action_temp[NetNub].append([NetOut]) # 훈련용 변수
+        if NetType:
+            self.list_porb_action_temp[NetNub].append([NetOut]) # 훈련용 변수
+        else:
+            self.list_porb_action_temp[NetNub].append(NetOut)  # 훈련용 변수
 
         # 액션 전체 확률
         self.float_allporb_action[NetNub] = AllNetOut
@@ -248,17 +256,25 @@ class RLMem:
     def GetGPAProb(self, nubNet):
         return self.list_porb_action[nubNet]
 
-    def DumpAllData(self, log_path):
+    def DumpAllData(self, log_path):        # TODO 아직 3개 이상의 네트워크가 구현되어 있지 않음.
         with open(log_path, 'w') as f:
             s = ''
             # title
-            for NetNub in range(self.net_nub):
-                s += f'Agent{NetNub}Act,'
-                s += f'Agent{NetNub}ModAct,'
-                s += f'Agent{NetNub}ActProb,'
+            for NetNub in range(self.net_nub - 1):
+                if np.shape(self.list_action[NetNub][0]) != ():
+                    for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                        s += f'Agent{NetNub}Act{_},'
+                    for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                        s += f'Agent{NetNub}ModAct{_},'
+                    for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                        s += f'Agent{NetNub}ActProb{_},'
+                else:
+                    s += f'Agent{NetNub}Act,'
+                    s += f'Agent{NetNub}ModAct,'
+                    s += f'Agent{NetNub}ActProb,'
 
                 for actline in range(len(self.list_allporb_action[NetNub][0])):
-                    s += f'Agent{NetNub}Act{actline},'
+                    s += f'Agent{NetNub}ALLAct{actline},'
 
                 s += f'Agent{NetNub}Reward,'
                 s += f'Agent{NetNub}Done,'
@@ -273,10 +289,18 @@ class RLMem:
             s += '\n'
             # DB
             for lineNub in range(len(self.spy_list)):
-                for NetNub in range(self.net_nub):
-                    s += f'{self.list_action[NetNub][lineNub]},'
-                    s += f'{self.list_mod_action[NetNub][lineNub]},'
-                    s += f'{self.list_porb_action[NetNub][lineNub]},'
+                for NetNub in range(self.net_nub - 1):
+                    if np.shape(self.list_action[NetNub][0]) != ():
+                        for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                            s += f'{self.list_action[NetNub][lineNub][_]},'
+                        for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                            s += f'{self.list_mod_action[NetNub][lineNub][_]},'
+                        for _ in range(np.shape(self.list_action[NetNub][0])[0]):
+                            s += f'{self.list_porb_action[NetNub][lineNub][_]},'
+                    else:
+                        s += f'{self.list_action[NetNub][lineNub]},'
+                        s += f'{self.list_mod_action[NetNub][lineNub]},'
+                        s += f'{self.list_porb_action[NetNub][lineNub]},'
 
                     for actline in range(len(self.list_allporb_action[NetNub][0])):
                         s += f'{self.list_allporb_action[NetNub][lineNub][actline]},'
@@ -284,7 +308,6 @@ class RLMem:
                     s += f'{self.list_reward[NetNub][lineNub]},'
                     s += f'{self.list_done[NetNub][lineNub]},'
 
-                print(np.shape(self.spy_list))
                 for spy_item in range(len(self.spy_list[lineNub])):
                     s += f'{self.spy_list[lineNub][spy_item]},'
                 for scomp_item in range(len(self.scomp_list[lineNub])):
