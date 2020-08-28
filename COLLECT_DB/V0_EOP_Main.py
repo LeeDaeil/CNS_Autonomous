@@ -1,6 +1,6 @@
 from torch import multiprocessing as mp
 
-from CNS_UDP_FAST import CNS
+from COLLECT_DB.LOCACNS import ENVCNS
 
 import time
 import copy
@@ -13,25 +13,25 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CNS_PORT_LIST = [7100, 7200, 7300]
         self.CNS_NUMBERS = [10, 10, 10]
 
-        self.TimeLeg = 600
+        self.TimeLeg = 25 * 60
 
         # TO CNS_UDP_FASE.py
         self.UpdateIterval = 5
 
 
         # range_i_ = range(20010, 20100, 10)
-        range_i_ = range(20010, 20110, 10)
+        range_i_ = list(range(10010, 10060, 10)) + list(range(20010, 20060, 10)) + list(range(30010, 30060, 10))
         # range_i__ = range(120100, 122100, 100)
-        range_i__ = [122000]
+        range_i__ = [0]
 
         range_i = range(0, len(range_i__) * len(range_i_))
         print(len(range_i))
 
-        range_case = [13 for _ in range_i]
+        range_case = [12 for _ in range_i]
         range_opt = []
-        range_time = [5 for _ in range_i]
+        range_time = [30 for _ in range_i]
 
-        range_case2 = [52 for _ in range_i]
+        range_case2 = [0 for _ in range_i]
         range_opt2 = []
         range_time2 = [5 for _ in range_i]
 
@@ -59,37 +59,15 @@ class Agent(mp.Process):
         # Work info
         self.W = Work_info()
         # CNS
-        self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
-        self.CNS.LoggerPath = 'DB'
+
+        self.CNS = ENVCNS(Name=self.name, IP=CNS_ip, PORT=CNS_port)
+        # self.CNS = CNS(self.name, CNS_ip, CNS_port, Remote_ip, Remote_port, Max_len=self.W.TimeLeg)
+        # self.CNS.LoggerPath = 'DB'
+
         # SharedMem
         self.mem = MEM
         self.LocalMem = copy.deepcopy(self.mem)
         print(f'Make -- {self}')
-
-    # ==============================================================================================================
-    # 제어 신호 보내는 파트
-    def send_action_append(self, pa, va):
-        for _ in range(len(pa)):
-            self.para.append(pa[_])
-            self.val.append(va[_])
-
-    def send_action(self, act=0):
-        # 전송될 변수와 값 저장하는 리스트
-        self.para = []
-        self.val = []
-        # 최종 파라메터 전송
-        self.CNS._send_control_signal(self.para, self.val)
-    #
-    # ==============================================================================================================
-    # 입력 출력 값 생성
-
-    def PreProcessing(self):
-        pass
-
-    def CNSStep(self):
-        self.CNS.run_freeze_CNS()   # CNS에 취득한 값을 메모리에 업데이트
-        self.PreProcessing()        # 취득된 값에 기반하여 db_add.txt의 변수명에 해당하는 값을 재처리 및 업데이트
-        self.CNS._append_val_to_list()  # 최종 값['Val']를 ['List']에 저장
 
     def run(self):
         while True:
@@ -112,7 +90,7 @@ class Agent(mp.Process):
 
                 file_name = f'{mal_case}_{size}_{maltime}_{mal_case2}_{mal_opt2}_{mal_time2}'
                 # CNS initial
-                self.CNS.reset(initial_nub=1, mal=True, mal_case=mal_case, mal_opt=size, mal_time=maltime,
+                self.CNS.Reset(mal_case=mal_case, mal_opt=size, mal_time=maltime,
                                # mal_case2=mal_case2, mal_opt2=mal_opt2, mal_time2=mal_time2,
                                file_name=file_name)
                 time.sleep(1)
@@ -122,22 +100,12 @@ class Agent(mp.Process):
                 print(f'DONE initial {file_name}')
 
                 while True:
-                    # 초기 제어 Setting 보내기
-                    # self.send_action()
-                    # time.sleep(1)
-
-                    # Train Mode
-                    # Time Leg 만큼 데이터 수집만 수행
                     for t in range(self.W.TimeLeg + 1):
-                        self.CNSStep()
-                        # Mal_nub, Mal_opt, Mal_time):
-                        # if t == 0:
-                        #     self.CNS._send_malfunction_signal(Mal_nub=mal_case2, Mal_opt=mal_opt2, Mal_time=mal_time2)
-                        #     time.sleep(100)
-
+                        self.CNS.step(0)
                     print('DONE EP')
                     break
             except:
+                print('ERROR')
                 break
         print('END')
 
