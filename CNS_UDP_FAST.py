@@ -173,6 +173,9 @@ class CNS:
             else:
                 pass
 
+    def get_CNS_time(self):
+        return self.mem['KCNTOMS']['Val']
+
     # logger
     def init_line(self):
         with open(f"./{self.LoggerPath}/{self.file_name}.txt", 'w') as f:
