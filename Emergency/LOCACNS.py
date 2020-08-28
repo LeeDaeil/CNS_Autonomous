@@ -153,7 +153,7 @@ class ENVCNS(CNS):
             # 16.0
             for _tar, _val in zip(['WAFWS1', 'WAFWS2', 'WAFWS3'], ['KSWO143', 'KSWO152', 'KSWO155']):
                 if self.mem[_tar]['Val'] < 20:
-                    if self.get_CNS_time() >= self.FixedRad + 700: self.s_val(_val, 1)
+                    if self.get_CNS_time() >= self.FixedRad + 700: self.s_val([_val], [1])
             # 17.2
             if self.get_CNS_time() == self.FixedRad + 1500: self.s_val(['KWSO208'], [1])
 
@@ -245,7 +245,4 @@ if __name__ == '__main__':
     while True:
         # A = input(f'{env.ENVStep}A:')
         A = 0
-        try:
-            env.step(int(A))
-        except:
-            print('Error')
+        env.step(int(A))
