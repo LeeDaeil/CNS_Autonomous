@@ -102,9 +102,9 @@ class ENVCNS(CNS):
             if self.get_CNS_time() == self.FixedRad + 2300: self.s_val(['KSWO123'], [1])
 
             # 21.3
-            if self.get_CNS_time() == self.FixedRad + 2600: self.s_val(['KSWO129'], [1])
-            if self.get_CNS_time() == self.FixedRad + 2650: self.s_val(['KSWO130'], [1])
-            if self.get_CNS_time() == self.FixedRad + 2700: self.s_val(['KSWO131'], [1])
+            if self.get_CNS_time() == self.FixedRad + 2600: self.s_val(['KSWO132'], [0])
+            if self.get_CNS_time() == self.FixedRad + 2650: self.s_val(['KSWO133'], [0])
+            if self.get_CNS_time() == self.FixedRad + 2700: self.s_val(['KSWO134'], [0])
 
         elif self.accident_name == 'SGTR':
             print(self.mem['cMALC']['Val'])
@@ -120,18 +120,18 @@ class ENVCNS(CNS):
             if self.get_CNS_time() == self.FixedRad + 2300: self.s_val(['KSWO123'], [1])
 
             # 21.3
-            if self.get_CNS_time() == self.FixedRad + 2800: self.s_val(['KSWO129'], [1])
-            if self.get_CNS_time() == self.FixedRad + 2900: self.s_val(['KSWO130'], [1])
-            if self.get_CNS_time() == self.FixedRad + 3000: self.s_val(['KSWO131'], [1])
+            if self.get_CNS_time() == self.FixedRad + 2800: self.s_val(['KSWO132'], [0])
+            if self.get_CNS_time() == self.FixedRad + 2900: self.s_val(['KSWO133'], [0])
+            if self.get_CNS_time() == self.FixedRad + 3000: self.s_val(['KSWO134'], [0])
 
             # 비상03 4.2
-            if str(self.mem['cMALC']['Val'])[0] == 1:   # SG1번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 1:  # SG1번 고장
                 if self.mem['WAFWS1']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSW0142'], [1])
-            if str(self.mem['cMALC']['Val'])[0] == 2:   # SG2번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 2:  # SG2번 고장
                 if self.mem['WAFWS2']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO151'], [1])
-            if str(self.mem['cMALC']['Val'])[0] == 3:   # SG3번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 3:  # SG3번 고장
                 if self.mem['WAFWS3']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO154'], [1])
 
@@ -162,18 +162,18 @@ class ENVCNS(CNS):
             if self.get_CNS_time() == self.FixedRad + 1850: self.s_val(['KSWO123'], [1])
 
             # 21.3
-            if self.get_CNS_time() == self.FixedRad + 2300: self.s_val(['KSWO129'], [1])
-            if self.get_CNS_time() == self.FixedRad + 2450: self.s_val(['KSWO130'], [1])
-            if self.get_CNS_time() == self.FixedRad + 2500: self.s_val(['KSWO131'], [1])
+            if self.get_CNS_time() == self.FixedRad + 2300: self.s_val(['KSWO132'], [0])
+            if self.get_CNS_time() == self.FixedRad + 2450: self.s_val(['KSWO133'], [0])
+            if self.get_CNS_time() == self.FixedRad + 2500: self.s_val(['KSWO134'], [0])
 
             # 비상03 4.2
-            if str(self.mem['cMALC']['Val'])[0] == 1:   # MSLB 1번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 1:  # MSLB 1번 고장
                 if self.mem['WAFWS1']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSW0142'], [1])
-            if str(self.mem['cMALC']['Val'])[0] == 2:   # MSLB 2번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 2:  # MSLB 2번 고장
                 if self.mem['WAFWS2']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO151'], [1])
-            if str(self.mem['cMALC']['Val'])[0] == 3:   # MSLB 3번 고장
+            if str(self.mem['cMALC']['Val'])[0] == 3:  # MSLB 3번 고장
                 if self.mem['WAFWS3']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO154'], [1])
 
