@@ -406,7 +406,9 @@ class A3Cagent(threading.Thread):
             r = 0
 
             if A == 0:      # 제어가 없다면 + 0.01 보상
-                r += 0.01
+                # r += 0.01
+                r += self.Reactor_power/10
+
 
             if self.Reactor_power > power_up_bound:
                 done, r = True, -1
