@@ -12,8 +12,9 @@ class ENVCNS(CNS):
         self.Name = Name
         self.AcumulatedReward = 0
         self.ENVStep = 0
+        self.LoggerPath = 'DB'
 
-        self.accident_name = ['LOCA', 'SGTR', 'MSLB'][0]
+        self.accident_name = ['LOCA', 'SGTR', 'MSLB'][1]
 
         self.Loger_txt = ''
 
@@ -107,7 +108,6 @@ class ENVCNS(CNS):
             if self.get_CNS_time() == self.FixedRad + 2700: self.s_val(['KSWO134'], [0])
 
         elif self.accident_name == 'SGTR':
-            print(self.mem['cMALC']['Val'])
             # 16.0
             for _tar, _val in zip(['WAFWS1', 'WAFWS2', 'WAFWS3'], ['KSWO143', 'KSWO152', 'KSWO155']):
                 if self.mem[_tar]['Val'] < 20:
@@ -206,7 +206,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=1, mal=True, mal_case=12, mal_opt=10050, mal_time=30, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=1, mal=True, mal_case=13, mal_opt=10004, mal_time=30, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')

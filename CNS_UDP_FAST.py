@@ -8,29 +8,31 @@ from collections import deque
 
 class CNS:
     def __init__(self, threrad_name, CNS_IP, CNS_Port, Remote_IP, Remote_Port, Max_len=10):
-        if True:
-            # thread name
-            self.th_name = threrad_name
-            # Ip, Port
-            self.Remote_ip, self.Remote_port = Remote_IP, Remote_Port
-            self.CNS_ip, self.CNS_port = CNS_IP, CNS_Port
-            # Read Socket
-            self.resv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.resv_sock.bind((self.Remote_ip, self.Remote_port))
-            # Send Socket
-            self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            # SIZE BUFFER
-            self.size_buffer_mem = 46008
-            # SEND TICK
-            self.want_tick = 5
+        # thread name
+        self.th_name = threrad_name
+        # Ip, Port
+        self.Remote_ip, self.Remote_port = Remote_IP, Remote_Port
+        self.CNS_ip, self.CNS_port = CNS_IP, CNS_Port
+        # Read Socket
+        self.resv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.resv_sock.bind((self.Remote_ip, self.Remote_port))
+        # Send Socket
+        self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # SIZE BUFFER
+        self.size_buffer_mem = 46008
+        # SEND TICK
+        self.want_tick = 5
 
-        if True:
-            # memory
-            self.max_len = Max_len
-            self.mem = self._make_mem_structure(max_len=self.max_len)
-            # logger path
-            self.LoggerPath = ''
-            self.file_name = 0
+        # memory
+        self.max_len = Max_len
+        self.mem = self._make_mem_structure(max_len=self.max_len)
+        # logger path
+        self.LoggerPath = ''
+        self.file_name = 0
+
+        # Control
+        self.SaveControlPara = []
+        self.SaveControlVal = []
 
     def _make_mem_structure(self, max_len):
         # 초기 shared_mem의 구조를 선언한다.
@@ -71,6 +73,11 @@ class CNS:
         [self.mem[pid]['List'].append(self.mem[pid]['Val']) for pid in self.mem.keys()]
         return 0
 
+    # -------
+    def _send_control_initial(self):
+        self.SaveControlPara = []
+        self.SaveControlVal = []
+
     def _send_control_signal(self, para, val):
         '''
         조작 필요없음
@@ -103,6 +110,32 @@ class CNS:
 
         self.send_sock.sendto(buffer, (self.CNS_ip, self.CNS_port))
 
+    def _send_control_save(self, para, val):
+        """
+        para와 val을 받아서 save
+        :param para: [a, b, c]
+        :param val: [1, 2, 3]
+        :return: -
+        """
+        for _ in range(len(para)):
+            self.SaveControlPara.append(para[_])
+            self.SaveControlVal.append(val[_])
+
+    def _send_control_to_cns(self):
+        """
+        Close send function
+        ex.
+            _send_control_save(['Para', 'Para'],[1, 1])
+            _send_control_to_cns()
+        :return: 0 or 1
+        """
+        if self.SaveControlPara != []:
+            self._send_control_signal(self.SaveControlPara, self.SaveControlVal)
+            self._send_control_initial()
+            return 0    # Send function Success
+        else:
+            return 1    # Send function Fail due to no value in self.SaveControlPara
+
     def _send_malfunction_signal(self, Mal_nub, Mal_opt, Mal_time):
         '''
         CNS_04_18.tar 버전에서 동작함.
@@ -117,6 +150,7 @@ class CNS:
             Mal_time = Mal_time * 5
         return self._send_control_signal(['KFZRUN', 'KSWO280', 'KSWO279', 'KSWO278'],
                                          [10, Mal_nub, Mal_opt, Mal_time])
+    # -------
 
     def run_cns(self):
         para = []
