@@ -4,6 +4,9 @@ from datetime import datetime
 from collections import deque
 import torch
 import matplotlib.pylab as plt
+
+import mpl_toolkits.mplot3d.art3d as art3d
+
 import multiprocessing as mp
 
 
@@ -686,6 +689,10 @@ class ProcessPlotter3D(object):
         self.BotZ = []  # Bot pres
         self.UpZ = []   # Up pres
 
+        self.RHRY = [[], [], [], []]
+        self.RHRZ = [[], [], [], []]
+        self.RHRY = [[], [], [], []]
+
     def terminate(self):
         plt.close('all')
 
@@ -710,6 +717,20 @@ class ProcessPlotter3D(object):
             self.UpZ = np.array(UpPres)
             self.PTY = np.array([[time] for _ in range(0, 350)])
 
+        self.RHRZ = [np.array([[UpPres[0][0], UpPres[0][0]], [BotPres[0][0], BotPres[0][0]]]),
+                     np.array([[UpPres[0][0], UpPres[0][0]], [UpPres[0][0], UpPres[0][0]]]),
+                     np.array([[UpPres[0][0], BotPres[0][0]], [UpPres[0][0], BotPres[0][0]]]),
+                     ]
+        self.RHRY = [np.array([[time, time], [time, time]]),
+                     np.array([[time, time], [0, 0]]),
+                     np.array([[time, time], [0, 0]]),
+                     ]
+
+        self.RHRX = [np.array([[0, 170], [0, 170]]),
+                     np.array([[0, 170], [0, 170]]),
+                     np.array([[170, 170], [170, 170]])
+                     ]
+
     def call_back(self):
         while self.pipe.poll():
             command = self.pipe.recv()
@@ -725,27 +746,61 @@ class ProcessPlotter3D(object):
 
                 self._make_surface(-command[1])
 
-                self.ax1.plot3D(self.x, self.y, self.z)
+                # self.ax1.scatter(self.PTX, self.PTY, self.BotZ, marker='*')
+                self.ax1.plot_surface(self.PTX, self.PTY, self.BotZ, rstride=8, cstride=8, alpha=0.15, color='r')
+
+                # RHR range
+                # self.ax1.plot_surface(self.RHRX[0], self.RHRY[0], self.RHRZ[0], rstride=8, cstride=8, alpha=0.5,
+                #                       color='black')
+                # self.ax1.plot_surface(self.RHRX[1], self.RHRY[1], self.RHRZ[1], rstride=8, cstride=8, alpha=0.5,
+                #                       color='black')
+                # self.ax1.plot_surface(self.RHRX[2], self.RHRY[2], self.RHRZ[2], rstride=8, cstride=8, alpha=0.5,
+                #                       color='black')
+
+                self.ax1.plot3D([170, 0, 0, 170, 170],
+                                [self.y[-1], self.y[-1], 0, 0, self.y[-1]],
+                                [29.5, 29.5, 29.5, 29.5, 29.5], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([170, 0, 0, 170, 170],
+                                [self.y[-1], self.y[-1], 0, 0, self.y[-1]],
+                                [17, 17, 17, 17, 17], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([170, 170],
+                                [self.y[-1], self.y[-1]],
+                                [17, 29.5], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([170, 170],
+                                [0, 0],
+                                [17, 29.5], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([0, 0],
+                                [self.y[-1], self.y[-1]],
+                                [17, 29.5], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([0, 0],
+                                [0, 0],
+                                [17, 29.5], color='black', lw=0.5, ls='--')
+
+                self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ, rstride=8, cstride=8, alpha=0.15, color='r')
+
+                self.ax1.plot3D(self.x, self.y, self.z, color='blue', lw=1.5,)
 
                 # ls: {'-', '--', '-.', ':', '', (offset, on - off - seq), ...}
                 # linewidth or lw: float
-                self.ax1.plot3D([self.x[-1], self.x[-1]], [self.y[-1], self.y[-1]], [0, self.z[-1]], color='black', lw=0.5, ls='--')
-                self.ax1.plot3D([0, self.x[-1]], [self.y[-1], self.y[-1]], [self.z[-1], self.z[-1]], color='black', lw=0.5, ls='--')
-                self.ax1.plot3D([self.x[-1], self.x[-1]], [0, self.y[-1]], [self.z[-1], self.z[-1]], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([self.x[-1], self.x[-1]], [self.y[-1], self.y[-1]], [0, self.z[-1]], color='blue', lw=0.5, ls='--')
+                self.ax1.plot3D([0, self.x[-1]], [self.y[-1], self.y[-1]], [self.z[-1], self.z[-1]], color='blue', lw=0.5, ls='--')
+                self.ax1.plot3D([self.x[-1], self.x[-1]], [0, self.y[-1]], [self.z[-1], self.z[-1]], color='blue', lw=0.5, ls='--')
 
                 # each
-                self.ax1.plot3D(self.x, self.y, self.zero, color='black', lw=1, ls='--')
+                self.ax1.plot3D(self.x, self.y, 0, color='black', lw=1, ls='--')
                 self.ax1.plot3D(self.zero, self.y, self.z, color='black', lw=1, ls='--')
                 self.ax1.plot3D(self.x, self.zero, self.z, color='black', lw=1, ls='--')
 
-                # self.ax1.scatter(self.PTX, self.PTY, self.BotZ, marker='*')
-                self.ax1.plot_surface(self.PTX, self.PTY, self.BotZ, rstride=8, cstride=8, alpha=0.2, color='r')
-                self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ, rstride=8, cstride=8, alpha=0.2, color='r')
+                # 절대값 처리
+                self.ax1.set_yticklabels([int(_) for _ in abs(self.ax1.get_yticks())])
+
                 # self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ)
 
+
                 self.ax1.set_xlabel('Temperature')
-                self.ax1.set_ylabel('Time')
+                self.ax1.set_ylabel('Time [Tick]')
                 self.ax1.set_zlabel('Pressure')
+
                 self.ax1.set_xlim(0, 350)
                 self.ax1.set_zlim(0, 200)
         self.fig.canvas.draw()
@@ -825,7 +880,7 @@ class NBPlot3D(object):
             # data = np.random.random(2)
             send(data)
 
-
+#
 # from mpl_toolkits.mplot3d import axes3d
 # X, Y, Z = axes3d.get_test_data(0.05)
 # print(np.shape(X))
@@ -835,11 +890,12 @@ class NBPlot3D(object):
 # fig = plt.figure()
 # ax = fig.gca(projection='3d')
 #
-# X = np.array([[1], [0.5], [0]])
-# Y = np.array([[0], [0], [0]])
-# Z = np.array([[1], [0.5], [0]])
+# X = np.array([[1, 1], [0.5, 0.5], [0, 0]])
+# Y = np.array([[0, 1], [0, 1], [0, 1]])
+# Z = np.array([[1, 1], [0.5, 0.5], [0, 0]])
 #
 # print(np.shape(X))
+#
 # # fix_xy = np.array([[1], [0.5], [0]])
 # # Y = np.hstack([Y, np.array([[3], [3], [3]])])
 # # print(Y)
