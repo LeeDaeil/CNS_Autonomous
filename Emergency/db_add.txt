@@ -9,20 +9,3 @@ cMALC2	INTEGER	CNS Mal function Case
 cMALCA2	INTEGER	CNS Mal function Case actication or not
 cMALO2	INTEGER	CNS Mal function Option
 cMALT2	INTEGER	CNS Mal function Time
-vZINST78	REAL	SG1 level
-vZINST77	REAL	SG2 level
-vZINST76	REAL	SG3 level
-vZINST75	REAL	SG1 Pressure
-vZINST74	REAL	SG2 Pressure
-vZINST73	REAL	SG3 Pressure
-vKLAMPO134	REAL	Aux1 Pump
-vKLAMPO135	REAL	Aux2 Pump
-vKLAMPO136	REAL	Aux3 Pump
-vWAFWS1	REAL	Aux1 Valve
-vWAFWS2	REAL	Aux2 Valve
-vWAFWS3	REAL	Aux3 Valve
-vKLAMPO9	REAL	Trip Sig
-vBPV122C	REAL	BFV145 Pos
-vBPV145C	REAL	BFV145 Pos
-vReward0	REAL	Reward0
-vReward1	REAL	Reward1

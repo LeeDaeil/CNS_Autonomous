@@ -1,8 +1,9 @@
-from COMMONTOOL import TOOL, PTCureve, CSFTree
+from COMMONTOOL import TOOL, PTCureve, CSFTree, NBPlot3D
 from CNS_UDP_FAST import CNS
 import numpy as np
 import time
 import random
+import matplotlib.pylab as plt
 
 
 class ENVCNS(CNS):
@@ -13,6 +14,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
+        self.want_tick = 15     # 3sec
 
         self.accident_name = ['LOCA', 'SGTR', 'MSLB'][1]
 
@@ -24,6 +26,9 @@ class ENVCNS(CNS):
 
         self.action_space = 1
         self.observation_space = len(self.input_info)
+
+        # GP
+        self.pl = NBPlot3D()
 
     # ENV Logger
     def ENVlogging(self, s):
@@ -75,6 +80,9 @@ class ENVCNS(CNS):
         # self.Loger_txt += f'{d}\t'
         return d
 
+    def _send_control_save(self, zipParaVal):
+        super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
+
     def send_act(self, A):
         """
         A 에 해당하는 액션을 보내고 나머지는 자동
@@ -85,12 +93,48 @@ class ENVCNS(CNS):
         :param A: A 액션
         :return: AMod: 수정된 액션
         """
+        ActOrderBook = {
+            'StopAllRCP':       (['KSWO132', 'KSWO133', 'KSWO134'], [0, 0, 0]),
+            'StopRCP1':         (['KSWO132'], [0]),
+            'StopRCP2':         (['KSWO133'], [0]),
+            'StopRCP3':         (['KSWO134'], [0]),
+            'NetBRKOpen':       (['KSWO244'], [0]),
+
+            # 강화학습을 위한 제어 변수
+            'PZRSprayMan':      (['KSWO128'], [1]), 'PZRSprayAuto':         (['KSWO128'], [0]),
+            'PZRSprayClose':    (['KSWO126', 'KSWO127'], [1, 0]),
+            'PZRSprayOpen':     (['KSWO126', 'KSWO127'], [0, 1]),
+            'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn':      (['KSWO125'], [1]),
+
+            'PZRProHeaterMan':  (['KSWO120'], [1]), 'PZRProHeaterAuto':     (['KSWO120'], [0]),
+            'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
+            'PZRProHeaterUp':   (['KSWO121', 'KSWO122'], [0, 1]),
+
+            'DecreaseAux1Flow': (['KSWO142', 'KSWO143'], [1, 0]),
+            'IncreaseAux1Flow': (['KSWO142', 'KSWO143'], [0, 1]),
+            'DecreaseAux2Flow': (['KSWO151', 'KSWO152'], [1, 0]),
+            'IncreaseAux2Flow': (['KSWO151', 'KSWO152'], [0, 1]),
+            'DecreaseAux3Flow': (['KSWO154', 'KSWO155'], [1, 0]),
+            'IncreaseAux3Flow': (['KSWO154', 'KSWO155'], [0, 1]),
+        }
         AMod = A
+        # Order Book
         # -------------------------------------------------------------------------------------------------------
         # def check_CSFTree()
         V = {
-            # TRIP?
+            # ETC
             'Trip': self.mem['KLAMPO9']['Val'],
+            'RCP1': self.mem['KLAMPO124']['Val'],           'RCP2': self.mem['KLAMPO125']['Val'],
+            'RCP3': self.mem['KLAMPO126']['Val'],           'NetBRK': self.mem['KLAMPO224']['Val'],
+            'CNSTime': self.mem['KCNTOMS']['Val'],
+
+            # 강화학습을 위한 감시 변수
+            'PZRSprayManAuto': self.mem['KLAMPO119']['Val'],
+            'PZRSprayPos': self.mem['ZINST66']['Val'],
+            'PZRBackHeaterManAuto': self.mem['KLAMPO118']['Val'],
+            'PZRProHeaterManAuto': self.mem['KLAMPO117']['Val'],
+            'PZRProHeaterPos': self.mem['QPRZH']['Val'],
+
             # CSF 1 Value 미임계 상태 추적도
             'PowerRange': self.mem['ZINST1']['Val'],        'IntermediateRange': self.mem['ZINST2']['Val'],
             'SourceRange': self.mem['ZINST3']['Val'],
@@ -104,10 +148,18 @@ class ENVCNS(CNS):
             'SG3Pres': self.mem['ZINST73']['Val'],
             'SG1Feed': self.mem['WFWLN1']['Val'],           'SG2Feed': self.mem['WFWLN2']['Val'],
             'SG3Feed': self.mem['WFWLN3']['Val'],
+
+            'AllSGFeed': self.mem['WFWLN1']['Val'] +
+                         self.mem['WFWLN2']['Val'] +
+                         self.mem['WFWLN3']['Val'],
+            'SG1Wid': self.mem['ZINST72']['Val'],           'SG2Wid': self.mem['ZINST71']['Val'],
+            'SG3Wid': self.mem['ZINST70']['Val'],
+            'SG123Wid': [self.mem['ZINST72']['Val'], self.mem['ZINST71']['Val'], self.mem['ZINST70']['Val']],
+
             # CSF 4 Value RCS 건전성 상태 추적도
             'RCSColdLoop1': self.mem['UCOLEG1']['List'],    'RCSColdLoop2': self.mem['UCOLEG2']['List'],
             'RCSColdLoop3': self.mem['UCOLEG3']['List'],    'RCSPressure': self.mem['ZINST65']['Val'],
-            'CNSTime': self.mem['KCNTOMS']['List'],         # PTCurve: ...
+            'CNSTimeL': self.mem['KCNTOMS']['List'],         # PTCurve: ...
             # CSF 5 Value 격납용기 건전성 상태 추적도
             'CTMTPressre': self.mem['ZINST26']['Val'],      'CTMTSumpLevel': self.mem['ZSUMP']['Val'],
             'CTMTRad': self.mem['ZINST22']['Val'],
@@ -121,30 +173,67 @@ class ENVCNS(CNS):
                                  V['SG1Pres'], V['SG2Pres'], V['SG3Pres'],
                                  V['SG1Feed'], V['SG2Feed'], V['SG3Feed']),
             'CSF4': CSFTree.CSF4(V['Trip'], V['RCSColdLoop1'], V['RCSColdLoop2'], V['RCSColdLoop3'],
-                                 V['RCSPressure'], V['PTCurve'], V['CNSTime']),
+                                 V['RCSPressure'], V['PTCurve'], V['CNSTimeL']),
             'CSF5': CSFTree.CSF5(V['Trip'], V['CTMTPressre'], V['CTMTSumpLevel'], V['CTMTRad']),
             'CSF6': CSFTree.CSF6(V['Trip'], V['PZRLevel'])
         }
         CSF_level = [CSF[_]['L'] for _ in CSF.keys()]
         self.Loger_txt += f'{CSF}\t'
         self.Loger_txt += f'{CSF_level}\t'
+        DIS_CSF_Info = f"[{V['CNSTime']}] \t"
         # -------------------------------------------------------------------------------------------------------
-        # if self.accident_name == 'LOCA':
-        #     # 16.0
-        #     for _tar, _val in zip(['WAFWS1', 'WAFWS2', 'WAFWS3'], ['KSWO143', 'KSWO152', 'KSWO155']):
-        #         if self.mem[_tar]['Val'] < 20:
-        #             if self.get_CNS_time() >= self.FixedRad + 1325: self.s_val([_val], [1])
-        #     # 17.2
-        #     if self.get_CNS_time() == self.FixedRad + 1750: self.s_val(['KSWO208'], [1])
-        #
-        #     # 20.4
-        #     if self.get_CNS_time() == self.FixedRad + 2000: self.s_val(['KSWO115'], [1])
-        #     if self.get_CNS_time() == self.FixedRad + 2300: self.s_val(['KSWO123'], [1])
-        #
-        #     # 21.3
-        #     if self.get_CNS_time() == self.FixedRad + 2600: self.s_val(['KSWO132'], [0])
-        #     if self.get_CNS_time() == self.FixedRad + 2650: self.s_val(['KSWO133'], [0])
-        #     if self.get_CNS_time() == self.FixedRad + 2700: self.s_val(['KSWO134'], [0])
+        # RCP Stop
+        if V['Trip'] == 1:
+            if V['RCSPressure'] < 97 and V['CNSTime'] < 15 * 60 * 5:
+                if V['RCP1'] == 1: self._send_control_save(ActOrderBook['StopRCP1'])
+                if V['RCP2'] == 1: self._send_control_save(ActOrderBook['StopRCP2'])
+                if V['RCP3'] == 1: self._send_control_save(ActOrderBook['StopRCP3'])
+            if V['NetBRK'] == 1: self._send_control_save(ActOrderBook['NetBRKOpen'])
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 1 Act
+        if CSF_level[0] != 0:
+            DIS_CSF_Info += f'1: {CSF_level[0]} \t'
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 2 Act
+        if CSF_level[1] != 0:
+            DIS_CSF_Info += f'2: {CSF_level[1]} \t'
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 3 Act
+        if CSF_level[2] != 0:
+            DIS_CSF_Info += f'3: {CSF_level[2]} \t'
+
+            if CSF_level[2] == 3:   # All Aux <= 33
+                if V['AllSGFeed'] <= 33:
+                    # 1] Find width low SG nub
+                    LowSGNub = V['SG123Wid'].index(min(V['SG123Wid']))   # 0: SG1, 1:SG2, 2:SG3
+                    # 2] Supply water to the low SG
+                    if LowSGNub == 0: self._send_control_save(ActOrderBook['IncreaseAux1Flow'])
+                    if LowSGNub == 1: self._send_control_save(ActOrderBook['IncreaseAux2Flow'])
+                    if LowSGNub == 2: self._send_control_save(ActOrderBook['IncreaseAux3Flow'])
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 4 Act
+        if CSF_level[3] != 0:
+            DIS_CSF_Info += f'4: {CSF_level[3]} \t'
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 5 Act
+        if CSF_level[4] != 0:
+            DIS_CSF_Info += f'5: {CSF_level[4]} \t'
+
+        # -------------------------------------------------------------------------------------------------------
+        # CSF 6 Act
+        if CSF_level[5] != 0:
+            DIS_CSF_Info += f'6: {CSF_level[5]} \t'
+
+        # CSF info DIS
+        print(DIS_CSF_Info)
+
+        # -------------------------------------------------------------------------------------------------------
+        # Cool Act
 
         self._send_control_to_cns()
         return AMod
@@ -158,6 +247,9 @@ class ENVCNS(CNS):
         # Old Data (time t) ---------------------------------------
         # self.check_CSFTree()
         self.send_act(A)
+
+        self.pl.plot([self.mem['UAVLEG2']['Val'], self.mem['KCNTOMS']['Val'], self.mem['ZINST65']['Val']])
+        # self.pl2.plot([self.mem['KCNTOMS']['Val'], self.mem['KCNTOMS']['Val']])
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
         self._append_val_to_list()

@@ -3,6 +3,9 @@ import os
 from datetime import datetime
 from collections import deque
 import torch
+import matplotlib.pylab as plt
+import multiprocessing as mp
+
 
 class TOOL:
     @staticmethod
@@ -76,6 +79,7 @@ class TOOL:
     def RoundVal(val, div, r):
         return round(val / div, r)
 
+
 class DB:
     def __init__(self, max_leg=1):
         self.DB_logger = TOOL.DBlogger(name="DB_log0")
@@ -103,6 +107,7 @@ class DB:
     def to_torch(self):
         # [n, val] -> # [1, n, val]
         return torch.tensor([self.NetPhyInput]), torch.tensor([self.NetCopInput]), torch.tensor([self.NetCtmInput])
+
 
 class RLMem:
     def __init__(self, net_nub, para_info):
@@ -385,6 +390,7 @@ class RLMem:
         # 종료
         self.list_done_temp = {_: [] for _ in range(self.net_nub)}
 
+
 class PTCureve:
     """
         0 : 만족, 1: 불만족
@@ -438,6 +444,16 @@ class PTCureve:
                 BotF = self.BotLineFunc[i]
         return UpF, BotF
 
+    def _get_pres(self, Temp):
+        """
+        온도 받아서 위아래 Pres 조건 반환
+        :param Temp: [0~..]
+        :return: [Up_pres, Bot_pres]
+        """
+        UpF, BotF = self._call_fun(Temp=Temp)
+        Up_pres, Bot_pres = UpF(Temp), BotF(Temp)
+        return Up_pres, Bot_pres
+
     def _check_up_or_under(self, fun, Temp, Pres):
         Get_Pres = fun(Temp)
         if Get_Pres > Pres:
@@ -466,6 +482,7 @@ class PTCureve:
        """
         return self._check_in_or_out(Temp, Pres)
 
+
 class CSFTree:
     @staticmethod
     def CSF1(TRIP, PR, IR, SR):
@@ -483,7 +500,7 @@ class CSFTree:
             else:
                 if IR <= 0:
                     if IR < 1E-9:
-                        if SR <= 0:
+                        if SR <= 2: # 원래는 1
                             return {'L': 0, 'N': 1, 'P': 'Ok'}  # OK!
                         else:
                             return {'L': 1, 'N': 2, 'P': 'S2'}  # GOTO 회복 S.2
@@ -571,7 +588,7 @@ class CSFTree:
         :param RC3: RCS Cool LOOP 3 [List] [270 ..]
         :param RP: RCS pressure [160 ~ ..]
         :param PT: PTCurve [ 0 만족, 1 불만족 ]
-        :param TIME: CNS TIME [5 tick ~ ..]
+        :param TIME: CNS TIME [List] [5 tick ~ ..]
         :return: {'L': 0 만족, 1: 노랑, 2: 주황, 3: 빨강, 'N': 탈출 단계, 'P': 절차서}
         """
         if TRIP == 1:
@@ -652,3 +669,186 @@ class CSFTree:
                         return {'L': 0, 'N': 3, 'P': 'Ok'}    # Ok!
         else:
             return {'L': 0, 'N': 4, 'P': 'Ok'}                # Ok.
+
+
+# ---------------------------------------
+
+
+class ProcessPlotter3D(object):
+    def __init__(self):
+        self.x = []
+        self.y = []
+        self.z = []
+        self.zero = []
+
+        self.PTY = []   # Time
+        self.PTX = []   # Temp
+        self.BotZ = []  # Bot pres
+        self.UpZ = []   # Up pres
+
+    def terminate(self):
+        plt.close('all')
+
+    def _make_surface(self, time):
+        Temp = []
+        UpPres = []
+        BotPres = []
+        for _ in range(0, 350):
+            uppres, botpres = PTCureve()._get_pres(_)
+            Temp.append([_])
+            UpPres.append([uppres])
+            BotPres.append([botpres])
+
+        if np.shape(self.PTX)[0] != 0:
+            self.PTX = np.hstack([self.PTX[:, 0:1], Temp])
+            self.BotZ = np.hstack([self.BotZ[:, 0:1], BotPres])
+            self.UpZ = np.hstack([self.UpZ[:, 0:1], UpPres])
+            self.PTY = np.hstack([self.PTY[:, 0:1], np.array([[time] for _ in range(0, 350)])])
+        else:
+            self.PTX = np.array(Temp)
+            self.BotZ = np.array(BotPres)
+            self.UpZ = np.array(UpPres)
+            self.PTY = np.array([[time] for _ in range(0, 350)])
+
+    def call_back(self):
+        while self.pipe.poll():
+            command = self.pipe.recv()
+            if command is None:
+                self.terminate()
+                return False
+            else:
+                self.ax1.clear()
+                self.x.append(command[0])   #
+                self.y.append(-command[1])
+                self.z.append(command[2])
+                self.zero.append(0)
+
+                self._make_surface(-command[1])
+
+                self.ax1.plot3D(self.x, self.y, self.z)
+
+                # ls: {'-', '--', '-.', ':', '', (offset, on - off - seq), ...}
+                # linewidth or lw: float
+                self.ax1.plot3D([self.x[-1], self.x[-1]], [self.y[-1], self.y[-1]], [0, self.z[-1]], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([0, self.x[-1]], [self.y[-1], self.y[-1]], [self.z[-1], self.z[-1]], color='black', lw=0.5, ls='--')
+                self.ax1.plot3D([self.x[-1], self.x[-1]], [0, self.y[-1]], [self.z[-1], self.z[-1]], color='black', lw=0.5, ls='--')
+
+                # each
+                self.ax1.plot3D(self.x, self.y, self.zero, color='black', lw=1, ls='--')
+                self.ax1.plot3D(self.zero, self.y, self.z, color='black', lw=1, ls='--')
+                self.ax1.plot3D(self.x, self.zero, self.z, color='black', lw=1, ls='--')
+
+                # self.ax1.scatter(self.PTX, self.PTY, self.BotZ, marker='*')
+                self.ax1.plot_surface(self.PTX, self.PTY, self.BotZ, rstride=8, cstride=8, alpha=0.2, color='r')
+                self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ, rstride=8, cstride=8, alpha=0.2, color='r')
+                # self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ)
+
+                self.ax1.set_xlabel('Temperature')
+                self.ax1.set_ylabel('Time')
+                self.ax1.set_zlabel('Pressure')
+                self.ax1.set_xlim(0, 350)
+                self.ax1.set_zlim(0, 200)
+        self.fig.canvas.draw()
+        return True
+
+    def __call__(self, pipe):
+        print('starting plotter...')
+
+        self.pipe = pipe
+        self.fig = plt.figure()
+        self.ax1 = plt.axes(projection='3d')
+        # self.ax2 = plt.axes(projection='3d')
+
+        # self.fig, self.ax = plt.subplots()
+        timer = self.fig.canvas.new_timer(interval=1000)
+        timer.add_callback(self.call_back)
+        timer.start()
+
+        print('...done')
+        plt.show()
+
+
+class ProcessPlotter2D(object):
+    def __init__(self):
+        self.x = []
+        self.y = []
+
+    def terminate(self):
+        plt.close('all')
+
+    def call_back(self):
+        while self.pipe.poll():
+            command = self.pipe.recv()
+            if command is None:
+                self.terminate()
+                return False
+            else:
+                self.ax.clear()
+                self.x.append(command[0])
+                self.y.append(command[1])
+                self.ax.plot(self.x, self.y)
+        self.fig.canvas.draw()
+        return True
+
+    def __call__(self, pipe):
+        print('starting plotter...')
+
+        self.pipe = pipe
+        self.fig, self.ax = plt.subplots()
+        timer = self.fig.canvas.new_timer(interval=1000)
+        timer.add_callback(self.call_back)
+        timer.start()
+
+        print('...done')
+        plt.show()
+
+
+class NBPlot3D(object):
+    """
+    Ex. pl = NBPlot()
+        loop ---
+            pl.plot()
+
+    """
+    def __init__(self):
+        self.plot_pipe, plotter_pipe = mp.Pipe()
+        self.plotter = ProcessPlotter3D()
+        self.plot_process = mp.Process(
+            target=self.plotter, args=(plotter_pipe,), daemon=True)
+        self.plot_process.start()
+
+    def plot(self, data, finished=False):
+        send = self.plot_pipe.send
+        if finished:
+            send(None)
+        else:
+            # data = np.random.random(2)
+            send(data)
+
+
+# from mpl_toolkits.mplot3d import axes3d
+# X, Y, Z = axes3d.get_test_data(0.05)
+# print(np.shape(X))
+# print(np.shape(Y))
+# print(np.shape(Z))
+#
+# fig = plt.figure()
+# ax = fig.gca(projection='3d')
+#
+# X = np.array([[1], [0.5], [0]])
+# Y = np.array([[0], [0], [0]])
+# Z = np.array([[1], [0.5], [0]])
+#
+# print(np.shape(X))
+# # fix_xy = np.array([[1], [0.5], [0]])
+# # Y = np.hstack([Y, np.array([[3], [3], [3]])])
+# # print(Y)
+#
+# ax.scatter(X, Y, Z, marker='*')
+# # ax.plot_wireframe(X, Y, Z, rstride=10, cstride=10)
+# ax.plot_surface(X, Y, Z, rstride=8, cstride=8, alpha=0.3)
+#
+# ax.set_xlabel('X Label=Temp')
+# ax.set_ylabel('Y Label=Time')
+# ax.set_zlabel('Z Label=Pres')
+# plt.show()
