@@ -48,28 +48,25 @@ class ENVCNS(CNS):
         return np.array(state)
 
     def get_reward(self):
-        New_Aux_Flow = self.mem['WAFWS1']['List'][-1]
-        Old_Aux_Flow = self.mem['WAFWS1']['List'][-2]
-
+        # --------------------------------- NEW ----
         r = 0
-        if self.mem['KLAMPO9']['List'][-1] == 1 and self.mem['KLAMPO134']['List'][-1] == 1:
-            if New_Aux_Flow >= 20:
-                r += 20
-            else:
-                r += New_Aux_Flow - 20
-
-        else:
-            r -= New_Aux_Flow
-        r = r / 25
-
+        if self.ENVGetSIReset:
+            V = {
+                'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
+                'CurrentTemp': self.mem['UAVLEG2']['Val'],
+                'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val'])
+            }
+            # Cooling rate에 따라서 온도 감소
+            r -= V['Dis']
+            self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
+        # --------------------------------- Send R ----
         self.AcumulatedReward += r
 
         if self.AcumulatedReward > 400:
             r += 100
         else:
             pass
-
-        # self.Loger_txt += f'{r}\t'
+        self.Loger_txt += f'{r}\t'
         return r
 
     def get_done(self):
@@ -246,6 +243,11 @@ class ENVCNS(CNS):
 
             # 2] SI reset 발생 시 (냉각 운전 시작)
             if V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+                # 2.0] Build Cooling rate function
+                if not self.ENVGetSIReset:
+                    rate = -55 / (60 * 60 * 5)
+                    self.DRateFun = lambda t: rate * (t - V['CNSTime']) + self.mem['UAVLEG2']['Val']
+                    self.ENVGetSIReset = True
 
                 # 2.0] Press set-point 를 현재 최대 압력 기준까지 조절
                 # Steam dump Auto
@@ -276,16 +278,16 @@ class ENVCNS(CNS):
                     # Check ACT input
                     while True:
                         ACT = input("Want act:")
-                        if ACT == '' or ACT =='0':
-                            print("[SEND] No Act")
+                        if ACT == '' or ACT == '0':
+                            # print("[SEND] No Act")
                             ACT = int(0)
                             break
                         if ACT.isdigit():
-                            print(f"[SEND] Act {int(ACT)}")
+                            # print(f"[SEND] Act {int(ACT)}")
                             ACT = int(ACT)
                             break
                     # Done ACT input
-                    #
+                    # --------------
                     # Start ACT Code
                     if ACT == 0: pass
                     if ACT == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
@@ -346,6 +348,7 @@ class ENVCNS(CNS):
 
         self.pl.plot([self.mem['UAVLEG2']['Val'], self.mem['KCNTOMS']['Val'], self.mem['ZINST65']['Val'],
                       self.mem['KLAMPO6']['Val'], self.mem['KLAMPO9']['Val']])
+
         # self.pl2.plot([self.mem['KCNTOMS']['Val'], self.mem['KCNTOMS']['Val']])
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
@@ -372,6 +375,7 @@ class ENVCNS(CNS):
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0
         self.ENVStep = 0
+        self.ENVGetSIReset = False
         # 5 FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         return state
@@ -388,8 +392,13 @@ if __name__ == '__main__':
     ]
     env.observation_space = 3
 
-    env.reset(file_name='Ep1')
-    while True:
-        # A = input(f'{env.ENVStep}A:')
-        A = 0
-        env.step(int(A))
+    for _ in range(1, 4):
+        env.reset(file_name=f'Ep{_}')
+        for __ in range(3):
+            A = 0
+            env.step(int(A))
+
+    # while True:
+    #     # A = input(f'{env.ENVStep}A:')
+    #     A = 0
+    #     env.step(int(A))

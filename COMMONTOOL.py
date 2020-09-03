@@ -679,6 +679,9 @@ class CSFTree:
 
 class ProcessPlotter3D(object):
     def __init__(self):
+        self.resetInit()
+
+    def resetInit(self):
         self.x = []
         self.y = []
         self.z = []
@@ -701,6 +704,16 @@ class ProcessPlotter3D(object):
 
     def terminate(self):
         plt.close('all')
+
+    def saveFig(self):
+        filename, i = 'EP', 1
+        while True:
+            if os.path.isfile(f'./DB/EP{i}.png'):
+                i += 1
+            else:
+                break
+        self.fig.savefig(f'./DB/Ep{i}.png', dpi=300)
+        self.resetInit()
 
     def _make_surface(self, time):
         Temp = []
@@ -749,8 +762,11 @@ class ProcessPlotter3D(object):
                 self.terminate()
                 return False
             else:
+                # 반드시 이거 시간 바꾸고 뭐할때마다 체크 TODO Check This!!!
+                if command[1] == 0 and len(self.x) > 1: self.saveFig()
+
                 self.ax1.clear()
-                self.x.append(command[0])   #
+                self.x.append(command[0])
                 self.y.append(-command[1])
                 self.z.append(command[2])
 
@@ -758,7 +774,6 @@ class ProcessPlotter3D(object):
                     if self.SaveTIMETEMP['Time'] == 0:
                         self.SaveTIMETEMP['Temp'] = command[0]
                         self.SaveTIMETEMP['Time'] = command[1]
-
                     self.RateX.append(self.funDecreaseRate(command[1]))
                     self.RateY.append(-command[1])
                     self.RateZ.append(0)
@@ -817,7 +832,6 @@ class ProcessPlotter3D(object):
                 self.ax1.set_yticklabels([int(_) for _ in abs(self.ax1.get_yticks())])
 
                 # self.ax1.plot_surface(self.PTX, self.PTY, self.UpZ)
-
 
                 self.ax1.set_xlabel('Temperature')
                 self.ax1.set_ylabel('Time [Tick]')
