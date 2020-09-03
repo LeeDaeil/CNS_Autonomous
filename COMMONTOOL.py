@@ -693,6 +693,12 @@ class ProcessPlotter3D(object):
         self.RHRZ = [[], [], [], []]
         self.RHRY = [[], [], [], []]
 
+        self.RateX = []
+        self.RateY = []
+        self.RateZ = []
+
+        self.SaveTIMETEMP = {'Temp':0, 'Time':0}
+
     def terminate(self):
         plt.close('all')
 
@@ -731,6 +737,11 @@ class ProcessPlotter3D(object):
                      np.array([[170, 170], [170, 170]])
                      ]
 
+    def funDecreaseRate(self, Time):
+        rate = -55 / (60 * 60 * 5)
+        Temp = rate * (Time - self.SaveTIMETEMP['Time']) + self.SaveTIMETEMP['Temp']
+        return Temp
+
     def call_back(self):
         while self.pipe.poll():
             command = self.pipe.recv()
@@ -742,6 +753,17 @@ class ProcessPlotter3D(object):
                 self.x.append(command[0])   #
                 self.y.append(-command[1])
                 self.z.append(command[2])
+
+                if command[3] == 0 and command[4] == 1 and command[1] > 1500:     # SI reset + Reactor trip
+                    if self.SaveTIMETEMP['Time'] == 0:
+                        self.SaveTIMETEMP['Temp'] = command[0]
+                        self.SaveTIMETEMP['Time'] = command[1]
+
+                    self.RateX.append(self.funDecreaseRate(command[1]))
+                    self.RateY.append(-command[1])
+                    self.RateZ.append(0)
+                    self.ax1.plot3D(self.RateX, self.RateY, self.RateZ, color='orange', lw=1.5, ls='--')
+
                 self.zero.append(0)
 
                 self._make_surface(-command[1])
@@ -787,9 +809,9 @@ class ProcessPlotter3D(object):
                 self.ax1.plot3D([self.x[-1], self.x[-1]], [0, self.y[-1]], [self.z[-1], self.z[-1]], color='blue', lw=0.5, ls='--')
 
                 # each
-                self.ax1.plot3D(self.x, self.y, 0, color='black', lw=1, ls='--')
-                self.ax1.plot3D(self.zero, self.y, self.z, color='black', lw=1, ls='--')
-                self.ax1.plot3D(self.x, self.zero, self.z, color='black', lw=1, ls='--')
+                self.ax1.plot3D(self.x, self.y, 0, color='black', lw=1, ls='--')            # temp
+                self.ax1.plot3D(self.zero, self.y, self.z, color='black', lw=1, ls='--')    # pres
+                self.ax1.plot3D(self.x, self.zero, self.z, color='black', lw=1, ls='--')    # PT
 
                 # 절대값 처리
                 self.ax1.set_yticklabels([int(_) for _ in abs(self.ax1.get_yticks())])
