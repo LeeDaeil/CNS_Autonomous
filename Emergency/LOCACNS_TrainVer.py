@@ -458,7 +458,7 @@ class ENVCNS(CNS):
         next_state = self.get_state()
 
         self.ENVlogging(s=self.Loger_txt)
-        # self.Loger_txt = f'{next_state}\t'
+        self.Loger_txt = f'{next_state}\t'
         self.Loger_txt = ''
 
         # -------------------------------------------------------------------------------------------------------
