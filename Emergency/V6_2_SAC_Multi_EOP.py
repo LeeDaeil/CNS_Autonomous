@@ -32,7 +32,8 @@ from torch.multiprocessing import Process
 from multiprocessing import Process, Manager
 from multiprocessing.managers import BaseManager
 
-from Emergency.LOCACNS import ENVCNS
+# from Emergency.LOCACNS import ENVCNS
+from Emergency.LOCACNS_TrainVer import ENVCNS
 
 import copy
 
@@ -42,7 +43,6 @@ if GPU:
     device = torch.device("cuda:" + str(device_idx) if torch.cuda.is_available() else "cpu")
 else:
     device = torch.device("cpu")
-print(device)
 
 parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
 parser.add_argument('--train', dest='train', action='store_true', default=False)
@@ -322,7 +322,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
     the function for sampling with multi-processing
     '''
 
-    print(sac_trainer, replay_buffer)
+    # print(sac_trainer, replay_buffer)
     # sac_tainer are not the same, but all networks and optimizers in it are the same; replay  buffer is the same one.
     if ENV == 'Pendulum':
         env = gym.make("Pendulum-v0")
@@ -333,6 +333,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
         env = ENVCNS(Name=id, IP='192.168.0.103', PORT=int(f'710{id + 1}'))
         action_dim = env.action_space
         state_dim = env.observation_space
+        action_range = 1.
 
     frame_idx = 0
     rewards = []
@@ -354,12 +355,28 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
             else:
                 action = sac_trainer.policy_net.sample_action()
 
+            if action >= 0.6:
+                action = [0.6]
+            elif 0.5 <= action < 0.6:
+                action = [0.5]
+            elif 0.4 <= action < 0.5:
+                action = [0.4]
+            elif 0.3 <= action < 0.4:
+                action = [0.3]
+            elif 0.2 <= action < 0.3:
+                action = [0.2]
+            elif 0.1 <= action < 0.2:
+                action = [0.1]
+            elif action < 0.1:
+                action = [0]
+
             try:
                 if ENV == 'Pendulum':
                     next_state, reward, done, _ = env.step(action)
                     # env.render()
                 if ENV == 'CNS':
-                    next_state, reward, done, action  = env.step(action)
+                    next_state, reward, done, action = env.step(action)
+
             except KeyboardInterrupt:
                 print('Finished')
                 sac_trainer.save_model(model_path)
@@ -450,7 +467,7 @@ if __name__ == '__main__':
 
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
-    max_steps = 100 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+    max_steps = 350 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     # max_steps = 12 if ENV == 'CNS' else 10  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     batch_size = 128
     # batch_size = 10

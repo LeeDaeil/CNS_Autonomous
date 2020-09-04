@@ -28,7 +28,7 @@ class ENVCNS(CNS):
         self.observation_space = len(self.input_info)
 
         # GP
-        self.pl = NBPlot3D()
+        # self.pl = NBPlot3D()
 
     # ENV Logger
     def ENVlogging(self, s):
@@ -87,7 +87,7 @@ class ENVCNS(CNS):
             self._send_control_save(['KSWO115'], [0])
             ...
             self._send_control_to_cns()
-        :param A: A 액션
+        :param A: A 액션 [0]
         :return: AMod: 수정된 액션
         """
         ActOrderBook = {
@@ -136,7 +136,7 @@ class ENVCNS(CNS):
 
             'ResetSI': (['KSWO7', 'KSWO5'], [1, 1]),
         }
-        AMod = A
+        AMod = A[0] # A는 리스트 값으로 0번째 값 추출
         # Order Book
         # -------------------------------------------------------------------------------------------------------
         # def check_CSFTree()
@@ -210,7 +210,7 @@ class ENVCNS(CNS):
         CSF_level = [CSF[_]['L'] for _ in CSF.keys()]
         self.Loger_txt += f'{CSF}\t'
         self.Loger_txt += f'{CSF_level}\t'
-        DIS_CSF_Info = f"[{V['CNSTime']}] \t"
+        DIS_CSF_Info = f"[{V['CNSTime']}][{AMod}] \t"
         # -------------------------------------------------------------------------------------------------------
         # 자동 액션
         if V['Trip'] == 1:
@@ -297,6 +297,8 @@ class ENVCNS(CNS):
                     if ACT == 5: self._send_control_save(ActOrderBook['RunCHP2'])
                     if ACT == 6: self._send_control_save(ActOrderBook['StopCHP2'])
 
+        # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
+
         # -------------------------------------------------------------------------------------------------------
         # CSF 1 Act
         if CSF_level[0] != 0: DIS_CSF_Info += f'1: {CSF_level[0]} \t'
@@ -341,13 +343,13 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         # self.check_CSFTree()
-        self.send_act(A)
+        AMod = self.send_act(A)
 
         # GOTICK = input("Want Tick : ")
         # self.want_tick = int(GOTICK)
 
-        self.pl.plot([self.mem['UAVLEG2']['Val'], self.mem['KCNTOMS']['Val'], self.mem['ZINST65']['Val'],
-                      self.mem['KLAMPO6']['Val'], self.mem['KLAMPO9']['Val']])
+        # self.pl.plot([self.mem['UAVLEG2']['Val'], self.mem['KCNTOMS']['Val'], self.mem['ZINST65']['Val'],
+        #               self.mem['KLAMPO6']['Val'], self.mem['KLAMPO9']['Val']])
 
         # self.pl2.plot([self.mem['KCNTOMS']['Val'], self.mem['KCNTOMS']['Val']])
         # New Data (time t+1) -------------------------------------
@@ -362,7 +364,7 @@ class ENVCNS(CNS):
         self.ENVlogging(s=self.Loger_txt)
         # self.Loger_txt = f'{next_state}\t'
         self.Loger_txt = ''
-        return next_state, reward, done, A
+        return next_state, reward, done, AMod
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
