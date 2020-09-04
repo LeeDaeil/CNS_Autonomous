@@ -57,25 +57,23 @@ class ENVCNS(CNS):
                 'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val'])
             }
             # Cooling rate에 따라서 온도 감소
-            r -= V['Dis']
+            r -= V['Dis'] / 100
             self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
-        # --------------------------------- Send R ----
-        self.AcumulatedReward += r
-
-        if self.AcumulatedReward > 400:
-            r += 100
-        else:
-            pass
+            # --------------------------------- Send R ----
+            self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
         return r
 
-    def get_done(self):
-        if self.AcumulatedReward < -500 or self.AcumulatedReward > 400:
+    def get_done(self, r):
+        if self.AcumulatedReward < -100:
             d = True
+        elif self.mem['KCNTOMS']['Val'] == 38000:
+            d = True
+            r = 1
         else:
             d = False
         # self.Loger_txt += f'{d}\t'
-        return d
+        return d, r
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -133,6 +131,7 @@ class ENVCNS(CNS):
 
             'RunRCP2': (['KSWO130', 'KSWO133'], [1, 1]),
             'RunCHP2': (['KSWO70'], [1]), 'StopCHP2': (['KSWO70'], [0]),
+            'OpenSI': (['KSWO81', 'KSWO82'], [1, 0]), 'CloseSI': (['KSWO81', 'KSWO82'], [0, 1]),
 
             'ResetSI': (['KSWO7', 'KSWO5'], [1, 1]),
         }
@@ -157,13 +156,15 @@ class ENVCNS(CNS):
 
             'ChargingManAUto': self.mem['KLAMPO95']['Val'],
             'ChargingValvePos': self.mem['BFV122']['Val'],
+            'ChargingPump2State': self.mem['KLAMPO70']['Val'],
+            'SIValve': self.mem['BHV22']['Val'],
 
             # 강화학습을 위한 감시 변수
             'PZRSprayManAuto': self.mem['KLAMPO119']['Val'],
             'PZRSprayPos': self.mem['ZINST66']['Val'],
             'PZRBackHeaterOnOff': self.mem['KLAMPO118']['Val'],
             'PZRProHeaterManAuto': self.mem['KLAMPO117']['Val'],
-            'PZRProHeaterPos': self.mem['QPRZH']['Val'],
+            'PZRProHeaterPos': self.mem['BHV22']['Val'],
 
             # CSF 1 Value 미임계 상태 추적도
             'PowerRange': self.mem['ZINST1']['Val'], 'IntermediateRange': self.mem['ZINST2']['Val'],
@@ -298,7 +299,51 @@ class ENVCNS(CNS):
                     if ACT == 6: self._send_control_save(ActOrderBook['StopCHP2'])
 
         # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
-
+        if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+            if AMod == 0: pass
+            if AMod == 0.1:
+                if V['PZRSprayPos'] >= 25.0:
+                    AMod = 0
+                else:
+                    self._send_control_save(ActOrderBook['PZRSprayOpen'])
+            if AMod == 0.2:
+                if V['PZRSprayPos'] == 0:
+                    AMod = 0
+                else:
+                    self._send_control_save(ActOrderBook['PZRSprayClose'])
+            if AMod == 0.3:
+                if V['AllSGFeed'] >= 73:
+                    AMod = 0
+                else:
+                    self._send_control_save(ActOrderBook['UpAllAux'])
+            if AMod == 0.4:
+                if V['AllSGFeed'] == 0:
+                    AMod = 0
+                else:
+                    if V['SG1Nar'] > 6 and V['SG2Nar'] > 6 and V['SG3Nar'] > 6:
+                        self._send_control_save(ActOrderBook['DownAllAux'])
+                    else:
+                        AMod = 0
+            if AMod == 0.5:
+                if V['PZRLevel'] > 40:
+                    AMod = 0
+                else:
+                    if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                        AMod = 0
+                    elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0:
+                        self._send_control_save(ActOrderBook['RunCHP2'])
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                        self._send_control_save(ActOrderBook['OpenSI'])
+            if AMod == 0.6:
+                if V['PZRLevel'] < 18:
+                    AMod = 0
+                else:
+                    if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                        AMod = 0
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
+                        self._send_control_save(ActOrderBook['CloseSI'])
+                    elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                        self._send_control_save(ActOrderBook['StopCHP2'])
         # -------------------------------------------------------------------------------------------------------
         # CSF 1 Act
         if CSF_level[0] != 0: DIS_CSF_Info += f'1: {CSF_level[0]} \t'
@@ -333,7 +378,7 @@ class ENVCNS(CNS):
         # -------------------------------------------------------------------------------------------------------
         # Done Act
         self._send_control_to_cns()
-        return AMod
+        return [AMod]
 
     def step(self, A):
         """
@@ -358,7 +403,7 @@ class ENVCNS(CNS):
         self.ENVStep += 1
 
         reward = self.get_reward()
-        done = self.get_done()
+        done, reward = self.get_done(reward)
         next_state = self.get_state()
 
         self.ENVlogging(s=self.Loger_txt)
