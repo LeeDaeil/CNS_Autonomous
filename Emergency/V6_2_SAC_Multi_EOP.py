@@ -354,21 +354,22 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
                 action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
             else:
                 action = sac_trainer.policy_net.sample_action()
+            print(action)
 
-            if action >= 0.6:
-                action = [0.6]
-            elif 0.5 <= action < 0.6:
-                action = [0.5]
-            elif 0.4 <= action < 0.5:
-                action = [0.4]
-            elif 0.3 <= action < 0.4:
-                action = [0.3]
-            elif 0.2 <= action < 0.3:
-                action = [0.2]
-            elif 0.1 <= action < 0.2:
-                action = [0.1]
-            elif action < 0.1:
-                action = [0]
+            # if action >= 0.6:
+            #     action = [0.6]
+            # elif 0.5 <= action < 0.6:
+            #     action = [0.5]
+            # elif 0.4 <= action < 0.5:
+            #     action = [0.4]
+            # elif 0.3 <= action < 0.4:
+            #     action = [0.3]
+            # elif 0.2 <= action < 0.3:
+            #     action = [0.2]
+            # elif 0.1 <= action < 0.2:
+            #     action = [0.1]
+            # elif action < 0.1:
+            #     action = [0]
 
             try:
                 if ENV == 'Pendulum':

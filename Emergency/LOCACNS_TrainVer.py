@@ -51,7 +51,7 @@ class ENVCNS(CNS):
             ('ZINST63',  1, 0,   100),     # PZRLevel
         ]
 
-        self.action_space = 1
+        self.action_space = 3       # TODO 1개에서 > 3개 "가압기 제어", "보조급수 제어", "SI 유량 제어"
         self.observation_space = len(self.input_info)
 
         # GP
@@ -125,9 +125,13 @@ class ENVCNS(CNS):
             self._send_control_save(['KSWO115'], [0])
             ...
             self._send_control_to_cns()
-        :param A: A 액션 [0]
+        :param A: A 액션 [0, 0, 0] <- act space에 따라서
         :return: AMod: 수정된 액션
         """
+        # -------------------------------------------------------------------------------------------------------
+        # AMod = A[0]  # A는 리스트 값으로 0번째 값 추출
+        AMod = A
+        # -------------------------------------------------------------------------------------------------------
         ActOrderBook = {
             'StopAllRCP': (['KSWO132', 'KSWO133', 'KSWO134'], [0, 0, 0]),
             'StopRCP1': (['KSWO132'], [0]),
@@ -175,7 +179,6 @@ class ENVCNS(CNS):
 
             'ResetSI': (['KSWO7', 'KSWO5'], [1, 1]),
         }
-        AMod = A[0] # A는 리스트 값으로 0번째 값 추출
         # Order Book
         # -------------------------------------------------------------------------------------------------------
         # def check_CSFTree()
@@ -338,61 +341,100 @@ class ENVCNS(CNS):
                     if ACT == 5: self._send_control_save(ActOrderBook['RunCHP2'])
                     if ACT == 6: self._send_control_save(ActOrderBook['StopCHP2'])
         # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
-        if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
-            # 1] 선택한 액션의 적합성을 판단하고 램덤으로 재 샘플링
-            if AMod == 0:
-                pass
-            else:
-                while True:
-                    AMod = random.randint(0, 6)/10      # [0 ... 0.6]
-                    if AMod == 0: break
-                    if AMod == 0.1 and V['PZRSprayPos'] < 25.0: break
-                    if AMod == 0.2 and V['PZRSprayPos'] != 0: break
-                    if AMod == 0.3 and V['AllSGFeed'] < 73: break
-                    if AMod == 0.4:
-                        if not V['AllSGFeed'] == 0:
-                            if V['SG1Nar'] > 6 and V['SG2Nar'] > 6 and V['SG3Nar'] > 6:
-                                break
-                    if AMod == 0.5:
-                        if V['PZRLevel'] > 40: pass
-                        else:
-                            if V['ChargingPump2State'] == 1 and V['SIValve'] == 1: pass
-                            elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0: break
-                            elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0: break
-                    if AMod == 0.6:
-                        if V['PZRLevel'] < 18: pass
-                        else:
-                            if V['ChargingPump2State'] == 0 and V['SIValve'] == 0: pass
-                            elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1: break
-                            elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1: break
-            # 2] 최종적으로 제어 보내기
-            if AMod == 0: pass
-            if AMod == 0.1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
-            if AMod == 0.2: self._send_control_save(ActOrderBook['PZRSprayClose'])
-            if AMod == 0.3: self._send_control_save(ActOrderBook['UpAllAux'])
-            if AMod == 0.4: self._send_control_save(ActOrderBook['DownAllAux'])
-            if AMod == 0.5:
-                if V['PZRLevel'] > 40:
-                    AMod = 0
+        V6_2_1 = False
+        V6_2_2 = True
+        if V6_2_1:  # TODO 돌리려면 AMod = Act[0] 하고 마지막 return [AMod] 써야함.
+            if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+                # 1] 선택한 액션의 적합성을 판단하고 램덤으로 재 샘플링
+                if AMod == 0:
+                    pass
                 else:
-                    if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                    while True:
+                        AMod = random.randint(0, 6)/10      # [0 ... 0.6]
+                        if AMod == 0: break
+                        if AMod == 0.1 and V['PZRSprayPos'] < 25.0: break
+                        if AMod == 0.2 and V['PZRSprayPos'] != 0: break
+                        if AMod == 0.3 and V['AllSGFeed'] < 73: break
+                        if AMod == 0.4:
+                            if not V['AllSGFeed'] == 0:
+                                if V['SG1Nar'] > 6 and V['SG2Nar'] > 6 and V['SG3Nar'] > 6:
+                                    break
+                        if AMod == 0.5:
+                            if V['PZRLevel'] > 40: pass
+                            else:
+                                if V['ChargingPump2State'] == 1 and V['SIValve'] == 1: pass
+                                elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0: break
+                                elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0: break
+                        if AMod == 0.6:
+                            if V['PZRLevel'] < 18: pass
+                            else:
+                                if V['ChargingPump2State'] == 0 and V['SIValve'] == 0: pass
+                                elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1: break
+                                elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1: break
+                # 2] 최종적으로 제어 보내기
+                if AMod == 0: pass
+                if AMod == 0.1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                if AMod == 0.2: self._send_control_save(ActOrderBook['PZRSprayClose'])
+                if AMod == 0.3: self._send_control_save(ActOrderBook['UpAllAux'])
+                if AMod == 0.4: self._send_control_save(ActOrderBook['DownAllAux'])
+                if AMod == 0.5:
+                    if V['PZRLevel'] > 40:
                         AMod = 0
+                    else:
+                        if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                            AMod = 0
+                        elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0:
+                            self._send_control_save(ActOrderBook['RunCHP2'])
+                        elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                            self._send_control_save(ActOrderBook['OpenSI'])
+                if AMod == 0.6:
+                    if V['PZRLevel'] < 18:
+                        AMod = 0
+                    else:
+                        if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                            AMod = 0
+                        elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
+                            self._send_control_save(ActOrderBook['CloseSI'])
+                        elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                            self._send_control_save(ActOrderBook['StopCHP2'])
+            else:
+                AMod = 0
+        if V6_2_2:
+            if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+                # 1] Continuous 값을 Discrete 값으로 변경
+                AMod_ = [] # [1, 0, 0] 형식으로 저장됨
+                for A in AMod:
+                    if A >= 0.4:
+                        AMod_.append(1)
+                    elif -0.4 <= A < 0.4:
+                        AMod_.append(0)
+                    else:
+                        AMod_.append(-1)
+                AMod = AMod_
+                # 2] 액션 스페이스는 줄이지 않고 수행해보기
+                if AMod[0] == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                if AMod[0] == 0: pass
+                if AMod[0] == -1: self._send_control_save(ActOrderBook['PZRSprayClose'])
+                if AMod[1] == 1: self._send_control_save(ActOrderBook['UpAllAux'])
+                if AMod[1] == 0: pass
+                if AMod[1] == -1: self._send_control_save(ActOrderBook['DownAllAux'])
+                if AMod[2] == 1:
+                    if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                        pass
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0:
                         self._send_control_save(ActOrderBook['RunCHP2'])
                     elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
                         self._send_control_save(ActOrderBook['OpenSI'])
-            if AMod == 0.6:
-                if V['PZRLevel'] < 18:
-                    AMod = 0
-                else:
+                if AMod[2] == 0: pass
+                if AMod[2] == -1:
                     if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
-                        AMod = 0
+                        pass
                     elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['CloseSI'])
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['StopCHP2'])
-        else:
-            AMod = 0
+            else:
+                AMod = [0, 0, 0]
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
         self.Loger_txt += f'{AMod}\t'
         # -------------------------------------------------------------------------------------------------------
@@ -429,7 +471,7 @@ class ENVCNS(CNS):
         # -------------------------------------------------------------------------------------------------------
         # Done Act
         self._send_control_to_cns()
-        return [AMod]
+        return AMod
 
     def step(self, A):
         """
