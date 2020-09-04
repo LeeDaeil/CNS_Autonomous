@@ -21,7 +21,34 @@ class ENVCNS(CNS):
         self.Loger_txt = ''
 
         self.input_info = [
-            ('ZINST78', 1000)
+            # (para, x_round, x_min, x_max)
+            ('ZINST98',  1, 0,   100),     # SteamDumpPos
+            ('ZINST87',  1, 0,   50),      # Steam Flow 1
+            ('ZINST86',  1, 0,   50),      # Steam Flow 2
+            ('ZINST85',  1, 0,   50),      # Steam Flow 3
+            ('KLAMPO70', 1, 0,   0),       # Charging Pump2 State
+            ('BHV22',    1, 0,   0),       # SI Valve State
+            ('ZINST66',  1, 0,   25),      # PZRSprayPos
+            ('UAVLEG2',  1, 150, 320),     # PTTemp
+            ('ZINST65',  1, 0,   160),     # PTPressure
+            ('ZINST78',  1, 0,   70),      # SG1Nar
+            ('ZINST77',  1, 0,   70),      # SG2Nar
+            ('ZINST76',  1, 0,   70),      # SG3Nar
+            ('ZINST75',  1, 0,   80),      # SG1Pres
+            ('ZINST74',  1, 0,   80),      # SG2Pres
+            ('ZINST73',  1, 0,   80),      # SG3Pres
+            ('ZINST72',  1, 0,   100),     # SG1Wid
+            ('ZINST71',  1, 0,   100),     # SG2Wid
+            ('ZINST70',  1, 0,   100),     # SG3Wid
+            ('UUPPPL',   1, 100, 350),     # CoreExitTemp
+            ('WFWLN1',   1, 0,   25),      # SG1Feed
+            ('WFWLN2',   1, 0,   25),      # SG2Feed
+            ('WFWLN3',   1, 0,   25),      # SG3Feed
+            ('UCOLEG1',  1, 100, 0),       # RCSColdLoop1
+            ('UCOLEG2',  1, 100, 0),       # RCSColdLoop2
+            ('UCOLEG3',  1, 100, 0),       # RCSColdLoop3
+            ('ZINST65',  1, 0,   160),     # RCSPressure
+            ('ZINST63',  1, 0,   100),     # PZRLevel
         ]
 
         self.action_space = 1
@@ -42,9 +69,21 @@ class ENVCNS(CNS):
             with open(f'{self.Name}.txt', 'a') as f:
                 f.write(f'[{cr_time}] {self.Loger_txt}\n')
 
+    def normalize(self, x, x_round, x_min, x_max):
+        if x_max == 0 and x_min == 0:
+            # It means X value is not normalized.
+            x = x / x_round
+        else:
+            x = x_max if x >= x_max else x
+            x = x_min if x <= x_min else x
+            x = (x - x_min) / (x_max - x_min)
+        return x
+
     def get_state(self):
-        state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
-        # self.Loger_txt += f'{np.array(state)}\t'
+        state = [self.normalize(self.mem[para]['Val'], x_round, x_min, x_max) for
+                 para, x_round, x_min, x_max in self.input_info]
+        # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
+        self.Loger_txt += f'{state}\t'
         return np.array(state)
 
     def get_reward(self):
@@ -210,8 +249,8 @@ class ENVCNS(CNS):
             'CSF6': CSFTree.CSF6(V['Trip'], V['PZRLevel'])
         }
         CSF_level = [CSF[_]['L'] for _ in CSF.keys()]
-        self.Loger_txt += f'{CSF}\t'
-        self.Loger_txt += f'{CSF_level}\t'
+        # self.Loger_txt += f'{CSF}\t'
+        # self.Loger_txt += f'{CSF_level}\t'
         self.DIS_CSF_Info = f"[{V['CNSTime']}]\t"
         # -------------------------------------------------------------------------------------------------------
         # 자동 액션
@@ -355,6 +394,7 @@ class ENVCNS(CNS):
         else:
             AMod = 0
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
+        self.Loger_txt += f'{AMod}\t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 1 Act
         if CSF_level[0] != 0: self.DIS_CSF_Info += f'1: {CSF_level[0]} \t'
