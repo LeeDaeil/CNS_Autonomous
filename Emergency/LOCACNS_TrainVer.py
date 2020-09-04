@@ -62,6 +62,7 @@ class ENVCNS(CNS):
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
+        self.DIS_CSF_Info += f'[R: {r}]\t'
         return r
 
     def get_done(self, r):
@@ -211,7 +212,7 @@ class ENVCNS(CNS):
         CSF_level = [CSF[_]['L'] for _ in CSF.keys()]
         self.Loger_txt += f'{CSF}\t'
         self.Loger_txt += f'{CSF_level}\t'
-        DIS_CSF_Info = f"[{V['CNSTime']}][{AMod}] \t"
+        self.DIS_CSF_Info = f"[{V['CNSTime']}]\t"
         # -------------------------------------------------------------------------------------------------------
         # 자동 액션
         if V['Trip'] == 1:
@@ -274,7 +275,7 @@ class ENVCNS(CNS):
                 # -------------------------------------------------------------------------------------------
                 # 강화학습 제어 파트
                 # 2.4] TEST 모듈
-                TEST = True
+                TEST = False
                 if TEST:
                     # Check ACT input
                     while True:
@@ -297,33 +298,40 @@ class ENVCNS(CNS):
                     if ACT == 4: self._send_control_save(ActOrderBook['DownAllAux'])
                     if ACT == 5: self._send_control_save(ActOrderBook['RunCHP2'])
                     if ACT == 6: self._send_control_save(ActOrderBook['StopCHP2'])
-
         # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
         if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+            # 1] 선택한 액션의 적합성을 판단하고 램덤으로 재 샘플링
+            if AMod == 0:
+                pass
+            else:
+                while True:
+                    AMod = random.randint(0, 6)/10      # [0 ... 0.6]
+                    if AMod == 0: break
+                    if AMod == 0.1 and V['PZRSprayPos'] < 25.0: break
+                    if AMod == 0.2 and V['PZRSprayPos'] != 0: break
+                    if AMod == 0.3 and V['AllSGFeed'] < 73: break
+                    if AMod == 0.4:
+                        if not V['AllSGFeed'] == 0:
+                            if V['SG1Nar'] > 6 and V['SG2Nar'] > 6 and V['SG3Nar'] > 6:
+                                break
+                    if AMod == 0.5:
+                        if V['PZRLevel'] > 40: pass
+                        else:
+                            if V['ChargingPump2State'] == 1 and V['SIValve'] == 1: pass
+                            elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0: break
+                            elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0: break
+                    if AMod == 0.6:
+                        if V['PZRLevel'] < 18: pass
+                        else:
+                            if V['ChargingPump2State'] == 0 and V['SIValve'] == 0: pass
+                            elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1: break
+                            elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1: break
+            # 2] 최종적으로 제어 보내기
             if AMod == 0: pass
-            if AMod == 0.1:
-                if V['PZRSprayPos'] >= 25.0:
-                    AMod = 0
-                else:
-                    self._send_control_save(ActOrderBook['PZRSprayOpen'])
-            if AMod == 0.2:
-                if V['PZRSprayPos'] == 0:
-                    AMod = 0
-                else:
-                    self._send_control_save(ActOrderBook['PZRSprayClose'])
-            if AMod == 0.3:
-                if V['AllSGFeed'] >= 73:
-                    AMod = 0
-                else:
-                    self._send_control_save(ActOrderBook['UpAllAux'])
-            if AMod == 0.4:
-                if V['AllSGFeed'] == 0:
-                    AMod = 0
-                else:
-                    if V['SG1Nar'] > 6 and V['SG2Nar'] > 6 and V['SG3Nar'] > 6:
-                        self._send_control_save(ActOrderBook['DownAllAux'])
-                    else:
-                        AMod = 0
+            if AMod == 0.1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
+            if AMod == 0.2: self._send_control_save(ActOrderBook['PZRSprayClose'])
+            if AMod == 0.3: self._send_control_save(ActOrderBook['UpAllAux'])
+            if AMod == 0.4: self._send_control_save(ActOrderBook['DownAllAux'])
             if AMod == 0.5:
                 if V['PZRLevel'] > 40:
                     AMod = 0
@@ -344,16 +352,19 @@ class ENVCNS(CNS):
                         self._send_control_save(ActOrderBook['CloseSI'])
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['StopCHP2'])
+        else:
+            AMod = 0
+        self.DIS_CSF_Info += f'[A:{AMod}]\t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 1 Act
-        if CSF_level[0] != 0: DIS_CSF_Info += f'1: {CSF_level[0]} \t'
+        if CSF_level[0] != 0: self.DIS_CSF_Info += f'1: {CSF_level[0]} \t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 2 Act
-        if CSF_level[1] != 0: DIS_CSF_Info += f'2: {CSF_level[1]} \t'
+        if CSF_level[1] != 0: self.DIS_CSF_Info += f'2: {CSF_level[1]} \t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 3 Act
         if CSF_level[2] != 0:
-            DIS_CSF_Info += f'3: {CSF_level[2]} \t'
+            self.DIS_CSF_Info += f'3: {CSF_level[2]} \t'
 
             if CSF_level[2] == 3:  # All Aux <= 33
                 if V['AllSGFeed'] <= 33:
@@ -365,16 +376,16 @@ class ENVCNS(CNS):
                     if LowSGNub == 2: self._send_control_save(ActOrderBook['IncreaseAux3Flow'])
         # -------------------------------------------------------------------------------------------------------
         # CSF 4 Act
-        if CSF_level[3] != 0: DIS_CSF_Info += f'4: {CSF_level[3]} \t'
+        if CSF_level[3] != 0: self.DIS_CSF_Info += f'4: {CSF_level[3]} \t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 5 Act
-        if CSF_level[4] != 0: DIS_CSF_Info += f'5: {CSF_level[4]} \t'
+        if CSF_level[4] != 0: self.DIS_CSF_Info += f'5: {CSF_level[4]} \t'
         # -------------------------------------------------------------------------------------------------------
         # CSF 6 Act
-        if CSF_level[5] != 0: DIS_CSF_Info += f'6: {CSF_level[5]} \t'
+        if CSF_level[5] != 0: self.DIS_CSF_Info += f'6: {CSF_level[5]} \t'
         # -------------------------------------------------------------------------------------------------------
         # CSF info DIS
-        print(DIS_CSF_Info)
+        # print(self.DIS_CSF_Info)
         # -------------------------------------------------------------------------------------------------------
         # Done Act
         self._send_control_to_cns()
@@ -409,6 +420,10 @@ class ENVCNS(CNS):
         self.ENVlogging(s=self.Loger_txt)
         # self.Loger_txt = f'{next_state}\t'
         self.Loger_txt = ''
+
+        # -------------------------------------------------------------------------------------------------------
+        print(self.DIS_CSF_Info)
+        # -------------------------------------------------------------------------------------------------------
         return next_state, reward, done, AMod
 
     def reset(self, file_name):
