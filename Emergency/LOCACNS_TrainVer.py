@@ -93,11 +93,14 @@ class ENVCNS(CNS):
             V = {
                 'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
                 'CurrentTemp': self.mem['UAVLEG2']['Val'],
-                'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val'])
+                'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
+                'PZRLevel': self.mem['ZINST63']['Val']
             }
             # Cooling rate에 따라서 온도 감소
             r -= V['Dis'] / 100
             self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
+            # 가압기 수위 10 아래 종료
+            # if V['PZRLevel'] <= 10:  r -= 100
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
@@ -411,6 +414,10 @@ class ENVCNS(CNS):
                     else:
                         AMod_.append(-1)
                 AMod = AMod_
+                # 1.1] 가압기 10 아래면 무조건 CHP 2 on, HV Open
+                if V['PZRLevel'] <= 10:
+                    AMod[2] = 1
+
                 # 2] 액션 스페이스는 줄이지 않고 수행해보기
                 if AMod[0] == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
                 if AMod[0] == 0: pass
@@ -520,8 +527,15 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.ENVGetSIReset = False
-        # 5 FIX RADVAL
+        # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
+        # 6] 초반에 제어의 의미가 없어 보임. 실제 냉각이 필요한 제어부분까지 진행
+        while True:
+            if self.mem['KLAMPO9']['Val'] == 1 and self.mem['KLAMPO6']['Val'] == 0 \
+                    and self.mem['KLAMPO3']['Val'] == 0 and self.mem['KCNTOMS']['Val'] > 5 * 60 * 5:
+                break
+            else:
+                state, _, _, _ = self.step([0, 0, 0])
         return state
 
 

@@ -467,7 +467,7 @@ if __name__ == '__main__':
         action_range = 1.
 
     # hyper-parameters for RL training, no need for sharing across processes
-    max_episodes = 1000
+    max_episodes = 10000
     max_steps = 350 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     # max_steps = 12 if ENV == 'CNS' else 10  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     batch_size = 128
@@ -477,7 +477,7 @@ if __name__ == '__main__':
     AUTO_ENTROPY = True
     DETERMINISTIC = False
     hidden_dim = 512
-    model_path = './model/sac_v2_multi'
+    model_path = './model'
 
     sac_trainer = SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range)
 
