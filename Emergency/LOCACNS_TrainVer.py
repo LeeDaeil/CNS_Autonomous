@@ -87,20 +87,31 @@ class ENVCNS(CNS):
         return np.array(state)
 
     def get_reward(self):
+        # Ver list
+        self.Verlist = {
+            '1': False,
+            '2': True
+        }
         # --------------------------------- NEW ----
         r = 0
         if self.ENVGetSIReset:
             V = {
                 'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
                 'CurrentTemp': self.mem['UAVLEG2']['Val'],
+                'CurrentPres': self.mem['ZINST65']['Val'],
                 'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
                 'PZRLevel': self.mem['ZINST63']['Val']
             }
-            # Cooling rate에 따라서 온도 감소
-            r -= V['Dis'] / 100
+            if self.Verlist['1']:
+                # Cooling rate에 따라서 온도 감소
+                r -= V['Dis'] / 100
+                # 가압기 수위 10 아래 종료
+                # if V['PZRLevel'] <= 10:  r -= 100
+            if self.Verlist['2']:
+                # 목표치까지 도달
+                r += (29.5 - V['CurrentPres']) / 100
+                r += (170 - V['CurrentTemp']) / 100
             self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
-            # 가압기 수위 10 아래 종료
-            # if V['PZRLevel'] <= 10:  r -= 100
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
@@ -108,13 +119,29 @@ class ENVCNS(CNS):
         return r
 
     def get_done(self, r):
-        if self.AcumulatedReward < -100:
-            d = True
-        elif self.mem['KCNTOMS']['Val'] == 38000:
-            d = True
-            r = 1
-        else:
-            d = False
+        if self.Verlist['1']:
+            if self.AcumulatedReward < -100:
+                d = True
+            elif self.mem['KCNTOMS']['Val'] == 38000:
+                d = True
+                r = 1
+            else:
+                d = False
+
+        if self.Verlist['2']:
+            # 압력이 너무 아래까지 가는 것을 방지
+            if self.mem['ZINST65']['Val'] <= 17:
+                d = True
+                r = -1
+
+            if self.mem['KCNTOMS']['Val'] == 38000:
+                d = True
+                if 17 < self.mem['ZINST65']['Val'] < 29.5 and self.mem['UAVLEG2']['Val'] <= 170:
+                    r = 1
+                else:
+                    r = -1
+
+
         # self.Loger_txt += f'{d}\t'
         return d, r
 
