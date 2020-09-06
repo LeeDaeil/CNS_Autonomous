@@ -428,7 +428,7 @@ class ENVCNS(CNS):
                 if AMod[2] == 1:
                     if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         pass
-                    elif V['ChargingPump2State'] == 1 and V['SIValve'] == 0:
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['RunCHP2'])
                     elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
                         self._send_control_save(ActOrderBook['OpenSI'])
