@@ -3,6 +3,7 @@ from CNS_UDP_FAST import CNS
 import numpy as np
 import time
 import random
+import copy
 import matplotlib.pylab as plt
 
 
@@ -106,6 +107,7 @@ class ENVCNS(CNS):
             if self.Verlist['1']:
                 # Cooling rate에 따라서 온도 감소
                 r -= V['Dis'] / 100
+                print(V['CurrentTemp'], V['Dis'])
                 # 가압기 수위 10 아래 종료
                 # if V['PZRLevel'] <= 10:  r -= 100
             if self.Verlist['2']:
@@ -121,14 +123,15 @@ class ENVCNS(CNS):
 
     def get_done(self, r):
         if self.Verlist['1']:
-            if self.AcumulatedReward < -100:
-                d = True
-            elif self.mem['KCNTOMS']['Val'] == 38000:
-                d = True
-                r = 1
-            else:
-                d = False
-        if self.Verlist['2']:
+            pass
+            # if self.AcumulatedReward < -100:
+            #     d = True
+            # elif self.mem['KCNTOMS']['Val'] == 38000:
+            #     d = True
+            #     r = 1
+            # else:
+            #     d = False
+        if self.Verlist['2'] or self.Verlist['1']:
             # 압력이 너무 아래까지 가는 것을 방지
             if self.mem['ZINST65']['Val'] <= 17:
                 d = True
@@ -321,9 +324,11 @@ class ENVCNS(CNS):
             # 2] SI reset 발생 시 (냉각 운전 시작)
             if V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
                 # 2.0] Build Cooling rate function
-                if not self.ENVGetSIReset:
+                if self.ENVGetSIReset == False:
                     rate = -55 / (60 * 60 * 5)
-                    self.DRateFun = lambda t: rate * (t - V['CNSTime']) + self.mem['UAVLEG2']['Val']
+                    self.FixedTemp = copy.deepcopy(self.mem['UAVLEG2']['Val'])  # 변수의 Follow up 방지
+                    self.FixedTime = copy.deepcopy(self.mem['KCNTOMS']['Val'])  # 변수의 Follow up 방지
+                    self.DRateFun = lambda t: rate * (t - self.FixedTime) + self.FixedTemp
                     self.ENVGetSIReset = True
 
                 # 2.0] Press set-point 를 현재 최대 압력 기준까지 조절
@@ -574,6 +579,8 @@ class ENVCNS(CNS):
         self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
+        self.FixedTime = 0
+        self.FixedTemp = 0
         # 6] 초반에 제어의 의미가 없어 보임. 실제 냉각이 필요한 제어부분까지 진행
         while True:
             if self.mem['KLAMPO9']['Val'] == 1 and self.mem['KLAMPO6']['Val'] == 0 \
