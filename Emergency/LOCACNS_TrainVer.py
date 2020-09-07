@@ -7,10 +7,11 @@ import matplotlib.pylab as plt
 
 
 class ENVCNS(CNS):
-    def __init__(self, Name, IP, PORT):
+    def __init__(self, Name, IP, PORT, Monitoring_ENV = None):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT, Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
-        self.Name = Name
+        self.Monitoring_ENV = Monitoring_ENV
+        self.Name = Name # = id
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
@@ -127,7 +128,6 @@ class ENVCNS(CNS):
                 r = 1
             else:
                 d = False
-
         if self.Verlist['2']:
             # 압력이 너무 아래까지 가는 것을 방지
             if self.mem['ZINST65']['Val'] <= 17:
@@ -144,7 +144,6 @@ class ENVCNS(CNS):
                     r = -1
             else:
                 d = False
-
 
         # self.Loger_txt += f'{d}\t'
         return d, r
@@ -524,10 +523,10 @@ class ENVCNS(CNS):
         # GOTICK = input("Want Tick : ")
         # self.want_tick = int(GOTICK)
 
-        # self.pl.plot([self.mem['UAVLEG2']['Val'], self.mem['KCNTOMS']['Val'], self.mem['ZINST65']['Val'],
-        #               self.mem['KLAMPO6']['Val'], self.mem['KLAMPO9']['Val']])
-
-        # self.pl2.plot([self.mem['KCNTOMS']['Val'], self.mem['KCNTOMS']['Val']])
+        self.Monitoring_ENV.push_ENV_val(i=self.Name,
+                                         Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
+                                                   ['UAVLEG2', 'KCNTOMS', 'ZINST65', 'KLAMPO6', 'KLAMPO9']}
+                                         )
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
         self._append_val_to_list()
@@ -535,6 +534,9 @@ class ENVCNS(CNS):
 
         reward = self.get_reward()
         done, reward = self.get_done(reward)
+        self.Monitoring_ENV.push_ENV_reward(i=self.Name,
+                                            Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
+
         next_state = self.get_state()
 
         self.ENVlogging(s=self.Loger_txt)
@@ -558,6 +560,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.ENVGetSIReset = False
+        self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         # 6] 초반에 제어의 의미가 없어 보임. 실제 냉각이 필요한 제어부분까지 진행

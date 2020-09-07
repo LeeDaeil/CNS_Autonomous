@@ -10,6 +10,7 @@ import random
 
 import gym
 import numpy as np
+import time
 
 import torch
 
@@ -29,6 +30,7 @@ from multiprocessing.managers import BaseManager
 
 # from Emergency.LOCACNS import ENVCNS
 from Emergency.LOCACNS_TrainVer import ENVCNS
+from MONITORINGTOOL import MonitoringMEM, Monitoring
 
 GPU = False
 device_idx = 0
@@ -67,9 +69,6 @@ class ReplayBuffer:
         np.stack((1,2)) => array([1, 2])
         '''
         return state, action, reward, next_state, done
-
-    def __len__(self):  # cannot work in multiprocessing case, len(replay_buffer) is not available in proxy of manager!
-        return len(self.buffer)
 
     def get_length(self):
         return len(self.buffer)
@@ -308,7 +307,7 @@ class SAC_Trainer():
         self.policy_net.eval()
 
 
-def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
+def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Monitoring_ENV, \
            replay_buffer, max_episodes, max_steps, batch_size, explore_steps, \
            update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path):
     '''
@@ -323,7 +322,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
         state_dim = env.observation_space.shape[0]
         action_range = 1.
     elif ENV == 'CNS':
-        env = ENVCNS(Name=id, IP='192.168.0.103', PORT=int(f'710{id + 1}'))
+        env = ENVCNS(Name=id, IP='192.168.0.103', PORT=int(f'710{id + 1}'), Monitoring_ENV=Monitoring_ENV)
         action_dim = env.action_space
         state_dim = env.observation_space
         action_range = 1.
@@ -423,12 +422,19 @@ def plot(rewards, name):
 
 if __name__ == '__main__':
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
+    num_workers = 3  # mp.cpu_count()    # TODO
+
     BaseManager.register('ReplayBuffer', ReplayBuffer)
+    BaseManager.register('MonitoringMEM', MonitoringMEM)
+
     manager = BaseManager()
     manager.start()
 
     replay_buffer_size = 1e6
     replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
+    #
+
+    Monitoring_ENV = manager.MonitoringMEM(num_workers)
 
     # choose env
     ENV = ['Pendulum', 'CNS'][1]
@@ -475,20 +481,26 @@ if __name__ == '__main__':
     q2_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
     p_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
 
-    num_workers = 3  # mp.cpu_count()    # TODO
     processes = []
     rewards = []
     q1_q = []
     q2_q = []
     p_q = []
 
+
     for i in range(num_workers):
         process = Process(target=worker, args=(
-            i, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
+            i, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Monitoring_ENV,
             replay_buffer, max_episodes, max_steps, batch_size, explore_steps,
             update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
+
         processes.append(process)
+
+    # MoProcess = Process(target=Monitoring, args=(Monitoring_ENV, ), daemon=True)
+    # processes.append(MoProcess)
+    if ENV == 'CNS':
+        processes.append(Monitoring(Monitoring_ENV=Monitoring_ENV))
 
     [p.start() for p in processes]
     while True:  # keep geting the episode reward from the queue
@@ -497,7 +509,7 @@ if __name__ == '__main__':
             if GetedQu is not None:
                 Qu_box.append(GetedQu)
             else:
-                break
+                pass
 
         if len(rewards) % 20 == 0 and len(rewards) > 0:
             plot(rewards, name=f'{len(rewards)}R')
