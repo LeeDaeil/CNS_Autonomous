@@ -286,8 +286,8 @@ class SAC_Trainer():
         policy_loss.backward()
         self.policy_optimizer.step()
 
-        print('q loss: ', q_value_loss1, q_value_loss2)
-        print('policy loss: ', policy_loss)
+        # print('q loss: ', q_value_loss1, q_value_loss2)
+        # print('policy loss: ', policy_loss)
 
         # Soft update the target value net
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
@@ -354,7 +354,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
                 action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
             else:
                 action = sac_trainer.policy_net.sample_action()
-            print(action)
+            # print(action)
 
             # if action >= 0.6:
             #     action = [0.6]
@@ -394,8 +394,8 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
                     _, episode_q1, episode_q2, episode_p = sac_trainer.update(batch_size,
                                                                               reward_scale=10., auto_entropy=AUTO_ENTROPY,
                                                                               target_entropy=-1. * action_dim)
-                    print(episode_q1, episode_q2, episode_p)
-                    print(type(episode_q1), type(episode_q2), type(episode_p))
+                    # print(episode_q1, episode_q2, episode_p)
+                    # print(type(episode_q1), type(episode_q2), type(episode_p))
                     episode_q1 += episode_q1
                     episode_q2 += episode_q2
                     episode_p += episode_p
@@ -498,7 +498,7 @@ if __name__ == '__main__':
     q2_queue = mp.Queue()        # used for get rewards from all processes and plot the curve
     p_queue = mp.Queue()        # used for get rewards from all processes and plot the curve
 
-    num_workers = 1 # mp.cpu_count()
+    num_workers = 3 # mp.cpu_count()    # TODO
     processes = []
     rewards = []
     q1_q = []

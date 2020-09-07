@@ -3,7 +3,16 @@ import numpy as np
 import pandas as pd
 from COMMONTOOL import PTCureve
 
-DB = pd.read_csv('324.txt')
+# DB = pd.read_csv('130.txt')
+DB = pd.read_csv('../3차 검증/322.txt')
+
+
+# target_time = 100
+# for i in range(0, len(DB)):
+#     if DB['KCNTOMS'].loc[i] != target_time:
+#         DB.drop([i], inplace=True)
+#     else:
+#         target_time += 100
 
 
 x, y, z, zero = [], [], [], []

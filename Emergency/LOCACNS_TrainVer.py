@@ -133,6 +133,8 @@ class ENVCNS(CNS):
             if self.mem['ZINST65']['Val'] <= 17:
                 d = True
                 r = -1
+            else:
+                d = False
 
             if self.mem['KCNTOMS']['Val'] == 38000:
                 d = True
@@ -140,6 +142,8 @@ class ENVCNS(CNS):
                     r = 1
                 else:
                     r = -1
+            else:
+                d = False
 
 
         # self.Loger_txt += f'{d}\t'
