@@ -501,6 +501,7 @@ if __name__ == '__main__':
     # processes.append(MoProcess)
     if ENV == 'CNS':
         processes.append(Monitoring(Monitoring_ENV=Monitoring_ENV))
+        pass
 
     [p.start() for p in processes]
     while True:  # keep geting the episode reward from the queue

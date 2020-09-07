@@ -52,7 +52,7 @@ class ENVCNS(CNS):
             ('ZINST63',  1, 0,   100),     # PZRLevel
         ]
 
-        self.action_space = 3       # TODO 1개에서 > 3개 "가압기 제어", "보조급수 제어", "SI 유량 제어"
+        self.action_space = 4       # TODO 1개에서 > 4개 "가압기 제어", "보조급수 제어", "SI 유량 제어", "덤프밸브"
         self.observation_space = len(self.input_info)
 
         # GP
@@ -90,8 +90,8 @@ class ENVCNS(CNS):
     def get_reward(self):
         # Ver list
         self.Verlist = {
-            '1': False,
-            '2': True
+            '1': True,
+            '2': False
         }
         # --------------------------------- NEW ----
         r = 0
@@ -329,8 +329,10 @@ class ENVCNS(CNS):
                 # 2.0] Press set-point 를 현재 최대 압력 기준까지 조절
                 # Steam dump Auto
                 if V['SteamDumpManAuto'] == 0:      self._send_control_save(ActOrderBook['SteamDumpMan'])
-                if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
-                    self._send_control_save(ActOrderBook['SteamDumpDown'])
+                # 변수 업!
+                # if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
+                #     self._send_control_save(ActOrderBook['SteamDumpDown'])
+
                 # Steam Line up
                 if V['SteamLine1'] == 0:            self._send_control_save(ActOrderBook['SteamLine1Open'])
                 if V['SteamLine2'] == 0:            self._send_control_save(ActOrderBook['SteamLine2Open'])
@@ -470,6 +472,15 @@ class ENVCNS(CNS):
                         self._send_control_save(ActOrderBook['CloseSI'])
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['StopCHP2'])
+                if AMod[3] == 1:
+                    if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos'] + 5:
+                        self._send_control_save(ActOrderBook['SteamDumpDown'])
+                        AMod[3] == -1
+                    else:
+                        self._send_control_save(ActOrderBook['SteamDumpUp'])
+                if AMod[3] == 0: pass
+                if AMod[3] == -1: self._send_control_save(ActOrderBook['SteamDumpDown'])
+
             else:
                 AMod = [0, 0, 0]
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
