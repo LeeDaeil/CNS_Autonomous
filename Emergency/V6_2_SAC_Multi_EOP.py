@@ -6,7 +6,6 @@ paper: https://arxiv.org/pdf/1812.05905.pdf
 https://github.com/quantumiracle/SOTA-RL-Algorithms
 '''
 
-import math
 import random
 
 import gym
@@ -14,28 +13,22 @@ import numpy as np
 
 import torch
 
-# torch.multiprocessing.set_start_method('forkserver', force=True)  # critical for make multiprocessing work
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 
 import matplotlib.pyplot as plt
-from matplotlib import animation
 
 import argparse
-import time
 
 import torch.multiprocessing as mp
-from torch.multiprocessing import Process
 
 from multiprocessing import Process, Manager
 from multiprocessing.managers import BaseManager
 
 # from Emergency.LOCACNS import ENVCNS
 from Emergency.LOCACNS_TrainVer import ENVCNS
-
-import copy
 
 GPU = False
 device_idx = 0
@@ -195,7 +188,7 @@ class PolicyNetwork(nn.Module):
         action = self.action_range * torch.tanh(mean + std * z)
 
         action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
-        action.detach().cpu().numpy()[0]
+            action.detach().cpu().numpy()[0]
         return action
 
     def sample_action(self, ):
@@ -347,29 +340,13 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
         if ENV == 'Pendulum':
             state = env.reset()
         elif ENV == 'CNS':
-            state = env.reset(file_name=eps)
+            state = env.reset(file_name=f'{id}_{eps}')
 
         for step in range(max_steps):
             if frame_idx > explore_steps:
                 action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
             else:
                 action = sac_trainer.policy_net.sample_action()
-            # print(action)
-
-            # if action >= 0.6:
-            #     action = [0.6]
-            # elif 0.5 <= action < 0.6:
-            #     action = [0.5]
-            # elif 0.4 <= action < 0.5:
-            #     action = [0.4]
-            # elif 0.3 <= action < 0.4:
-            #     action = [0.3]
-            # elif 0.2 <= action < 0.3:
-            #     action = [0.2]
-            # elif 0.1 <= action < 0.2:
-            #     action = [0.1]
-            # elif action < 0.1:
-            #     action = [0]
 
             try:
                 if ENV == 'Pendulum':
@@ -392,7 +369,8 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
             if replay_buffer.get_length() > batch_size:
                 for i in range(update_itr):
                     _, episode_q1, episode_q2, episode_p = sac_trainer.update(batch_size,
-                                                                              reward_scale=10., auto_entropy=AUTO_ENTROPY,
+                                                                              reward_scale=10.,
+                                                                              auto_entropy=AUTO_ENTROPY,
                                                                               target_entropy=-1. * action_dim)
                     # print(episode_q1, episode_q2, episode_p)
                     # print(type(episode_q1), type(episode_q2), type(episode_p))
@@ -401,13 +379,14 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
                     episode_p += episode_p
 
             # if eps % 10 == 0 and eps > 0:
-                # plot(rewards, id)
-                # sac_trainer.save_model(model_path)
+            # plot(rewards, id)
+            # sac_trainer.save_model(model_path)
 
             if done:
                 print('Done')
                 break
-        print('Episode: ', replay_buffer.get_ep(), eps, '| Episode Reward: ', episode_reward, episode_q1, episode_q2, episode_p)
+        print('Episode: ', replay_buffer.get_ep(), eps, '| Episode Reward: ', episode_reward, episode_q1, episode_q2,
+              episode_p)
         # if len(rewards) == 0: rewards.append(episode_reward)
         # else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
         rewards_queue.put(episode_reward)
@@ -443,14 +422,12 @@ def plot(rewards, name):
 
 
 if __name__ == '__main__':
-
-    replay_buffer_size = 1e6
-    # replay_buffer = ReplayBuffer(replay_buffer_size)
-
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)
     manager = BaseManager()
     manager.start()
+
+    replay_buffer_size = 1e6
     replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
 
     # choose env
@@ -494,11 +471,11 @@ if __name__ == '__main__':
     ShareParameters(sac_trainer.alpha_optimizer)
 
     rewards_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
-    q1_queue = mp.Queue()        # used for get rewards from all processes and plot the curve
-    q2_queue = mp.Queue()        # used for get rewards from all processes and plot the curve
-    p_queue = mp.Queue()        # used for get rewards from all processes and plot the curve
+    q1_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
+    q2_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
+    p_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
 
-    num_workers = 3 # mp.cpu_count()    # TODO
+    num_workers = 3  # mp.cpu_count()    # TODO
     processes = []
     rewards = []
     q1_q = []
@@ -507,39 +484,21 @@ if __name__ == '__main__':
 
     for i in range(num_workers):
         process = Process(target=worker, args=(
-        i, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
-        replay_buffer, max_episodes, max_steps, batch_size, explore_steps,
-        update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
+            i, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue,
+            replay_buffer, max_episodes, max_steps, batch_size, explore_steps,
+            update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
 
     [p.start() for p in processes]
     while True:  # keep geting the episode reward from the queue
-        r = rewards_queue.get()
-        if r is not None:
-            rewards.append(r)
-        else:
-            break
+        for Qu_, Qu_box in zip([rewards_queue, q1_queue, q2_queue, p_queue], [rewards, q1_q, q2_q, p_q]):
+            GetedQu = Qu_.get()
+            if GetedQu is not None:
+                Qu_box.append(GetedQu)
+            else:
+                break
 
-        r = q1_queue.get()
-        if r is not None:
-            q1_q.append(r)
-        else:
-            break
-
-        r = q2_queue.get()
-        if r is not None:
-            q2_q.append(r)
-        else:
-            break
-
-        r = p_queue.get()
-        if r is not None:
-            p_q.append(r)
-        else:
-            break
-
-        # if len(rewards) % 5 == 0 and len(rewards) > 0:
         if len(rewards) % 20 == 0 and len(rewards) > 0:
             plot(rewards, name=f'{len(rewards)}R')
             plot(q1_q, name=f'{len(rewards)}q1')
@@ -547,24 +506,3 @@ if __name__ == '__main__':
             plot(p_q, name=f'{len(rewards)}p_q')
 
     [p.join() for p in processes]  # finished at the same time
-
-    # sac_trainer.save_model(model_path)
-
-    # if args.test:
-    #     # single process for testing
-    #     sac_trainer.load_model(model_path)
-    #     for eps in range(10):
-    #         if ENV == 'Pendulum':
-    #             state = env.reset()
-    #         episode_reward = 0
-    #
-    #         for step in range(max_steps):
-    #             action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
-    #             if ENV == 'Pendulum':
-    #                 next_state, reward, done, _ = env.step(action)
-    #                 env.render()
-    #
-    #             episode_reward += reward
-    #             state = next_state
-    #
-    #         print('Episode: ', eps, '| Episode Reward: ', episode_reward)
