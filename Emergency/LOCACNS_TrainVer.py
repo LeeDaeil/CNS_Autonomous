@@ -102,12 +102,13 @@ class ENVCNS(CNS):
                 'CurrentTemp': self.mem['UAVLEG2']['Val'],
                 'CurrentPres': self.mem['ZINST65']['Val'],
                 'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
-                'PZRLevel': self.mem['ZINST63']['Val']
+                'PZRLevel': self.mem['ZINST63']['Val'],
+                'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
+                'SG3Nar': self.mem['ZINST76']['Val'],
             }
             if self.Verlist['1']:
                 # Cooling rate에 따라서 온도 감소
                 r -= V['Dis'] / 100
-                print(V['CurrentTemp'], V['Dis'])
                 # 가압기 수위 10 아래 종료
                 # if V['PZRLevel'] <= 10:  r -= 100
             if self.Verlist['2']:
@@ -122,6 +123,16 @@ class ENVCNS(CNS):
         return r
 
     def get_done(self, r):
+        V = {
+            'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
+            'CurrentTemp': self.mem['UAVLEG2']['Val'],
+            'CurrentPres': self.mem['ZINST65']['Val'],
+            'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
+            'PZRLevel': self.mem['ZINST63']['Val'],
+            'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
+            'SG3Nar': self.mem['ZINST76']['Val'],
+
+        }
         if self.Verlist['1']:
             pass
             # if self.AcumulatedReward < -100:
@@ -132,22 +143,31 @@ class ENVCNS(CNS):
             # else:
             #     d = False
         if self.Verlist['2'] or self.Verlist['1']:
-            # 압력이 너무 아래까지 가는 것을 방지
-            if self.mem['ZINST65']['Val'] <= 17:
+            # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
+            if V['PZRLevel'] <= 17:
+                self.Loger_txt += f'PZR Pres Done\t'
                 d = True
                 r = -1
             else:
                 d = False
-
+            # 증기발생기 수위 78 이상 시 종료
+            if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 78:
+                self.Loger_txt += f'SG Level Done\t'
+                d = True
+                r= -1
+            # PT 커브 범위 초과 시 종료
+            if PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres']) == 1: # 불만족
+                self.Loger_txt += f'PT Curve\t'
+                d = True
+                r = -1
             if self.mem['KCNTOMS']['Val'] == 38000:
                 d = True
-                if 17 < self.mem['ZINST65']['Val'] < 29.5 and self.mem['UAVLEG2']['Val'] <= 170:
+                if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
                     r = 1
                 else:
                     r = -1
             else:
                 d = False
-
         # self.Loger_txt += f'{d}\t'
         return d, r
 
@@ -459,7 +479,11 @@ class ENVCNS(CNS):
                 if AMod[0] == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
                 if AMod[0] == 0: pass
                 if AMod[0] == -1: self._send_control_save(ActOrderBook['PZRSprayClose'])
-                if AMod[1] == 1: self._send_control_save(ActOrderBook['UpAllAux'])
+                if AMod[1] == 1:
+                    if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 50:
+                        AMod[1] = -1
+                    else:
+                        self._send_control_save(ActOrderBook['UpAllAux'])
                 if AMod[1] == 0: pass
                 if AMod[1] == -1: self._send_control_save(ActOrderBook['DownAllAux'])
                 if AMod[2] == 1:

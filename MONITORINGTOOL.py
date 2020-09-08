@@ -166,7 +166,7 @@ class Mainwindow(QMainWindow):
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = plt.figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
+        self.fig = plt.figure(figsize=(width, height), dpi=dpi)
 
         gs = GridSpec(3, 3, figure=self.fig)
         self.ax1 = self.fig.add_subplot(gs[0:4, 0:2], projection='3d')
@@ -255,7 +255,7 @@ class PlotCanvas(FigureCanvas):
             self.ax2.plot(reward_mem[1])    # 'AcuR 전체
             self.ax3.plot(reward_mem[0])
             pass
-
+        self.fig.set_tight_layout(True)
         self.fig.canvas.draw()
 
     def saveFig(self):
