@@ -141,13 +141,12 @@ class ENVCNS(CNS):
             # else:
             #     d = False
         if self.Verlist['2'] or self.Verlist['1']:
+            d = False
             # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
             if V['CurrentPres'] <= 17:
                 self.Loger_txt += f'PZR Pres Done\t'
                 d = True
                 r = -1
-            else:
-                d = False
             # 증기발생기 수위 78 이상 시 종료
             if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 78:
                 self.Loger_txt += f'SG Level Done\t'
@@ -158,14 +157,12 @@ class ENVCNS(CNS):
                 self.Loger_txt += f'PT Curve\t'
                 d = True
                 r = -1
-            if self.mem['KCNTOMS']['Val'] == 38000:
+            if self.mem['KCNTOMS']['Val'] == 35000:
                 d = True
                 if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
                     r = 1
                 else:
                     r = -1
-            else:
-                d = False
         # self.Loger_txt += f'{d}\t'
         return d, r
 
@@ -485,12 +482,15 @@ class ENVCNS(CNS):
                 if AMod[1] == 0: pass
                 if AMod[1] == -1: self._send_control_save(ActOrderBook['DownAllAux'])
                 if AMod[2] == 1:
-                    if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
-                        pass
-                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
-                        self._send_control_save(ActOrderBook['RunCHP2'])
-                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
-                        self._send_control_save(ActOrderBook['OpenSI'])
+                    if V['PZRLevel'] > 76:  ## 가압기 만수위 방지용.
+                        AMod[2] = -1
+                    else:
+                        if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                            pass
+                        elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
+                            self._send_control_save(ActOrderBook['RunCHP2'])
+                        elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                            self._send_control_save(ActOrderBook['OpenSI'])
                 if AMod[2] == 0: pass
                 if AMod[2] == -1:
                     if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
@@ -500,7 +500,7 @@ class ENVCNS(CNS):
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['StopCHP2'])
                 if AMod[3] == 1:
-                    if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos'] + 5:
+                    if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
                         self._send_control_save(ActOrderBook['SteamDumpDown'])
                         AMod[3] == -1
                     else:
@@ -509,7 +509,7 @@ class ENVCNS(CNS):
                 if AMod[3] == -1: self._send_control_save(ActOrderBook['SteamDumpDown'])
 
             else:
-                AMod = [0, 0, 0]
+                AMod = [0, 0, 0, 0]
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
         self.Loger_txt += f'{AMod}\t'
         # -------------------------------------------------------------------------------------------------------
