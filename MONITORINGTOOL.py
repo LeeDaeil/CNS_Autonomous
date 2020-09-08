@@ -25,8 +25,9 @@ class MonitoringMEM:
                             'Zero': []} for i in range(nub_agent)}
 
         self.ENVReward = {i: {
-            'R': [], 'AcuR': [],
+            'R': [], 'CurAcuR': 0
         } for i in range(nub_agent)}
+        self.ENVReward['AcuR'] = []
 
     def push_currentEP(self, i, ep):
         self.StepInEachAgent[i] = ep
@@ -54,13 +55,18 @@ class MonitoringMEM:
 
     def push_ENV_reward(self, i, Dict_val):
         self.ENVReward[i]['R'].append(Dict_val['R'])
-        if Dict_val['Done']: self.ENVReward[i]['AcuR'].append(Dict_val['AcuR'])
+        self.ENVReward[i]['CurAcuR'] = Dict_val['AcuR']
 
     def init_ENV_val(self, i):
+        # 종료 또는 초기화로
+        self.ENVReward['AcuR'].append(self.ENVReward[i]['CurAcuR'])
+
         for key in self.ENVVALInEachAgent[i].keys():
             self.ENVVALInEachAgent[i][key] = []
-        self.ENVReward[i]['R'] = []
         self.ENVVALSetTime[i] = {'Time': 0, 'Temp': 0}
+        self.ENVRATE[i] = {'RateX': [], 'RateY': [], 'RateZ': [], 'Zero': []}
+        self.ENVReward[i]['R'] = []
+        self.ENVReward[i]['CurAcuR'] = 0
 
     def get_currentEP(self):
         get_db = self.StepInEachAgent
@@ -76,10 +82,11 @@ class MonitoringMEM:
         return self.ENVRATE[i]
 
     def get_ENV_reward_val(self, i):
-        return self.ENVReward[i]
+        return [self.ENVReward[i]['R'], self.ENVReward['AcuR']]
 
     def get_ENV_nub(self):
         return self.nub_agent
+
 
 class Monitoring(multiprocessing.Process):
     def __init__(self, Monitoring_ENV):
@@ -108,7 +115,7 @@ class Mainwindow(QMainWindow):
     def initUI(self):
         self.setGeometry(100, 100, 640, 400)
 
-        self.GP = PlotCanvas(self, width=16, height=7)
+        self.GP = PlotCanvas(self, width=16, height=8)
         self.GP.move(0, 0)
 
         self.button = QPushButton('Next', self)
@@ -124,6 +131,11 @@ class Mainwindow(QMainWindow):
         self.stopbutton.move(50, 0)
         self.stopbutton.resize(50, 20)
         self.stopbutton.clicked.connect(self.PAUSE)
+
+        self.SaveFig = QPushButton('Save', self)
+        self.SaveFig.move(100, 0)
+        self.SaveFig.resize(50, 20)
+        self.SaveFig.clicked.connect(self.Savefig)
 
         self.show()
 
@@ -148,14 +160,19 @@ class Mainwindow(QMainWindow):
             self.stopbutton.setText('Stop')
             self.stopbutton.cond_stop = True
 
+    def Savefig(self):
+        self.GP.saveFig()
+
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         self.fig = plt.figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
+
         gs = GridSpec(3, 3, figure=self.fig)
-        self.ax1 = self.fig.add_subplot(gs[0:3, 0:2], projection='3d')
-        self.ax2 = self.fig.add_subplot(gs[0:1, 2:3])
-        self.ax3 = self.fig.add_subplot(gs[1:3, 2:3])
+        self.ax1 = self.fig.add_subplot(gs[0:4, 0:2], projection='3d')
+        self.ax2 = self.fig.add_subplot(gs[0:1, 2:3])   # 에이전트 누적 Reward
+        self.ax3 = self.fig.add_subplot(gs[1:3, 2:3])   # 현재 보상
+        # self.ax4 = self.fig.add_subplot(gs[2:4, 2:3])   # 현재 보상
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -235,8 +252,11 @@ class PlotCanvas(FigureCanvas):
             self.ax1.set_zlim(0, 200)
 
         if True:
-            self.ax2.plot(reward_mem['R'])
-            self.ax3.plot(reward_mem['AcuR'])
+            self.ax2.plot(reward_mem[1])    # 'AcuR 전체
+            self.ax3.plot(reward_mem[0])
             pass
 
         self.fig.canvas.draw()
+
+    def saveFig(self):
+        self.fig.savefig('SaveFIg.png', dpi=100)
