@@ -85,7 +85,7 @@ class ENVCNS(CNS):
         state = [self.normalize(self.mem[para]['Val'], x_round, x_min, x_max) for
                  para, x_round, x_min, x_max in self.input_info]
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
-        self.Loger_txt += f'{state}\t'
+        # self.Loger_txt += f'{state}\t'
         return np.array(state)
 
     def get_reward(self):
@@ -124,10 +124,8 @@ class ENVCNS(CNS):
 
     def get_done(self, r):
         V = {
-            'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
             'CurrentTemp': self.mem['UAVLEG2']['Val'],
             'CurrentPres': self.mem['ZINST65']['Val'],
-            'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
             'PZRLevel': self.mem['ZINST63']['Val'],
             'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
             'SG3Nar': self.mem['ZINST76']['Val'],
@@ -144,7 +142,7 @@ class ENVCNS(CNS):
             #     d = False
         if self.Verlist['2'] or self.Verlist['1']:
             # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
-            if V['PZRLevel'] <= 17:
+            if V['CurrentPres'] <= 17:
                 self.Loger_txt += f'PZR Pres Done\t'
                 d = True
                 r = -1
@@ -580,7 +578,7 @@ class ENVCNS(CNS):
         next_state = self.get_state()
 
         self.ENVlogging(s=self.Loger_txt)
-        self.Loger_txt = f'{next_state}\t'
+        # self.Loger_txt = f'{next_state}\t'
         self.Loger_txt = ''
 
         # -------------------------------------------------------------------------------------------------------
