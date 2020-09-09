@@ -91,8 +91,9 @@ class ENVCNS(CNS):
     def get_reward(self):
         # Ver list
         self.Verlist = {
-            '1': True,
-            '2': False
+            '1': False,
+            '2': False,
+            '3': True,
         }
         # --------------------------------- NEW ----
         r = 0
@@ -115,6 +116,16 @@ class ENVCNS(CNS):
                 # 목표치까지 도달
                 r += (29.5 - V['CurrentPres']) / 100
                 r += (170 - V['CurrentTemp']) / 100
+            if self.Verlist['3']:
+                # Cooling rate에 따라서 온도 감소
+                dis_reward = - V['Dis'] / 100 # [0.0 ~ -0.2] 동향을 보임
+                # Pressure and Temp Dis
+                curp = 29.5 if V['CurrentPres'] <= 29.5 else V['CurrentPres']
+                curt = 170 if V['CurrentTemp'] <= 170 else V['CurrentTemp']
+                dis_pres = (29.5 - V['CurrentPres']) / 100
+                dis_temp = (170 - V['CurrentTemp']) / 100
+
+                r += (dis_pres * 1) + (dis_temp * 1) + (dis_reward * 2)
             self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
@@ -154,6 +165,31 @@ class ENVCNS(CNS):
                 r= -1
             # PT 커브 범위 초과 시 종료
             if PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres']) == 1: # 불만족
+                self.Loger_txt += f'PT Curve\t'
+                d = True
+                r = -1
+            if self.mem['KCNTOMS']['Val'] == 35000:
+                d = True
+                if 17 < V['CurrentPres'] < 29.5 or V['CurrentTemp'] <= 170:
+                    r = 0
+                    if 17 < V['CurrentPres'] < 29.5: r += 0.5
+                    if V['CurrentTemp'] <= 170: r += 0.5
+                else:
+                    r = -1
+        if self.Verlist['3']:
+            d = False
+            # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
+            if V['CurrentPres'] <= 17:
+                self.Loger_txt += f'PZR Pres Done\t'
+                d = True
+                r = -1
+            # 증기발생기 수위 78 이상 시 종료
+            if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 78:
+                self.Loger_txt += f'SG Level Done\t'
+                d = True
+                r = -1
+            # PT 커브 범위 초과 시 종료
+            if PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres']) == 1:  # 불만족
                 self.Loger_txt += f'PT Curve\t'
                 d = True
                 r = -1
@@ -473,20 +509,28 @@ class ENVCNS(CNS):
                 # 2] 액션 스페이스는 줄이지 않고 수행해보기
                 if AMod[0] == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
                 if AMod[0] == 0: pass
-                if AMod[0] == -1: self._send_control_save(ActOrderBook['PZRSprayClose'])
+                if AMod[0] == -1:
+                    if V['PZRSprayPos'] == 0:
+                        AMod[0] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['PZRSprayClose'])
                 if AMod[1] == 1:
                     if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 50:
                         AMod[1] = -1
                     else:
                         self._send_control_save(ActOrderBook['UpAllAux'])
                 if AMod[1] == 0: pass
-                if AMod[1] == -1: self._send_control_save(ActOrderBook['DownAllAux'])
+                if AMod[1] == -1:
+                    if V['AllSGFeed'] == 0:
+                        AMod[1] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['DownAllAux'])
                 if AMod[2] == 1:
                     if V['PZRLevel'] > 76:  ## 가압기 만수위 방지용.
                         AMod[2] = -1
                     else:
                         if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
-                            pass
+                            AMod[2] = 0
                         elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
                             self._send_control_save(ActOrderBook['RunCHP2'])
                         elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
@@ -494,7 +538,7 @@ class ENVCNS(CNS):
                 if AMod[2] == 0: pass
                 if AMod[2] == -1:
                     if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
-                        pass
+                        AMod[2] = 0
                     elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['CloseSI'])
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
