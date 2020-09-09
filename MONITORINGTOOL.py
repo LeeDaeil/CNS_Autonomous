@@ -18,6 +18,7 @@ class MonitoringMEM:
         self.ENVVALInEachAgent = {i: {
             'UAVLEG2': [], 'KCNTOMS': [], 'ZINST65': [],
             'KLAMPO6': [], 'KLAMPO9': [],
+            'ZINST63': [], 'WFWLN1': [], 'WFWLN2': [], 'WFWLN3': [],
         } for i in range(nub_agent)}
 
         self.ENVVALSetTime = {i: {'Time': 0, 'Temp': 0} for i in range(nub_agent)}
@@ -168,11 +169,12 @@ class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         self.fig = plt.figure(figsize=(width, height), dpi=dpi)
 
-        gs = GridSpec(3, 3, figure=self.fig)
-        self.ax1 = self.fig.add_subplot(gs[0:4, 0:2], projection='3d')
+        gs = GridSpec(5, 3, figure=self.fig)
+        self.ax1 = self.fig.add_subplot(gs[0:5, 0:2], projection='3d')
         self.ax2 = self.fig.add_subplot(gs[0:1, 2:3])   # 에이전트 누적 Reward
-        self.ax3 = self.fig.add_subplot(gs[1:3, 2:3])   # 현재 보상
-        # self.ax4 = self.fig.add_subplot(gs[2:4, 2:3])   # 현재 보상
+        self.ax3 = self.fig.add_subplot(gs[1:2, 2:3])   # 현재 보상
+        self.ax4 = self.fig.add_subplot(gs[2:3, 2:3])   # 현재 수위
+        self.ax5 = self.fig.add_subplot(gs[3:4, 2:3])   # 현재 급수량
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -186,6 +188,9 @@ class PlotCanvas(FigureCanvas):
         self.ax1.clear()
         self.ax2.clear()
         self.ax3.clear()
+        self.ax4.clear()
+        self.ax5.clear()
+
         if True:
             Temp = []
             UpPres = []
@@ -254,6 +259,9 @@ class PlotCanvas(FigureCanvas):
         if True:
             self.ax2.plot(reward_mem[1])    # 'AcuR 전체
             self.ax3.plot(reward_mem[0])
+            self.ax4.plot(val['ZINST63'])
+            all_feed = [line1 + line2 + line3 for line1, line2, line3 in zip(val['WFWLN1'], val['WFWLN2'], val['WFWLN3'])]
+            self.ax5.plot(all_feed)
             pass
         self.fig.set_tight_layout(True)
         self.fig.canvas.draw()

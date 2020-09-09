@@ -125,7 +125,7 @@ class ENVCNS(CNS):
                 dis_pres = (29.5 - V['CurrentPres']) / 100
                 dis_temp = (170 - V['CurrentTemp']) / 100
 
-                r += (dis_pres * 1) + (dis_temp * 1) + (dis_reward * 2)
+                r += (dis_pres * 0.2) + (dis_temp * 0.2) + (dis_reward * 1)
             self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
@@ -607,7 +607,8 @@ class ENVCNS(CNS):
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
-                                                   ['UAVLEG2', 'KCNTOMS', 'ZINST65', 'KLAMPO6', 'KLAMPO9']}
+                                                   ['UAVLEG2', 'KCNTOMS', 'ZINST65', 'KLAMPO6', 'KLAMPO9',
+                                                    'ZINST63', 'WFWLN1', 'WFWLN2', 'WFWLN3']}
                                          )
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
