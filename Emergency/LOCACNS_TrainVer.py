@@ -93,7 +93,8 @@ class ENVCNS(CNS):
         self.Verlist = {
             '1': False,
             '2': False,
-            '3': True,
+            '3': False,
+            '4': True,
         }
         # --------------------------------- NEW ----
         r = 0
@@ -125,8 +126,20 @@ class ENVCNS(CNS):
                 dis_pres = (29.5 - V['CurrentPres']) / 100
                 dis_temp = (170 - V['CurrentTemp']) / 100
 
-                r += (dis_pres * 0.1) + (dis_temp * 0.1) + (dis_reward * 10)
-            self.Loger_txt += f"R:{dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
+                # r += (dis_pres * 0.1) + (dis_temp * 0.1) + (dis_reward * 10) # 감압 X
+                r += (dis_pres * 0.1) + (dis_reward * 5)
+            if self.Verlist['4']:
+                # Cooling rate에 따라서 온도 감소
+                dis_reward = - V['Dis'] / 100 # [0.0 ~ -0.2] 동향을 보임
+                # Pressure and Temp Dis
+                curp = 29.5 if V['CurrentPres'] <= 29.5 else V['CurrentPres']
+                dis_pres = (29.5 - V['CurrentPres']) / 100
+                PT_reward = - PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres'])
+                r += (dis_pres * 0.1) + (dis_reward * 5) + (PT_reward * 0.1)
+
+            # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
+            # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})\t" #Verlist['3']
+            self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})+({PT_reward * 0.1})\t"
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
@@ -183,11 +196,7 @@ class ENVCNS(CNS):
                 self.Loger_txt += f'PZR Pres Done\t'
                 d = True
                 r = -1
-            # 증기발생기 수위 78 이상 시 종료
-            if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 78:
-                self.Loger_txt += f'SG Level Done\t'
-                d = True
-                r = -1
+
             # PT 커브 범위 초과 시 종료
             if PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres']) == 1:  # 불만족
                 self.Loger_txt += f'PT Curve\t'
@@ -199,6 +208,15 @@ class ENVCNS(CNS):
                     r = 1
                 else:
                     r = -1
+        if self.Verlist['4']:
+            d = False
+            # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
+            if self.mem['KCNTOMS']['Val'] == 35000:
+                d = True
+                if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
+                    r = 1
+                else:
+                    r = -5
         # self.Loger_txt += f'{d}\t'
         return d, r
 
