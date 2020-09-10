@@ -125,8 +125,8 @@ class ENVCNS(CNS):
                 dis_pres = (29.5 - V['CurrentPres']) / 100
                 dis_temp = (170 - V['CurrentTemp']) / 100
 
-                r += (dis_pres * 0.5) + (dis_temp * 0.5) + (dis_reward * 1)
-            self.Loger_txt += f"R:{dis_pres * 0.5}+{dis_temp * 0.5}+({dis_reward * 1})\t"
+                r += (dis_pres * 0.1) + (dis_temp * 0.1) + (dis_reward * 10)
+            self.Loger_txt += f"R:{dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
