@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from COMMONTOOL import PTCureve
 
-# DB = pd.read_csv('130.txt')
-DB = pd.read_csv('../3차 검증/322.txt')
+DB = pd.read_csv('0_228.txt')
+# DB = pd.read_csv('../3차 검증/322.txt')
 
 
 # target_time = 100

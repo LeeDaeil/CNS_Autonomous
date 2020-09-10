@@ -125,8 +125,8 @@ class ENVCNS(CNS):
                 dis_pres = (29.5 - V['CurrentPres']) / 100
                 dis_temp = (170 - V['CurrentTemp']) / 100
 
-                r += (dis_pres * 0.2) + (dis_temp * 0.2) + (dis_reward * 1)
-            self.Loger_txt += f"{V['CoolRateTemp']}\t{V['CurrentTemp']}\t"
+                r += (dis_pres * 0.5) + (dis_temp * 0.5) + (dis_reward * 1)
+            self.Loger_txt += f"R:{dis_pres * 0.5}+{dis_temp * 0.5}+({dis_reward * 1})\t"
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
@@ -352,8 +352,9 @@ class ENVCNS(CNS):
                 if V['RCP3'] == 1: self._send_control_save(ActOrderBook['StopRCP3'])
             if V['NetBRK'] == 1: self._send_control_save(ActOrderBook['NetBRKOpen'])
             # 1.1] Setup 현재 최대 압력 기준으로 세팅.
-            if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
-                self._send_control_save(ActOrderBook['SteamDumpDown'])
+            if V['SIS'] != 0 and V['MSI'] != 0:
+                if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
+                    self._send_control_save(ActOrderBook['SteamDumpDown'])
             # 1.2] SI reset 전에 Aux 평균화 [검증 완료 20200903]
             if V['SIS'] != 0 and V['MSI'] != 0:
                 if V['SG1Feed'] == V['SG2Feed'] and V['SG1Feed'] == V['SG3Feed'] and \
@@ -507,7 +508,11 @@ class ENVCNS(CNS):
                     AMod[2] = 1
 
                 # 2] 액션 스페이스는 줄이지 않고 수행해보기
-                if AMod[0] == 1: self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                if AMod[0] == 1:
+                    if V['PZRSprayPos'] >= 35:
+                        AMod[0] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['PZRSprayOpen'])
                 if AMod[0] == 0: pass
                 if AMod[0] == -1:
                     if V['PZRSprayPos'] == 0:

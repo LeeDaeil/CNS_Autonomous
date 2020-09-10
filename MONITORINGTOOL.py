@@ -172,9 +172,9 @@ class PlotCanvas(FigureCanvas):
         gs = GridSpec(5, 3, figure=self.fig)
         self.ax1 = self.fig.add_subplot(gs[0:5, 0:2], projection='3d')
         self.ax2 = self.fig.add_subplot(gs[0:1, 2:3])   # 에이전트 누적 Reward
-        self.ax3 = self.fig.add_subplot(gs[1:2, 2:3])   # 현재 보상
-        self.ax4 = self.fig.add_subplot(gs[2:3, 2:3])   # 현재 수위
-        self.ax5 = self.fig.add_subplot(gs[3:4, 2:3])   # 현재 급수량
+        self.ax3 = self.fig.add_subplot(gs[1:3, 2:3])   # 현재 보상
+        self.ax4 = self.fig.add_subplot(gs[3:4, 2:3])   # 현재 수위
+        self.ax5 = self.fig.add_subplot(gs[4:5, 2:3])   # 현재 급수량
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -258,11 +258,19 @@ class PlotCanvas(FigureCanvas):
 
         if True:
             self.ax2.plot(reward_mem[1])    # 'AcuR 전체
+            self.ax2.grid()
+
             self.ax3.plot(reward_mem[0])
+            self.ax3.grid()
+
             self.ax4.plot(val['ZINST63'])
+            self.ax4.grid()
+
             all_feed = [line1 + line2 + line3 for line1, line2, line3 in zip(val['WFWLN1'], val['WFWLN2'], val['WFWLN3'])]
             self.ax5.plot(all_feed)
-            pass
+            self.ax5.set_ylim(0, 100)
+            self.ax5.grid()
+
         self.fig.set_tight_layout(True)
         self.fig.canvas.draw()
 
