@@ -369,12 +369,12 @@ class ENVCNS(CNS):
                 if V['RCP2'] == 1: self._send_control_save(ActOrderBook['StopRCP2'])
                 if V['RCP3'] == 1: self._send_control_save(ActOrderBook['StopRCP3'])
             if V['NetBRK'] == 1: self._send_control_save(ActOrderBook['NetBRKOpen'])
+
             # 1.1] Setup 현재 최대 압력 기준으로 세팅.
             if V['SIS'] != 0 and V['MSI'] != 0:
                 if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
                     self._send_control_save(ActOrderBook['SteamDumpDown'])
             # 1.2] SI reset 전에 Aux 평균화 [검증 완료 20200903]
-            if V['SIS'] != 0 and V['MSI'] != 0:
                 if V['SG1Feed'] == V['SG2Feed'] and V['SG1Feed'] == V['SG3Feed'] and \
                         V['SG2Feed'] == V['SG1Feed'] and V['SG2Feed'] == V['SG3Feed'] and \
                         V['SG3Feed'] == V['SG1Feed'] and V['SG3Feed'] == V['SG2Feed']:
@@ -452,7 +452,8 @@ class ENVCNS(CNS):
                     if ACT == 6: self._send_control_save(ActOrderBook['StopCHP2'])
         # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
         V6_2_1 = False
-        V6_2_2 = True
+        V6_2_2 = False
+        V6_2_3 = True
         if V6_2_1:  # TODO 돌리려면 AMod = Act[0] 하고 마지막 return [AMod] 써야함.
             if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
                 # 1] 선택한 액션의 적합성을 판단하고 램덤으로 재 샘플링
@@ -520,7 +521,7 @@ class ENVCNS(CNS):
                         AMod_.append(0)
                     else:
                         AMod_.append(-1)
-                AMod = AMod_
+                # AMod = AMod_
                 # 1.1] 가압기 10 아래면 무조건 CHP 2 on, HV Open
                 if V['PZRLevel'] <= 10:
                     AMod[2] = 1
@@ -537,6 +538,7 @@ class ENVCNS(CNS):
                         AMod[0] = 0
                     else:
                         self._send_control_save(ActOrderBook['PZRSprayClose'])
+
                 if AMod[1] == 1:
                     if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 50:
                         AMod[1] = -1
@@ -548,6 +550,7 @@ class ENVCNS(CNS):
                         AMod[1] = 0
                     else:
                         self._send_control_save(ActOrderBook['DownAllAux'])
+
                 if AMod[2] == 1:
                     if V['PZRLevel'] > 76:  ## 가압기 만수위 방지용.
                         AMod[2] = -1
@@ -566,6 +569,7 @@ class ENVCNS(CNS):
                         self._send_control_save(ActOrderBook['CloseSI'])
                     elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
                         self._send_control_save(ActOrderBook['StopCHP2'])
+
                 if AMod[3] == 1:
                     if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
                         self._send_control_save(ActOrderBook['SteamDumpDown'])
@@ -574,9 +578,75 @@ class ENVCNS(CNS):
                         self._send_control_save(ActOrderBook['SteamDumpUp'])
                 if AMod[3] == 0: pass
                 if AMod[3] == -1: self._send_control_save(ActOrderBook['SteamDumpDown'])
-
             else:
                 AMod = [0, 0, 0, 0]
+        if V6_2_3:
+            if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+                # 1] Continuous 값을 Discrete 값으로 변경
+                # AMod_ = []  # [1, 0, 0] 형식으로 저장됨
+                # for A in AMod:
+                #     if A >= 0.4:
+                #         AMod_.append(1)
+                #     elif -0.4 <= A < 0.4:
+                #         AMod_.append(0)
+                #     else:
+                #         AMod_.append(-1)
+                # AMod = AMod_
+                # 1.1] 가압기 10 아래면 무조건 CHP 2 on, HV Open
+                if V['PZRLevel'] <= 10:
+                    if AMod[2] < 0.4:  AMod[2] = 0.8
+                if V['PZRLevel'] > 76:
+                    if -0.4 <= AMod[2]: AMod[2] = -0.8
+
+                # 2] 액션 스페이스는 줄이지 않고 수행해보기
+                if 0.4 < AMod[0]:
+                    if V['PZRSprayPos'] >= 35:
+                        AMod[0] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                if -0.4 <= AMod[0] <= 0.4: pass
+                if AMod[0] < -0.4:
+                    if V['PZRSprayPos'] == 0:
+                        AMod[0] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['PZRSprayClose'])
+
+                if 0.4 < AMod[1]:
+                    if max(V['SG1Nar'], V['SG2Nar'], V['SG3Nar']) > 50:
+                        AMod[1] = -0.8
+                    else:
+                        self._send_control_save(ActOrderBook['UpAllAux'])
+                if -0.4 <= AMod[1] <= 0.4: pass
+                if AMod[1] < -0.4:
+                    if V['AllSGFeed'] == 0:
+                        AMod[1] = 0
+                    else:
+                        self._send_control_save(ActOrderBook['DownAllAux'])
+
+                if 0.4 < AMod[2]:
+                    if V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                        AMod[2] = 0
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
+                        self._send_control_save(ActOrderBook['RunCHP2'])
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                        self._send_control_save(ActOrderBook['OpenSI'])
+                if -0.4 <= AMod[2] <= 0.4: pass
+                if AMod[2] < -0.4:
+                    if V['ChargingPump2State'] == 0 and V['SIValve'] == 0:
+                        AMod[2] = 0
+                    elif V['ChargingPump2State'] == 0 and V['SIValve'] == 1:
+                        self._send_control_save(ActOrderBook['CloseSI'])
+                    elif V['ChargingPump2State'] == 1 and V['SIValve'] == 1:
+                        self._send_control_save(ActOrderBook['StopCHP2'])
+
+                if 0.4 < AMod[3]:
+                    self._send_control_save(ActOrderBook['SteamDumpUp'])
+                if -0.4 <= AMod[3] <= 0.4: pass
+                if AMod[3] < -0.4:
+                    self._send_control_save(ActOrderBook['SteamDumpDown'])
+            else:
+                AMod = [0, 0, 0, 0]
+
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
         self.Loger_txt += f'{AMod}\t'
         # -------------------------------------------------------------------------------------------------------
@@ -589,7 +659,6 @@ class ENVCNS(CNS):
         # CSF 3 Act
         if CSF_level[2] != 0:
             self.DIS_CSF_Info += f'3: {CSF_level[2]} \t'
-
             if CSF_level[2] == 3:  # All Aux <= 33
                 if V['AllSGFeed'] <= 33:
                     # 1] Find width low SG nub
