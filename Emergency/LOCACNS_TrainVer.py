@@ -211,7 +211,7 @@ class ENVCNS(CNS):
         if self.Verlist['4']:
             d = False
             # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
-            if self.mem['KCNTOMS']['Val'] == 35000:
+            if self.mem['KCNTOMS']['Val'] >= 35000:
                 d = True
                 if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
                     r = 1
@@ -693,9 +693,68 @@ class ENVCNS(CNS):
         # Old Data (time t) ---------------------------------------
         # self.check_CSFTree()
         AMod = self.send_act(A)
+        V = {
+            # ETC
+            'Trip': self.mem['KLAMPO9']['Val'],
+            'SIS': self.mem['KLAMPO6']['Val'],
+            'MSI': self.mem['KLAMPO3']['Val'],
+
+            'RCP1': self.mem['KLAMPO124']['Val'], 'RCP2': self.mem['KLAMPO125']['Val'],
+            'RCP3': self.mem['KLAMPO126']['Val'], 'NetBRK': self.mem['KLAMPO224']['Val'],
+            'CNSTime': self.mem['KCNTOMS']['Val'],
+
+            'SteamDumpManAuto': self.mem['KLAMPO150']['Val'], 'SteamDumpPos': self.mem['ZINST98']['Val'],
+            'SteamLine1': self.mem['BHV108']['Val'],
+            'SteamLine2': self.mem['BHV208']['Val'],
+            'SteamLine3': self.mem['BHV308']['Val'],
+
+            'ChargingManAUto': self.mem['KLAMPO95']['Val'],
+            'ChargingValvePos': self.mem['BFV122']['Val'],
+            'ChargingPump2State': self.mem['KLAMPO70']['Val'],
+            'SIValve': self.mem['BHV22']['Val'],
+
+            # 강화학습을 위한 감시 변수
+            'PZRSprayManAuto': self.mem['KLAMPO119']['Val'],
+            'PZRSprayPos': self.mem['ZINST66']['Val'],
+            'PZRBackHeaterOnOff': self.mem['KLAMPO118']['Val'],
+            'PZRProHeaterManAuto': self.mem['KLAMPO117']['Val'],
+            'PZRProHeaterPos': self.mem['BHV22']['Val'],
+
+            # CSF 1 Value 미임계 상태 추적도
+            'PowerRange': self.mem['ZINST1']['Val'], 'IntermediateRange': self.mem['ZINST2']['Val'],
+            'SourceRange': self.mem['ZINST3']['Val'],
+            # CSF 2 Value 노심냉각 상태 추적도
+            'CoreExitTemp': self.mem['UUPPPL']['Val'],
+            'PTCurve': PTCureve().Check(Temp=self.mem['UAVLEG2']['Val'], Pres=self.mem['ZINST65']['Val']),
+            # CSF 3 Value 열제거원 상태 추적도
+            'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
+            'SG3Nar': self.mem['ZINST76']['Val'],
+            'SG1Pres': self.mem['ZINST75']['Val'], 'SG2Pres': self.mem['ZINST74']['Val'],
+            'SG3Pres': self.mem['ZINST73']['Val'],
+            'SG1Feed': self.mem['WFWLN1']['Val'], 'SG2Feed': self.mem['WFWLN2']['Val'],
+            'SG3Feed': self.mem['WFWLN3']['Val'],
+
+            'AllSGFeed': self.mem['WFWLN1']['Val'] +
+                         self.mem['WFWLN2']['Val'] +
+                         self.mem['WFWLN3']['Val'],
+            'SG1Wid': self.mem['ZINST72']['Val'], 'SG2Wid': self.mem['ZINST71']['Val'],
+            'SG3Wid': self.mem['ZINST70']['Val'],
+            'SG123Wid': [self.mem['ZINST72']['Val'], self.mem['ZINST71']['Val'], self.mem['ZINST70']['Val']],
+
+            # CSF 4 Value RCS 건전성 상태 추적도
+            'RCSColdLoop1': self.mem['UCOLEG1']['List'], 'RCSColdLoop2': self.mem['UCOLEG2']['List'],
+            'RCSColdLoop3': self.mem['UCOLEG3']['List'], 'RCSPressure': self.mem['ZINST65']['Val'],
+            'CNSTimeL': self.mem['KCNTOMS']['List'],  # PTCurve: ...
+            # CSF 5 Value 격납용기 건전성 상태 추적도
+            'CTMTPressre': self.mem['ZINST26']['Val'], 'CTMTSumpLevel': self.mem['ZSUMP']['Val'],
+            'CTMTRad': self.mem['ZINST22']['Val'],
+            # CSF 6 Value RCS 재고량 상태 추적도
+            'PZRLevel': self.mem['ZINST63']['Val']
+        }
+        if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
 
         # GOTICK = input("Want Tick : ")
-        # self.want_tick = int(GOTICK)
+            self.want_tick = int(200)
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in

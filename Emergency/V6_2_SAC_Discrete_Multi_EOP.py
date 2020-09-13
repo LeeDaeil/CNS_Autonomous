@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.distributions import Categorical
 from torch.distributions import Normal
 
 import matplotlib.pyplot as plt
@@ -104,7 +105,7 @@ class SoftQNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3):
         super(SoftQNetwork, self).__init__()
 
-        self.linear1 = nn.Linear(num_inputs + num_actions, hidden_size)
+        self.linear1 = nn.Linear(num_inputs + num_actions - 1, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, hidden_size)
         self.linear4 = nn.Linear(hidden_size, 1)
@@ -113,6 +114,8 @@ class SoftQNetwork(nn.Module):
         self.linear4.bias.data.uniform_(-init_w, init_w)
 
     def forward(self, state, action):
+        action = action
+        action = action.view(len(action), 1)
         x = torch.cat([state, action], 1)  # the dim 0 is number of samples
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
@@ -134,13 +137,17 @@ class PolicyNetwork(nn.Module):
         self.linear3 = nn.Linear(hidden_size, hidden_size)
         self.linear4 = nn.Linear(hidden_size, hidden_size)
 
-        self.mean_linear = nn.Linear(hidden_size, num_actions)
-        self.mean_linear.weight.data.uniform_(-init_w, init_w)
-        self.mean_linear.bias.data.uniform_(-init_w, init_w)
+        # self.mean_linear = nn.Linear(hidden_size, num_actions)
+        # self.mean_linear.weight.data.uniform_(-init_w, init_w)
+        # self.mean_linear.bias.data.uniform_(-init_w, init_w)
+        #
+        # self.log_std_linear = nn.Linear(hidden_size, num_actions)
+        # self.log_std_linear.weight.data.uniform_(-init_w, init_w)
+        # self.log_std_linear.bias.data.uniform_(-init_w, init_w)
 
-        self.log_std_linear = nn.Linear(hidden_size, num_actions)
-        self.log_std_linear.weight.data.uniform_(-init_w, init_w)
-        self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+        self.act_prob = nn.Linear(hidden_size, num_actions)
+        self.act_prob.weight.data.uniform_(-init_w, init_w)
+        self.act_prob.bias.data.uniform_(-init_w, init_w)
 
         self.action_range = action_range
         self.num_actions = num_actions
@@ -151,12 +158,14 @@ class PolicyNetwork(nn.Module):
         x = F.relu(self.linear3(x))
         x = F.relu(self.linear4(x))
 
-        mean = (self.mean_linear(x))
+        # mean = (self.mean_linear(x))
         # mean    = F.leaky_relu(self.mean_linear(x))
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+        # log_std = self.log_std_linear(x)
+        # log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
 
-        return mean, log_std
+        # return mean, log_std
+        action_probs = F.softmax(self.act_prob(x))
+        return action_probs
 
     def evaluate(self, state, epsilon=1e-6):
         '''
@@ -179,16 +188,25 @@ class PolicyNetwork(nn.Module):
 
     def get_action(self, state, deterministic):
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
+        action_probs = self.forward(state).detach()
+        greedy_actions = torch.argmax(action_probs, dim=1, keepdim=True)
 
-        normal = Normal(0, 1)
-        z = normal.sample(mean.shape).to(device)
-        action = self.action_range * torch.tanh(mean + std * z)
+        categorical = Categorical(action_probs)
+        actions = categorical.sample().view(-1, 1)
 
-        action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
-            action.detach().cpu().numpy()[0]
-        return action
+        log_action_probs = torch.log(
+            action_probs + (action_probs == 0.0).float() * 1e-8)
+
+        # mean, log_std = self.forward(state)
+        # std = log_std.exp()
+
+        # normal = Normal(0, 1)
+        # z = normal.sample(mean.shape).to(device)
+        # action = self.action_range * torch.tanh(mean + std * z)
+        #
+        # action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
+        #     action.detach().cpu().numpy()[0]
+        return actions, action_probs, log_action_probs, greedy_actions
 
     def sample_action(self):
         # Ep 초기 랜덤 액션 용
@@ -322,6 +340,11 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
         action_dim = env.action_space.shape[0]
         state_dim = env.observation_space.shape[0]
         action_range = 1.
+    elif ENV == 'CART':
+        env = gym.make("CartPole-v0")
+        action_dim = 2
+        state_dim = env.observation_space.shape[0]
+        action_range = 1.
     elif ENV == 'CNS':
         env = ENVCNS(Name=id, IP='192.168.0.103', PORT=int(f'710{id + 1}'), Monitoring_ENV=Monitoring_ENV)
         action_dim = env.action_space
@@ -341,12 +364,18 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
             state = env.reset()
         elif ENV == 'CNS':
             state = env.reset(file_name=f'{id}_{eps}')
+        elif ENV == 'CART':
+            state = env.reset()
 
         for step in range(max_steps):
-            if frame_idx > explore_steps:
-                action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
+            # if frame_idx > explore_steps:
+            if ENV == 'CART':
+                action, _, _, _ = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
+                action = action.item()
             else:
-                action = sac_trainer.policy_net.sample_action()
+                action = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
+            # else:
+            #     action = sac_trainer.policy_net.sample_action()
 
             try:
                 if ENV == 'Pendulum':
@@ -354,6 +383,8 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
                     # env.render()
                 if ENV == 'CNS':
                     next_state, reward, done, action = env.step(action)
+                if ENV == 'CART':
+                    next_state, reward, done, _ = env.step(action)
 
             except KeyboardInterrupt:
                 print('Finished')
@@ -437,10 +468,15 @@ if __name__ == '__main__':
     Monitoring_ENV = manager.MonitoringMEM(num_workers)
 
     # choose env
-    ENV = ['Pendulum', 'CNS'][1]
+    ENV = ['Pendulum', 'CNS', 'CART'][2]
     if ENV == 'Pendulum':
         env = gym.make("Pendulum-v0")
         action_dim = env.action_space.shape[0]
+        state_dim = env.observation_space.shape[0]
+        action_range = 1.
+    elif ENV == 'CART':
+        env = gym.make("CartPole-v0")
+        action_dim = 2
         state_dim = env.observation_space.shape[0]
         action_range = 1.
     elif ENV == 'CNS':
@@ -448,7 +484,7 @@ if __name__ == '__main__':
         action_dim = env.action_space
         state_dim = env.observation_space
         action_range = 1.
-
+    print(action_dim, state_dim)
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 10000
     max_steps = 350 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
