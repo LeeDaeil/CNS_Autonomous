@@ -354,7 +354,6 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
                     # env.render()
                 if ENV == 'CNS':
                     next_state, reward, done, action = env.step(action)
-
             except KeyboardInterrupt:
                 print('Finished')
                 sac_trainer.save_model(model_path)
@@ -422,7 +421,7 @@ def plot(rewards, name):
 
 if __name__ == '__main__':
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
-    num_workers = 1  # mp.cpu_count()    # TODO
+    num_workers = 3  # mp.cpu_count()    # TODO
 
     BaseManager.register('ReplayBuffer', ReplayBuffer)
     BaseManager.register('MonitoringMEM', MonitoringMEM)
@@ -430,7 +429,7 @@ if __name__ == '__main__':
     manager = BaseManager()
     manager.start()
 
-    replay_buffer_size = 1e6
+    replay_buffer_size = 2e6
     replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
     #
 

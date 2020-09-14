@@ -89,12 +89,17 @@ class ENVCNS(CNS):
         return np.array(state)
 
     def get_reward(self):
+        """
+        R => -20 ~ 0
+        :return:
+        """
         # Ver list
         self.Verlist = {
             '1': False,
             '2': False,
             '3': False,
-            '4': True,
+            '4': False,
+            '5': True,
         }
         # --------------------------------- NEW ----
         r = 0
@@ -136,10 +141,47 @@ class ENVCNS(CNS):
                 dis_pres = (29.5 - V['CurrentPres']) / 100
                 PT_reward = - PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres'])
                 r += (dis_pres * 0.1) + (dis_reward * 5) + (PT_reward * 0.1)
+            if self.Verlist['5']:
+                r = 0
+                # 1] Cooling rate에 따라서 온도 감소
+                coolrate_r = V['Dis'] / 10
+                # 2] 가압기 수위 20~76% 구간 초과시 패널티
+                pzrlevel_r = 0
+                if 20 <= V['PZRLevel'] <= 76:
+                    pass
+                else:
+                    if 20 > V['PZRLevel']:
+                        pzrlevel_r -= (20 - V['PZRLevel'])
+                    else:
+                        pzrlevel_r -= (V['PZRLevel'] - 76)
+                # 3] 증기 발생기 6% ~ 50% 이상 초과 시 패널티
+                sg_r = 0
+                for _ in range(1, 4):
+                    if 6 <= V[f'SG{_}Nar'] <= 50:
+                        pass
+                    else:
+                        if 6 > V[f'SG{_}Nar']:
+                            sg_r -= (6 - V[f'SG{_}Nar'])
+                        else:
+                            sg_r -= (V[f'SG{_}Nar'] - 50)
+                # 4] PT 커브에서 벗어나면 패널티
+                PT_reward = - PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres'])
+                # 5] 목표치와 가까워 질 수록 +
+                pres_r, temp_r = 0, 0
+                pres_r = (29.5 - V['CurrentPres'])
+                temp_r = (170 - V['CurrentTemp'])
+
+                w = [1, 1, 1, 1, 1, 1]
+                r += coolrate_r * w[0] + pzrlevel_r * w[1] + sg_r * w[2] + PT_reward * w[3]
+                r += pres_r * w[4] + temp_r * w[5]
+                self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
+                                  f"+ {sg_r * w[2]} + {PT_reward * w[3]} + {pres_r * w[4]} + {temp_r * w[5]}\t"
+                pass
 
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})\t" #Verlist['3']
-            self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})+({PT_reward * 0.1})\t"
+            # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})+({PT_reward * 0.1})\t"
+
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
         self.Loger_txt += f'{r}\t'
@@ -208,7 +250,7 @@ class ENVCNS(CNS):
                     r = 1
                 else:
                     r = -1
-        if self.Verlist['4']:
+        if self.Verlist['4'] or self.Verlist['5']:
             d = False
             # 압력이 너무 아래까지 가는 것을 방지 아래가면 종료
             if self.mem['KCNTOMS']['Val'] >= 35000:
@@ -216,8 +258,9 @@ class ENVCNS(CNS):
                 if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
                     r = 1
                 else:
-                    r = -5
+                    r = 0
         # self.Loger_txt += f'{d}\t'
+        print(d, r)
         return d, r
 
     def _send_control_save(self, zipParaVal):
@@ -453,7 +496,8 @@ class ENVCNS(CNS):
         # 강화학습 제어 파트 ---------------------------------------------------------------------------------------
         V6_2_1 = False
         V6_2_2 = False
-        V6_2_3 = True
+        V6_2_3 = False
+        V6_2_4 = True
         if V6_2_1:  # TODO 돌리려면 AMod = Act[0] 하고 마지막 return [AMod] 써야함.
             if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
                 # 1] 선택한 액션의 적합성을 판단하고 램덤으로 재 샘플링
@@ -646,6 +690,49 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['SteamDumpDown'])
             else:
                 AMod = [0, 0, 0, 0]
+        if V6_2_4:
+            if V['Trip'] == 1 and V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
+
+                # 1] Spray Control
+                pos = self.mem['BPRZSP']['Val'] + 0.015 * np.clip(AMod[0] * 2, -2, 2)
+                zip_spray_pos = (['BPRZSP'],[pos])
+                self._send_control_save(zip_spray_pos)
+
+                # 2] Aux Feed
+                if AMod[1] < -0.8:
+                    self._send_control_save(ActOrderBook['DecreaseAux1Flow'])
+                elif -0.8 <= AMod[1] < -0.6:
+                    self._send_control_save(ActOrderBook['DecreaseAux2Flow'])
+                elif -0.6 <= AMod[1] < -0.4:
+                    self._send_control_save(ActOrderBook['DecreaseAux3Flow'])
+                elif -0.4 <= AMod[1] < 0.4:
+                    pass
+                elif 0.4 <= AMod[1] < 0.6:
+                    self._send_control_save(ActOrderBook['IncreaseAux3Flow'])
+                elif 0.6 <= AMod[1] < 0.8:
+                    self._send_control_save(ActOrderBook['IncreaseAux2Flow'])
+                elif 0.8 <= AMod[1]:
+                    self._send_control_save(ActOrderBook['IncreaseAux1Flow'])
+
+                # 3] SI Supply water
+                if AMod[2] < -0.8:
+                    self._send_control_save(ActOrderBook['CloseSI'])
+                elif -0.8 <= AMod[2] < -0.6:
+                    self._send_control_save(ActOrderBook['StopCHP2'])
+                elif -0.6 <= AMod[2] < 0.6:
+                    pass
+                elif 0.6 <= AMod[2] < 0.8:
+                    self._send_control_save(ActOrderBook['RunCHP2'])
+                elif 0.8 <= AMod[2]:
+                    self._send_control_save(ActOrderBook['OpenSI'])
+
+                # 4] Steam Dump
+                DumpPos = self.mem['PMSS']['Val'] + 2.0E5 * np.clip(AMod[3] * 2, -2, 2) * 0.2
+                zip_Dump_pos = (['PMSS'],[DumpPos])
+                self._send_control_save(zip_Dump_pos)
+
+            else:
+                pass #AMod = [0, 0, 0, 0]
 
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
         self.Loger_txt += f'{AMod}\t'
