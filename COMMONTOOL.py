@@ -455,7 +455,7 @@ class PTCureve:
     def _make_bound_UpLine(self):
         for i in range(len(self.UpTemp) - 1):
             self.UpLineFunc.append(self._make_bound_func(Temp=self.UpTemp[i:i+2], Pres=self.UpPres[i:i+2]))
-            self.UpLineORtFunc.append(self._make_bound_orthogonal_func(Temp=self.UpTemp[i:i+2], Pres=self.UpPres[i:i+2]))
+            self.UpLineOrtFunc.append(self._make_bound_orthogonal_func(Temp=self.UpTemp[i:i+2], Pres=self.UpPres[i:i+2]))
 
     def _make_bound_BotLine(self):
         for i in range(len(self.BotTemp) - 1):

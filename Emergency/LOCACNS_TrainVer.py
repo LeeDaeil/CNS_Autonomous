@@ -175,7 +175,7 @@ class ENVCNS(CNS):
                 r += coolrate_r * w[0] + pzrlevel_r * w[1] + sg_r * w[2] + PT_reward * w[3]
                 r += pres_r * w[4] + temp_r * w[5]
                 self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
-                                  f"+ {sg_r * w[2]} + {PT_reward * w[3]} + {pres_r * w[4]} + {temp_r * w[5]}\t"
+                                  f"+ {sg_r * w[2]} + PT:{PT_reward * w[3]} + {pres_r * w[4]} + {temp_r * w[5]}\t"
 
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})\t" #Verlist['3']
