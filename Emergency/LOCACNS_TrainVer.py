@@ -144,7 +144,7 @@ class ENVCNS(CNS):
             if self.Verlist['5']:
                 r = 0
                 # 1] Cooling rate에 따라서 온도 감소
-                coolrate_r = V['Dis'] / 10
+                coolrate_r = - V['Dis']
                 # 2] 가압기 수위 20~76% 구간 초과시 패널티
                 pzrlevel_r = 0
                 if 20 <= V['PZRLevel'] <= 76:
@@ -164,8 +164,8 @@ class ENVCNS(CNS):
                             sg_r -= (6 - V[f'SG{_}Nar'])
                         else:
                             sg_r -= (V[f'SG{_}Nar'] - 50)
-                # 4] PT 커브에서 벗어나면 패널티
-                PT_reward = - PTCureve().Check(Temp=V['CurrentTemp'], Pres=V['CurrentPres'])
+                # 4] PT 커브에서 벗어나면 거리만큼 패널티
+                PT_reward = - PTCureve().Check_Dis(Temp=V['CurrentTemp'], Pres=V['CurrentPres'])
                 # 5] 목표치와 가까워 질 수록 +
                 pres_r, temp_r = 0, 0
                 pres_r = (29.5 - V['CurrentPres'])
@@ -176,7 +176,6 @@ class ENVCNS(CNS):
                 r += pres_r * w[4] + temp_r * w[5]
                 self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
                                   f"+ {sg_r * w[2]} + {PT_reward * w[3]} + {pres_r * w[4]} + {temp_r * w[5]}\t"
-                pass
 
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})\t" #Verlist['3']
@@ -184,7 +183,7 @@ class ENVCNS(CNS):
 
             # --------------------------------- Send R ----
             self.AcumulatedReward += r
-        self.Loger_txt += f'{r}\t'
+        # self.Loger_txt += f'{r}\t'
         self.DIS_CSF_Info += f'[R: {r}]\t'
         return r
 
@@ -260,7 +259,6 @@ class ENVCNS(CNS):
                 else:
                     r = 0
         # self.Loger_txt += f'{d}\t'
-        print(d, r)
         return d, r
 
     def _send_control_save(self, zipParaVal):
