@@ -171,7 +171,7 @@ class ENVCNS(CNS):
                 pres_r = (29.5 - V['CurrentPres'])
                 temp_r = (170 - V['CurrentTemp'])
 
-                w = [1, 1, 1, 1, 1, 1]
+                w = [1, 1, 0.5, 3, 1, 1]
                 r += coolrate_r * w[0] + pzrlevel_r * w[1] + sg_r * w[2] + PT_reward * w[3]
                 r += pres_r * w[4] + temp_r * w[5]
                 self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
