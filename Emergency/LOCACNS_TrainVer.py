@@ -171,7 +171,7 @@ class ENVCNS(CNS):
                 pres_r = (29.5 - V['CurrentPres'])
                 temp_r = (170 - V['CurrentTemp'])
 
-                w = [1, 1, 0.5, 3, 1, 1]
+                w = [0.5, 0.5, 1, 3, 0.1, 0.5]
                 r += coolrate_r * w[0] + pzrlevel_r * w[1] + sg_r * w[2] + PT_reward * w[3]
                 r += pres_r * w[4] + temp_r * w[5]
                 self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
@@ -257,7 +257,7 @@ class ENVCNS(CNS):
                 if 17 < V['CurrentPres'] < 29.5 and V['CurrentTemp'] <= 170:
                     r = 1
                 else:
-                    r = 0
+                    r = r
         # self.Loger_txt += f'{d}\t'
         return d, r
 
@@ -284,6 +284,9 @@ class ENVCNS(CNS):
             'StopRCP2': (['KSWO133'], [0]),
             'StopRCP3': (['KSWO134'], [0]),
             'NetBRKOpen': (['KSWO244'], [0]),
+            'OilSysOff': (['KSWO190'], [0]),
+            'TurningGearOff': (['KSWO191'], [0]),
+            'CutBHV311': (['BHV311', 'FKAFWPI'], [0, 0]),
 
             # 강화학습을 위한 제어 변수
             'PZRSprayMan': (['KSWO128'], [1]), 'PZRSprayAuto': (['KSWO128'], [0]),
@@ -348,6 +351,10 @@ class ENVCNS(CNS):
             'ChargingPump2State': self.mem['KLAMPO70']['Val'],
             'SIValve': self.mem['BHV22']['Val'],
 
+            'TurningGear': self.mem['KLAMPO165']['Val'],
+            'OilSys': self.mem['KLAMPO164']['Val'],
+            'BHV311': self.mem['BHV311']['Val'],
+
             # 강화학습을 위한 감시 변수
             'PZRSprayManAuto': self.mem['KLAMPO119']['Val'],
             'PZRSprayPos': self.mem['ZINST66']['Val'],
@@ -410,6 +417,9 @@ class ENVCNS(CNS):
                 if V['RCP2'] == 1: self._send_control_save(ActOrderBook['StopRCP2'])
                 if V['RCP3'] == 1: self._send_control_save(ActOrderBook['StopRCP3'])
             if V['NetBRK'] == 1: self._send_control_save(ActOrderBook['NetBRKOpen'])
+            if V['TurningGear'] == 1: self._send_control_save(ActOrderBook['TurningGearOff'])
+            if V['OilSys'] == 1: self._send_control_save(ActOrderBook['OilSysOff'])
+            if V['BHV311'] > 0: self._send_control_save(ActOrderBook['CutBHV311'])
 
             # 1.1] Setup 현재 최대 압력 기준으로 세팅.
             if V['SIS'] != 0 and V['MSI'] != 0:
@@ -436,7 +446,7 @@ class ENVCNS(CNS):
             if V['SIS'] == 0 and V['MSI'] == 0 and V['CNSTime'] > 5 * 60 * 5:
                 # 2.0] Build Cooling rate function
                 if self.ENVGetSIReset == False:
-                    rate = -55 / (60 * 60 * 5)
+                    rate = - 50 / (60 * 60 * 5) # 55
                     self.FixedTemp = copy.deepcopy(self.mem['UAVLEG2']['Val'])  # 변수의 Follow up 방지
                     self.FixedTime = copy.deepcopy(self.mem['KCNTOMS']['Val'])  # 변수의 Follow up 방지
                     self.DRateFun = lambda t: rate * (t - self.FixedTime) + self.FixedTemp
