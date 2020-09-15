@@ -112,6 +112,8 @@ class ENVCNS(CNS):
                 'PZRLevel': self.mem['ZINST63']['Val'],
                 'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
                 'SG3Nar': self.mem['ZINST76']['Val'],
+                'SG1Pres': self.mem['ZINST75']['Val'], 'SG2Pres': self.mem['ZINST74']['Val'],
+                'SG3Pres': self.mem['ZINST73']['Val'],
             }
             if self.Verlist['1']:
                 # Cooling rate에 따라서 온도 감소
@@ -170,12 +172,27 @@ class ENVCNS(CNS):
                 pres_r, temp_r = 0, 0
                 pres_r = (29.5 - V['CurrentPres'])
                 temp_r = (170 - V['CurrentTemp'])
+                # 6] S/G 압력
+                Avg_pres = (V['SG1Pres'] + V['SG2Pres'] + V['SG3Pres'])/3
+                SGpres_r = 9 - Avg_pres if Avg_pres < 9 else 0
+                # --------------------------------------------------------------
+                w = {
+                    'coolrate_r': [coolrate_r, 0.5],
+                    'pzrlevel_r': [pzrlevel_r, 0.5],
+                    'sg_r': [sg_r, 1],
+                    'PT_reward': [PT_reward, 3],
+                    'pres_r': [pres_r, 1],
+                    'temp_r': [temp_r, 0.5],
+                    'SGpres_r': [SGpres_r, 1]
+                }
 
-                w = [0.5, 0.5, 1, 3, 0.1, 0.5]
-                r += coolrate_r * w[0] + pzrlevel_r * w[1] + sg_r * w[2] + PT_reward * w[3]
-                r += pres_r * w[4] + temp_r * w[5]
-                self.Loger_txt += f"R:{r} = {coolrate_r * w[0]} + {pzrlevel_r * w[1]} " \
-                                  f"+ {sg_r * w[2]} + PT:{PT_reward * w[3]} + {pres_r * w[4]} + {temp_r * w[5]}\t"
+                log_txt_temp = ''
+                for key in w.keys():
+                    r += w[key][0] * w[key][1]
+                    log_txt_temp += f'[{w[key][0]}*{w[key][1]}]_'
+                log_txt_temp = f'R:{r} = ' + log_txt_temp
+
+                self.Loger_txt += log_txt_temp
 
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+{dis_temp * 0.1}+({dis_reward * 10})\t"
             # self.Loger_txt += f"R:{r} = {dis_pres * 0.1}+({dis_reward * 5})\t" #Verlist['3']
@@ -189,12 +206,15 @@ class ENVCNS(CNS):
 
     def get_done(self, r):
         V = {
+            'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
             'CurrentTemp': self.mem['UAVLEG2']['Val'],
             'CurrentPres': self.mem['ZINST65']['Val'],
+            'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
             'PZRLevel': self.mem['ZINST63']['Val'],
             'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
             'SG3Nar': self.mem['ZINST76']['Val'],
-
+            'SG1Pres': self.mem['ZINST75']['Val'], 'SG2Pres': self.mem['ZINST74']['Val'],
+            'SG3Pres': self.mem['ZINST73']['Val'],
         }
         if self.Verlist['1']:
             pass
