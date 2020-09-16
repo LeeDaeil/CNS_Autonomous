@@ -112,6 +112,8 @@ class ENVCNS(CNS):
                 'PZRLevel': self.mem['ZINST63']['Val'],
                 'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
                 'SG3Nar': self.mem['ZINST76']['Val'],
+                'SG1Wid': self.mem['ZINST72']['Val'], 'SG2Wid': self.mem['ZINST71']['Val'],
+                'SG3Wid': self.mem['ZINST70']['Val'],
                 'SG1Pres': self.mem['ZINST75']['Val'], 'SG2Pres': self.mem['ZINST74']['Val'],
                 'SG3Pres': self.mem['ZINST73']['Val'],
             }
@@ -206,10 +208,8 @@ class ENVCNS(CNS):
 
     def get_done(self, r):
         V = {
-            'CoolRateTemp': self.DRateFun(self.mem['KCNTOMS']['Val']),
             'CurrentTemp': self.mem['UAVLEG2']['Val'],
             'CurrentPres': self.mem['ZINST65']['Val'],
-            'Dis': abs(self.DRateFun(self.mem['KCNTOMS']['Val']) - self.mem['UAVLEG2']['Val']),
             'PZRLevel': self.mem['ZINST63']['Val'],
             'SG1Nar': self.mem['ZINST78']['Val'], 'SG2Nar': self.mem['ZINST77']['Val'],
             'SG3Nar': self.mem['ZINST76']['Val'],
@@ -298,56 +298,6 @@ class ENVCNS(CNS):
         # AMod = A[0]  # A는 리스트 값으로 0번째 값 추출
         AMod = A
         # -------------------------------------------------------------------------------------------------------
-        ActOrderBook = {
-            'StopAllRCP': (['KSWO132', 'KSWO133', 'KSWO134'], [0, 0, 0]),
-            'StopRCP1': (['KSWO132'], [0]),
-            'StopRCP2': (['KSWO133'], [0]),
-            'StopRCP3': (['KSWO134'], [0]),
-            'NetBRKOpen': (['KSWO244'], [0]),
-            'OilSysOff': (['KSWO190'], [0]),
-            'TurningGearOff': (['KSWO191'], [0]),
-            'CutBHV311': (['BHV311', 'FKAFWPI'], [0, 0]),
-
-            # 강화학습을 위한 제어 변수
-            'PZRSprayMan': (['KSWO128'], [1]), 'PZRSprayAuto': (['KSWO128'], [0]),
-
-            'PZRSprayClose': (['BPRZSP'], [self.mem['BPRZSP']['Val'] + 0.015 * -1]),
-            'PZRSprayOpen': (['BPRZSP'], [self.mem['BPRZSP']['Val'] + 0.015 * 1]),
-
-            'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
-
-            'PZRProHeaterMan': (['KSWO120'], [1]), 'PZRProHeaterAuto': (['KSWO120'], [0]),
-            'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
-            'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
-
-            'DecreaseAux1Flow': (['KSWO142', 'KSWO143'], [1, 0]),
-            'IncreaseAux1Flow': (['KSWO142', 'KSWO143'], [0, 1]),
-            'DecreaseAux2Flow': (['KSWO151', 'KSWO152'], [1, 0]),
-            'IncreaseAux2Flow': (['KSWO151', 'KSWO152'], [0, 1]),
-            'DecreaseAux3Flow': (['KSWO154', 'KSWO155'], [1, 0]),
-            'IncreaseAux3Flow': (['KSWO154', 'KSWO155'], [0, 1]),
-
-            'UpAllAux': (['KSWO142', 'KSWO143', 'KSWO151', 'KSWO152', 'KSWO154', 'KSWO155'], [0, 1, 0, 1, 0, 1]),
-            'DownAllAux': (['KSWO142', 'KSWO143', 'KSWO151', 'KSWO152', 'KSWO154', 'KSWO155'], [1, 0, 1, 0, 1, 0]),
-
-            'SteamDumpMan': (['KSWO176'], [1]), 'SteamDumpAuto': (['KSWO176'], [0]),
-            'SteamDumpUp': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * 1 * 0.2]),
-            'SteamDumpDown': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * (-1) * 0.2]),
-
-            'SteamLine1Open': (['KSWO148', 'KSWO149'], [1, 0]),
-            'SteamLine2Open': (['KSWO146', 'KSWO147'], [1, 0]),
-            'SteamLine3Open': (['KSWO144', 'KSWO145'], [1, 0]),
-
-            'ChargingValveMan': (['KSWO100'], [1]), 'ChargingValveAUto': (['KSWO100'], [0]),
-            'ChargingValveDown': (['KSWO101', 'KSWO102'], [1, 0]),
-            'ChargingValveUp': (['KSWO101', 'KSWO102'], [0, 1]),
-
-            'RunRCP2': (['KSWO130', 'KSWO133'], [1, 1]),
-            'RunCHP2': (['KSWO70'], [1]), 'StopCHP2': (['KSWO70'], [0]),
-            'OpenSI': (['KSWO81', 'KSWO82'], [1, 0]), 'CloseSI': (['KSWO81', 'KSWO82'], [0, 1]),
-
-            'ResetSI': (['KSWO7', 'KSWO5'], [1, 1]),
-        }
         # Order Book
         # -------------------------------------------------------------------------------------------------------
         # def check_CSFTree()
@@ -424,6 +374,67 @@ class ENVCNS(CNS):
             'CSF5': CSFTree.CSF5(V['Trip'], V['CTMTPressre'], V['CTMTSumpLevel'], V['CTMTRad']),
             'CSF6': CSFTree.CSF6(V['Trip'], V['PZRLevel'])
         }
+        ActOrderBook = {
+            'StopAllRCP': (['KSWO132', 'KSWO133', 'KSWO134'], [0, 0, 0]),
+            'StopRCP1': (['KSWO132'], [0]),
+            'StopRCP2': (['KSWO133'], [0]),
+            'StopRCP3': (['KSWO134'], [0]),
+            'NetBRKOpen': (['KSWO244'], [0]),
+            'OilSysOff': (['KSWO190'], [0]),
+            'TurningGearOff': (['KSWO191'], [0]),
+            'CutBHV311': (['BHV311', 'FKAFWPI'], [0, 0]),
+
+            # 강화학습을 위한 제어 변수
+            'PZRSprayMan': (['KSWO128'], [1]), 'PZRSprayAuto': (['KSWO128'], [0]),
+
+            'PZRSprayClose': (['BPRZSP'], [self.mem['BPRZSP']['Val'] + 0.015 * -1]),
+            'PZRSprayOpen': (['BPRZSP'], [self.mem['BPRZSP']['Val'] + 0.015 * 1]),
+
+            'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
+
+            'PZRProHeaterMan': (['KSWO120'], [1]), 'PZRProHeaterAuto': (['KSWO120'], [0]),
+            'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
+            'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
+
+            'DecreaseAux1Flow': (['KSWO142', 'KSWO143'], [1, 0]),
+            'IncreaseAux1Flow': (['KSWO142', 'KSWO143'], [0, 1]),
+            'DecreaseAux2Flow': (['KSWO151', 'KSWO152'], [1, 0]),
+            'IncreaseAux2Flow': (['KSWO151', 'KSWO152'], [0, 1]),
+            'DecreaseAux3Flow': (['KSWO154', 'KSWO155'], [1, 0]),
+            'IncreaseAux3Flow': (['KSWO154', 'KSWO155'], [0, 1]),
+
+            'UpAllAux': (['KSWO142', 'KSWO143', 'KSWO151', 'KSWO152', 'KSWO154', 'KSWO155'], [0, 1, 0, 1, 0, 1]),
+            'DownAllAux': (['KSWO142', 'KSWO143', 'KSWO151', 'KSWO152', 'KSWO154', 'KSWO155'], [1, 0, 1, 0, 1, 0]),
+
+            # WAFWS1
+            'RL_IncreaseAux1Flow': (['WAFWS1'], [self.mem['WAFWS1']['Val'] + 0.04 * 1]),
+            'RL_DecreaseAux1Flow': (['WAFWS1'], [self.mem['WAFWS1']['Val'] + 0.04 * (-1)]),
+            'RL_IncreaseAux2Flow': (['WAFWS2'], [self.mem['WAFWS2']['Val'] + 0.04 * 1]),
+            'RL_DecreaseAux2Flow': (['WAFWS2'], [self.mem['WAFWS2']['Val'] + 0.04 * (-1)]),
+            'RL_IncreaseAux3Flow': (['WAFWS3'], [self.mem['WAFWS3']['Val'] + 0.04 * 1]),
+            'RL_DecreaseAux3Flow': (['WAFWS3'], [self.mem['WAFWS3']['Val'] + 0.04 * (-1)]),
+
+            'SteamDumpMan': (['KSWO176'], [1]), 'SteamDumpAuto': (['KSWO176'], [0]),
+            'SteamDumpUp': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * 1 * 0.2]),
+            'SteamDumpDown': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * (-1) * 0.2]),
+
+            'IFLOGIC_SteamDumpUp': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * 3 * 0.2]),
+            'IFLOGIC_SteamDumpDown': (['PMSS'], [self.mem['PMSS']['Val'] + 2.0E5 * (-3) * 0.2]),
+
+            'SteamLine1Open': (['KSWO148', 'KSWO149'], [1, 0]),
+            'SteamLine2Open': (['KSWO146', 'KSWO147'], [1, 0]),
+            'SteamLine3Open': (['KSWO144', 'KSWO145'], [1, 0]),
+
+            'ChargingValveMan': (['KSWO100'], [1]), 'ChargingValveAUto': (['KSWO100'], [0]),
+            'ChargingValveDown': (['KSWO101', 'KSWO102'], [1, 0]),
+            'ChargingValveUp': (['KSWO101', 'KSWO102'], [0, 1]),
+
+            'RunRCP2': (['KSWO130', 'KSWO133'], [1, 1]),
+            'RunCHP2': (['KSWO70'], [1]), 'StopCHP2': (['KSWO70'], [0]),
+            'OpenSI': (['KSWO81', 'KSWO82'], [1, 0]), 'CloseSI': (['KSWO81', 'KSWO82'], [0, 1]),
+
+            'ResetSI': (['KSWO7', 'KSWO5'], [1, 1]),
+        }
         CSF_level = [CSF[_]['L'] for _ in CSF.keys()]
         # self.Loger_txt += f'{CSF}\t'
         # self.Loger_txt += f'{CSF_level}\t'
@@ -444,7 +455,7 @@ class ENVCNS(CNS):
             # 1.1] Setup 현재 최대 압력 기준으로 세팅.
             if V['SIS'] != 0 and V['MSI'] != 0:
                 if max(V['SG1Pres'], V['SG2Pres'], V['SG3Pres']) < V['SteamDumpPos']:
-                    self._send_control_save(ActOrderBook['SteamDumpDown'])
+                    self._send_control_save(ActOrderBook['IFLOGIC_SteamDumpDown'])
             # 1.2] SI reset 전에 Aux 평균화 [검증 완료 20200903]
                 if V['SG1Feed'] == V['SG2Feed'] and V['SG1Feed'] == V['SG3Feed'] and \
                         V['SG2Feed'] == V['SG1Feed'] and V['SG2Feed'] == V['SG3Feed'] and \
@@ -728,19 +739,19 @@ class ENVCNS(CNS):
 
                 # 2] Aux Feed
                 if AMod[1] < -0.8:
-                    self._send_control_save(ActOrderBook['DecreaseAux1Flow'])
+                    self._send_control_save(ActOrderBook['RL_DecreaseAux1Flow'])
                 elif -0.8 <= AMod[1] < -0.6:
-                    self._send_control_save(ActOrderBook['DecreaseAux2Flow'])
+                    self._send_control_save(ActOrderBook['RL_DecreaseAux2Flow'])
                 elif -0.6 <= AMod[1] < -0.4:
-                    self._send_control_save(ActOrderBook['DecreaseAux3Flow'])
+                    self._send_control_save(ActOrderBook['RL_DecreaseAux3Flow'])
                 elif -0.4 <= AMod[1] < 0.4:
                     pass
                 elif 0.4 <= AMod[1] < 0.6:
-                    self._send_control_save(ActOrderBook['IncreaseAux3Flow'])
+                    self._send_control_save(ActOrderBook['RL_IncreaseAux3Flow'])
                 elif 0.6 <= AMod[1] < 0.8:
-                    self._send_control_save(ActOrderBook['IncreaseAux2Flow'])
+                    self._send_control_save(ActOrderBook['RL_IncreaseAux2Flow'])
                 elif 0.8 <= AMod[1]:
-                    self._send_control_save(ActOrderBook['IncreaseAux1Flow'])
+                    self._send_control_save(ActOrderBook['RL_IncreaseAux1Flow'])
 
                 # 3] SI Supply water
                 if AMod[2] < -0.8:
@@ -755,13 +766,14 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['OpenSI'])
 
                 # 4] Steam Dump
-                DumpPos = self.mem['PMSS']['Val'] + 2.0E5 * np.clip(AMod[3] * 2, -2, 2) * 0.2
+                SteamDumpRate = 4
+                DumpPos = self.mem['PMSS']['Val'] + 2.0E5 * np.clip(AMod[3] * SteamDumpRate,
+                                                                    - SteamDumpRate, SteamDumpRate) * 0.2
                 zip_Dump_pos = (['PMSS'],[DumpPos])
                 self._send_control_save(zip_Dump_pos)
 
             else:
                 pass #AMod = [0, 0, 0, 0]
-
         self.DIS_CSF_Info += f'[A:{AMod}]\t'
         self.Loger_txt += f'{AMod}\t'
         # -------------------------------------------------------------------------------------------------------
