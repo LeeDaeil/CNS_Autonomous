@@ -176,22 +176,22 @@ class ENVCNS(CNS):
                 temp_r = (170 - V['CurrentTemp'])
                 # 6] S/G 압력
                 Avg_pres = (V['SG1Pres'] + V['SG2Pres'] + V['SG3Pres'])/3
-                SGpres_r = 9 - Avg_pres if Avg_pres < 9 else 0
+                SGpres_r = 9 - Avg_pres if Avg_pres > 9 else 0
                 # --------------------------------------------------------------
                 w = {
-                    'coolrate_r': [coolrate_r, 0.5],
-                    'pzrlevel_r': [pzrlevel_r, 0.5],
-                    'sg_r': [sg_r, 1],
+                    'coolrate_r': [coolrate_r, 2],
+                    'pzrlevel_r': [pzrlevel_r, 1],
+                    'sg_r': [sg_r, 1.5],
                     'PT_reward': [PT_reward, 3],
                     'pres_r': [pres_r, 1],
                     'temp_r': [temp_r, 0.5],
-                    'SGpres_r': [SGpres_r, 1]
+                    'SGpres_r': [SGpres_r, 0.5]
                 }
 
                 log_txt_temp = ''
                 for key in w.keys():
                     r += w[key][0] * w[key][1]
-                    log_txt_temp += f'[{w[key][0]}*{w[key][1]}]_'
+                    log_txt_temp += f'[{round(w[key][0]+w[key][1], 1)}:{w[key][0]}*{w[key][1]}]_'
                 log_txt_temp = f'R:{r} = ' + log_txt_temp
 
                 self.Loger_txt += log_txt_temp
