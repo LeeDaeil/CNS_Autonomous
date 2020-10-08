@@ -191,7 +191,7 @@ class ENVCNS(CNS):
                 log_txt_temp = ''
                 for key in w.keys():
                     r += w[key][0] * w[key][1]
-                    log_txt_temp += f'[{round(w[key][0]+w[key][1], 1)}:{w[key][0]}*{w[key][1]}]_'
+                    log_txt_temp += f'[{round(w[key][0]*w[key][1], 1)}:{w[key][0]}*{w[key][1]}]_'
                 log_txt_temp = f'R:{r} = ' + log_txt_temp
 
                 self.Loger_txt += log_txt_temp
@@ -734,7 +734,7 @@ class ENVCNS(CNS):
 
                 # 1] Spray Control
                 pos = self.mem['BPRZSP']['Val'] + 0.015 * np.clip(AMod[0] * 2, -2, 2)
-                zip_spray_pos = (['BPRZSP'],[pos])
+                zip_spray_pos = (['BPRZSP'], [pos])
                 self._send_control_save(zip_spray_pos)
 
                 # 2] Aux Feed
