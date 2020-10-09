@@ -187,7 +187,7 @@ class ENVCNS(CNS):
         self._send_control_to_cns()
         return AMod
 
-    def step(self, A):
+    def step(self, A, mean_, std_):
         """
         A를 받고 1 step 전진
         :param A: [Act], numpy.ndarry, Act는 numpy.float32
@@ -201,6 +201,9 @@ class ENVCNS(CNS):
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
                                                    ['BHV142', 'BFV122', 'ZINST65', 'ZINST63']}
                                          )
+        self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
+                                            Dict_val={'Mean': mean_, 'Std': std_}
+                                            )
 
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
