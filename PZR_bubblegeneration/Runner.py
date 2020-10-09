@@ -453,7 +453,7 @@ if __name__ == '__main__':
 
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 10000
-    max_steps = 350 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+    max_steps = 700 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     # max_steps = 12 if ENV == 'CNS' else 10  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     batch_size = 128
     # batch_size = 10

@@ -78,11 +78,11 @@ class ENVCNS(CNS):
                     # setpoint - 현재 압력 한뒤에 - abs
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'UpPres':
-                    v_ = self.PID_NA.SetPoint_pres + 5
+                    v_ = self.PID_NA.SetPoint_pres + 2
                     v_ = v_ - self.mem['ZINST65']['Val']
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'DownPres':
-                    v_ = self.PID_NA.SetPoint_pres - 5
+                    v_ = self.PID_NA.SetPoint_pres - 2
                     v_ = self.mem['ZINST65']['Val'] - v_
                     state.append(self.normalize(v_, x_round, x_min, x_max))
 
@@ -92,7 +92,7 @@ class ENVCNS(CNS):
 
     def get_reward(self):
         """
-        R => nor(0 ~ 5)
+        R => nor(0 ~ 2)
         :return:
         """
         r = 0
@@ -101,16 +101,16 @@ class ENVCNS(CNS):
         }
 
         if V['CurPres'] > self.PID_NA.SetPoint_pres:
-            UpBoun = self.PID_NA.SetPoint_pres + 5
+            UpBoun = self.PID_NA.SetPoint_pres + 2
             r = UpBoun - V['CurPres']
         elif V['CurPres'] < self.PID_NA.SetPoint_pres:
-            DownBoun = self.PID_NA.SetPoint_pres - 5
+            DownBoun = self.PID_NA.SetPoint_pres - 2
             r = V['CurPres'] - DownBoun
         else:
-            r = 5
+            r = 2
 
         self.Loger_txt += f'R:{r}\t'
-        return self.normalize(r, 1, 0, 5)
+        return self.normalize(r, 1, 0, 2)
 
     def get_done(self, r):
         if r < 0:
@@ -187,6 +187,28 @@ class ENVCNS(CNS):
         self._send_control_to_cns()
         return AMod
 
+    def SkipAct(self):
+        ActOrderBook = {
+            'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
+            'ChargingValveStay': (['KSWO101', 'KSWO102'], [0, 0]),
+            'ChargingValveClase': (['KSWO101', 'KSWO102'], [1, 0]),
+
+            'LetdownValveOpen': (['KSWO231', 'KSWO232'], [0, 1]),
+            'LetdownValveStay': (['KSWO231', 'KSWO232'], [0, 0]),
+            'LetdownValveClose': (['KSWO231', 'KSWO232'], [1, 0]),
+
+            'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
+
+            'PZRProHeaterMan': (['KSWO120'], [1]), 'PZRProHeaterAuto': (['KSWO120'], [0]),
+            'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
+            'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
+        }
+        # Skip or Reset Act
+        self._send_control_save(ActOrderBook['LetdownValveStay'])
+        # Done Act
+        self._send_control_to_cns()
+        return 0
+
     def step(self, A, mean_, std_):
         """
         A를 받고 1 step 전진
@@ -195,7 +217,7 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(5)
+        self.want_tick = int(20)
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
