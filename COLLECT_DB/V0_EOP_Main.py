@@ -9,7 +9,7 @@ import copy
 class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
     def __init__(self):
         self.CURNET_COM_IP = '192.168.0.10'
-        self.CNS_IP_LIST = ['192.168.0.13', '192.168.0.9', '192.168.0.2']
+        self.CNS_IP_LIST = ['192.168.0.13', '192.168.0.17', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
         self.CNS_NUMBERS = [10, 10, 10]
 
@@ -20,14 +20,17 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
 
 
         # range_i_ = range(20010, 20100, 10)
-        range_i_ = list(range(10010, 10060, 10)) + list(range(20010, 20060, 10)) + list(range(30010, 30060, 10))
+        # range_i_ = list(range(110350, 110600, 50)) + list(range(120350, 120600, 50)) + list(range(130350, 130600, 50)) \
+        #            + list(range(210350, 210600, 50)) + list(range(220350, 220600, 50)) + list(range(230350, 230600, 50))
+        range_i_ = list(range(10044, 10084, 4)) + list(range(20044, 20084, 4)) + list(range(30044, 30084, 4))
+
         # range_i__ = range(120100, 122100, 100)
         range_i__ = [0]
 
         range_i = range(0, len(range_i__) * len(range_i_))
         print(len(range_i))
 
-        range_case = [12 for _ in range_i]
+        range_case = [13 for _ in range_i]
         range_opt = []
         range_time = [30 for _ in range_i]
 

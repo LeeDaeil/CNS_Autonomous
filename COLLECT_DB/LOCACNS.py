@@ -12,8 +12,9 @@ class ENVCNS(CNS):
         self.Name = Name
         self.AcumulatedReward = 0
         self.ENVStep = 0
+        # TODO Logger path 수정됨 if True 구문삭제
 
-        self.accident_name = ['LOCA', 'SGTR', 'MSLB'][0]
+        self.accident_name = ['LOCA', 'SGTR', 'MSLB'][2]
 
         self.Loger_txt = ''
 
@@ -107,7 +108,6 @@ class ENVCNS(CNS):
             if self.get_CNS_time() == self.FixedRad + 2700: self.s_val(['KSWO134'], [0])
 
         elif self.accident_name == 'SGTR':
-            print(self.mem['cMALC']['Val'])
             # 16.0
             for _tar, _val in zip(['WAFWS1', 'WAFWS2', 'WAFWS3'], ['KSWO143', 'KSWO152', 'KSWO155']):
                 if self.mem[_tar]['Val'] < 20:
@@ -127,7 +127,7 @@ class ENVCNS(CNS):
             # 비상03 4.2
             if str(self.mem['cMALC']['Val'])[0] == 1:  # SG1번 고장
                 if self.mem['WAFWS1']['Val'] != 0:
-                    if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSW0142'], [1])
+                    if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO142'], [1])
             if str(self.mem['cMALC']['Val'])[0] == 2:  # SG2번 고장
                 if self.mem['WAFWS2']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO151'], [1])
@@ -136,7 +136,7 @@ class ENVCNS(CNS):
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO154'], [1])
 
             # 비상03 Oil
-            if self.get_CNS_time() == self.FixedRad + 4100: self.s_val(['KSW0130'], [1])
+            if self.get_CNS_time() == self.FixedRad + 4100: self.s_val(['KSWO130'], [1])
 
             # 비상03 RCP2
             if self.get_CNS_time() == self.FixedRad + 4200: self.s_val(['KSWO133'], [1])
@@ -169,7 +169,7 @@ class ENVCNS(CNS):
             # 비상03 4.2
             if str(self.mem['cMALC']['Val'])[0] == 1:  # MSLB 1번 고장
                 if self.mem['WAFWS1']['Val'] != 0:
-                    if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSW0142'], [1])
+                    if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO142'], [1])
             if str(self.mem['cMALC']['Val'])[0] == 2:  # MSLB 2번 고장
                 if self.mem['WAFWS2']['Val'] != 0:
                     if self.get_CNS_time() >= self.FixedRad + 3200: self.s_val(['KSWO151'], [1])

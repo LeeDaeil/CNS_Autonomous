@@ -23,13 +23,13 @@ class ENVCNS(CNS):
         self.Loger_txt = ''
 
         self.input_info = [
-            # (para, x_round, x_min, x_max)
+            # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
             ('ZINST98',  1, 0,   100),     # SteamDumpPos
             ('ZINST87',  1, 0,   50),      # Steam Flow 1
             ('ZINST86',  1, 0,   50),      # Steam Flow 2
             ('ZINST85',  1, 0,   50),      # Steam Flow 3
-            ('KLAMPO70', 1, 0,   0),       # Charging Pump2 State
-            ('BHV22',    1, 0,   0),       # SI Valve State
+            ('KLAMPO70', 1, 0,   1),       # Charging Pump2 State
+            ('BHV22',    1, 0,   1),       # SI Valve State
             ('ZINST66',  1, 0,   25),      # PZRSprayPos
             ('UAVLEG2',  1, 150, 320),     # PTTemp
             ('ZINST65',  1, 0,   160),     # PTPressure
@@ -46,9 +46,9 @@ class ENVCNS(CNS):
             ('WFWLN1',   1, 0,   25),      # SG1Feed
             ('WFWLN2',   1, 0,   25),      # SG2Feed
             ('WFWLN3',   1, 0,   25),      # SG3Feed
-            ('UCOLEG1',  1, 100, 0),       # RCSColdLoop1
-            ('UCOLEG2',  1, 100, 0),       # RCSColdLoop2
-            ('UCOLEG3',  1, 100, 0),       # RCSColdLoop3
+            ('UCOLEG1',  1, 0,   100),     # RCSColdLoop1
+            ('UCOLEG2',  1, 0,   100),     # RCSColdLoop2
+            ('UCOLEG3',  1, 0,   100),     # RCSColdLoop3
             ('ZINST65',  1, 0,   160),     # RCSPressure
             ('ZINST63',  1, 0,   100),     # PZRLevel
         ]
@@ -82,8 +82,14 @@ class ENVCNS(CNS):
         return x
 
     def get_state(self):
-        state = [self.normalize(self.mem[para]['Val'], x_round, x_min, x_max) for
-                 para, x_round, x_min, x_max in self.input_info]
+        state = []
+        for para, x_round, x_min, x_max in self.input_info:
+            if para in self.mem.keys():
+                state.append(self.normalize(self.mem[para]['Val'], x_round, x_min, x_max))
+            else:
+                # ADD logic ----- 계산된 값을 사용하고 싶을 때
+                print('Error_get_state function')
+                pass
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
         # self.Loger_txt += f'{state}\t'
         return np.array(state)
@@ -899,11 +905,10 @@ class ENVCNS(CNS):
                                             Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
 
         next_state = self.get_state()
-
+        # ----------------------------------------------------------
         self.ENVlogging(s=self.Loger_txt)
         # self.Loger_txt = f'{next_state}\t'
         self.Loger_txt = ''
-
         # -------------------------------------------------------------------------------------------------------
         print(self.DIS_CSF_Info)
         # -------------------------------------------------------------------------------------------------------

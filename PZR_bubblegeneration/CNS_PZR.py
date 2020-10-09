@@ -12,7 +12,7 @@ class ENVCNS(CNS):
     def __init__(self, Name, IP, PORT, Monitoring_ENV=None):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT,
-                                     Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
+                                     Remote_IP='192.168.0.10', Remote_Port=PORT, Max_len=10)
         self.Monitoring_ENV = Monitoring_ENV
         self.Name = Name  # = id
         self.AcumulatedReward = 0
@@ -23,41 +23,23 @@ class ENVCNS(CNS):
         self.Loger_txt = ''
 
         self.input_info = [
-            # (para, x_round, x_min, x_max)
-            ('ZINST98',  1, 0,   100),     # SteamDumpPos
-            ('ZINST87',  1, 0,   50),      # Steam Flow 1
-            ('ZINST86',  1, 0,   50),      # Steam Flow 2
-            ('ZINST85',  1, 0,   50),      # Steam Flow 3
-            ('KLAMPO70', 1, 0,   0),       # Charging Pump2 State
-            ('BHV22',    1, 0,   0),       # SI Valve State
-            ('ZINST66',  1, 0,   25),      # PZRSprayPos
-            ('UAVLEG2',  1, 150, 320),     # PTTemp
-            ('ZINST65',  1, 0,   160),     # PTPressure
-            ('ZINST78',  1, 0,   70),      # SG1Nar
-            ('ZINST77',  1, 0,   70),      # SG2Nar
-            ('ZINST76',  1, 0,   70),      # SG3Nar
-            ('ZINST75',  1, 0,   80),      # SG1Pres
-            ('ZINST74',  1, 0,   80),      # SG2Pres
-            ('ZINST73',  1, 0,   80),      # SG3Pres
-            ('ZINST72',  1, 0,   100),     # SG1Wid
-            ('ZINST71',  1, 0,   100),     # SG2Wid
-            ('ZINST70',  1, 0,   100),     # SG3Wid
-            ('UUPPPL',   1, 100, 350),     # CoreExitTemp
-            ('WFWLN1',   1, 0,   25),      # SG1Feed
-            ('WFWLN2',   1, 0,   25),      # SG2Feed
-            ('WFWLN3',   1, 0,   25),      # SG3Feed
-            ('UCOLEG1',  1, 100, 0),       # RCSColdLoop1
-            ('UCOLEG2',  1, 100, 0),       # RCSColdLoop2
-            ('UCOLEG3',  1, 100, 0),       # RCSColdLoop3
+            # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
+            ('BHV142',   1, 0,   0),       # Letdown(HV142)
+            ('BFV122',   1, 0,   0),       # ChargingValve(FV122)
             ('ZINST65',  1, 0,   160),     # RCSPressure
             ('ZINST63',  1, 0,   100),     # PZRLevel
+
+            ('ErrPres',  1, 0,   10),       # RCSPressure - setpoint
+            ('UpPres',   1, 0,   10),       # RCSPressure - Up
+            ('DownPres', 1, 0,   10),       # RCSPressure - Down
         ]
 
-        self.action_space = 2       # TODO "HV142" , "FV122"
+        self.action_space = 1       # TODO "HV142" 만 제어, "FV122"는 제어 않함..?
         self.observation_space = len(self.input_info)
 
+        self.PID_Mode = False
         self.PID_NA = PID(kp=0.03, ki=0.001, kd=1.0)
-        self.PID_NA.SetPoint_pres = 24.0
+        self.PID_NA.SetPoint_pres = 25.0
 
         # GP
         # self.pl = NBPlot3D()
@@ -85,18 +67,57 @@ class ENVCNS(CNS):
         return x
 
     def get_state(self):
-        state = [self.normalize(self.mem[para]['Val'], x_round, x_min, x_max) for
-                 para, x_round, x_min, x_max in self.input_info]
+        state = []
+        for para, x_round, x_min, x_max in self.input_info:
+            if para in self.mem.keys():
+                state.append(self.normalize(self.mem[para]['Val'], x_round, x_min, x_max))
+            else:
+                # ADD logic ----- 계산된 값을 사용하고 싶을 때
+                if para == 'ErrPres':
+                    v_ = - abs(self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val'])
+                    # setpoint - 현재 압력 한뒤에 - abs
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'UpPres':
+                    v_ = self.PID_NA.SetPoint_pres + 5
+                    v_ = v_ - self.mem['ZINST65']['Val']
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'DownPres':
+                    v_ = self.PID_NA.SetPoint_pres - 5
+                    v_ = self.mem['ZINST65']['Val'] - v_
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
-        # self.Loger_txt += f'{state}\t'
+        self.Loger_txt += f'{state}\t'
         return np.array(state)
 
     def get_reward(self):
+        """
+        R => nor(0 ~ 5)
+        :return:
+        """
         r = 0
-        return r
+        V = {
+            'CurPres': self.mem['ZINST65']['Val'],
+        }
+
+        if V['CurPres'] > self.PID_NA.SetPoint_pres:
+            UpBoun = self.PID_NA.SetPoint_pres + 5
+            r = UpBoun - V['CurPres']
+        elif V['CurPres'] < self.PID_NA.SetPoint_pres:
+            DownBoun = self.PID_NA.SetPoint_pres - 5
+            r = V['CurPres'] - DownBoun
+        else:
+            r = 5
+
+        self.Loger_txt += f'R:{r}\t'
+        return self.normalize(r, 1, 0, 5)
 
     def get_done(self, r):
-        d = False
+        if r < 0:
+            d = True
+        else:
+            d = False
+        self.Loger_txt += f'{d}\t'
         return d, r
 
     def _send_control_save(self, zipParaVal):
@@ -118,9 +139,11 @@ class ENVCNS(CNS):
         }
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
+            'ChargingValveStay': (['KSWO101', 'KSWO102'], [0, 0]),
             'ChargingValveClase': (['KSWO101', 'KSWO102'], [1, 0]),
 
             'LetdownValveOpen': (['KSWO231', 'KSWO232'], [0, 1]),
+            'LetdownValveStay': (['KSWO231', 'KSWO232'], [0, 0]),
             'LetdownValveClose': (['KSWO231', 'KSWO232'], [1, 0]),
 
             'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
@@ -129,29 +152,55 @@ class ENVCNS(CNS):
             'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
             'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
         }
+
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
 
-        if V['CNSTime'] % (self.want_tick * 3) == 0:
-            err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
-            PID_out = self.PID_NA.update(err_, 1)
+        if self.PID_Mode:
+            if V['CNSTime'] % (self.want_tick * 3) == 0:
+                err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
+                PID_out = self.PID_NA.update(err_, 1)
 
-            if PID_out >= 0.005:
-                self._send_control_save(ActOrderBook['LetdownValveClose'])
-                print(f'Close {PID_out}')
-            elif -0.005 < PID_out < 0.005:
-                print(f'Stay {PID_out}')
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+                    # print(f'Close {PID_out}')
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['LetdownValveStay'])
+                    # print(f'Stay {PID_out}')
+                else:
+                    # print(f'Open {PID_out}')
+                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
             else:
-                print(f'Open {PID_out}')
-                self._send_control_save(ActOrderBook['LetdownValveOpen'])
+                self._send_control_save(ActOrderBook['LetdownValveStay'])
+        else: # AI Agent
+            if V['CNSTime'] % (self.want_tick * 3) == 0:
+                if AMod[0] > 0.4:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+                elif -0.4 <= AMod[0] <= 0.4:
+                    self._send_control_save(ActOrderBook['LetdownValveStay'])
+                else:
+                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
+            else:
+                self._send_control_save(ActOrderBook['LetdownValveStay'])
 
         # Done Act
         self._send_control_to_cns()
         return AMod
 
     def step(self, A):
+        """
+        A를 받고 1 step 전진
+        :param A: [Act], numpy.ndarry, Act는 numpy.float32
+        :return: 최신 state와 reward done 반환
+        """
+        # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
         self.want_tick = int(5)
+
+        self.Monitoring_ENV.push_ENV_val(i=self.Name,
+                                         Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
+                                                   ['BHV142', 'BFV122', 'ZINST65', 'ZINST63']}
+                                         )
 
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
@@ -160,6 +209,8 @@ class ENVCNS(CNS):
 
         reward = self.get_reward()
         done, reward = self.get_done(reward)
+        self.Monitoring_ENV.push_ENV_reward(i=self.Name,
+                                            Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
         next_state = self.get_state()
         # ----------------------------------------------------------
         self.ENVlogging(s=self.Loger_txt)
@@ -178,6 +229,7 @@ class ENVCNS(CNS):
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0
         self.ENVStep = 0
+        self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         self.FixedTime = 0
