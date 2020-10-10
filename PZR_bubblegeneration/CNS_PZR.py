@@ -110,15 +110,24 @@ class ENVCNS(CNS):
             r = 2
 
         self.Loger_txt += f'R:{r}\t'
-        return self.normalize(r, 1, 0, 2)
+        return r
 
     def get_done(self, r):
-        if r < 0:
+        V = {
+            'CurPres': self.mem['ZINST65']['Val'],
+            'CurLevel': self.mem['ZINST63']['Val'],
+        }
+
+        d = False
+        if V['CurPres'] > 30:
             d = True
-        else:
-            d = False
+
+        if V['CurLevel'] < 80:
+            d = True
+            r += 1
+            
         self.Loger_txt += f'{d}\t'
-        return d, r
+        return d, self.normalize(r, 1, 0, 3)
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -136,6 +145,7 @@ class ENVCNS(CNS):
         AMod = A
         V = {
             'CNSTime': self.mem['KCNTOMS']['Val'],
+            'Delta_T': self.mem['DELTAT']['Val'],
         }
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
@@ -149,8 +159,12 @@ class ENVCNS(CNS):
             'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
 
             'PZRProHeaterMan': (['KSWO120'], [1]), 'PZRProHeaterAuto': (['KSWO120'], [0]),
+
             'PZRProHeaterDown': (['KSWO121', 'KSWO122'], [1, 0]),
+            'PZRProHeaterStay': (['KSWO121', 'KSWO122'], [0, 0]),
             'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
+
+            'ChangeDelta': (['DELTAT'], [1]),
         }
 
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
@@ -158,20 +172,16 @@ class ENVCNS(CNS):
 
         if self.PID_Mode:
             if V['CNSTime'] % (self.want_tick * 3) == 0:
+                # Letdown Valve Control Logic
                 err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
                 PID_out = self.PID_NA.update(err_, 1)
 
-                if PID_out >= 0.005:
-                    self._send_control_save(ActOrderBook['LetdownValveClose'])
-                    # print(f'Close {PID_out}')
-                elif -0.005 < PID_out < 0.005:
-                    self._send_control_save(ActOrderBook['LetdownValveStay'])
-                    # print(f'Stay {PID_out}')
-                else:
-                    # print(f'Open {PID_out}')
-                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
+                if PID_out >= 0.005:              self._send_control_save(ActOrderBook['LetdownValveClose'])
+                elif -0.005 < PID_out < 0.005:    self._send_control_save(ActOrderBook['LetdownValveStay'])
+                else:                             self._send_control_save(ActOrderBook['LetdownValveOpen'])
             else:
                 self._send_control_save(ActOrderBook['LetdownValveStay'])
+
         else: # AI Agent
             if V['CNSTime'] % (self.want_tick * 3) == 0:
                 if AMod[0] > 0.4:
@@ -183,6 +193,8 @@ class ENVCNS(CNS):
             else:
                 self._send_control_save(ActOrderBook['LetdownValveStay'])
 
+        # Delta
+        if V['Delta_T'] != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
         # Done Act
         self._send_control_to_cns()
         return AMod
@@ -217,7 +229,7 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(20)
+        self.want_tick = int(5)
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
@@ -245,7 +257,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=19, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=20, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')

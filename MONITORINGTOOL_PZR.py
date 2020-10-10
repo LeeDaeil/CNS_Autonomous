@@ -61,8 +61,8 @@ class MonitoringMEM:
         self.ENVReward[i]['R'] = []
         self.ENVReward[i]['CurAcuR'] = 0
 
-        self.ENVReward[i]['Mean'] = []
-        self.ENVReward[i]['Std'] = []
+        self.ENVActDis[i]['Mean'] = []
+        self.ENVActDis[i]['Std'] = []
 
     def get_currentEP(self):
         get_db = self.StepInEachAgent
