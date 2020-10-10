@@ -103,9 +103,11 @@ class ENVCNS(CNS):
         if V['CurPres'] > self.PID_NA.SetPoint_pres:
             UpBoun = self.PID_NA.SetPoint_pres + 2
             r = UpBoun - V['CurPres']
+            r = 0 if r <= 0 else r
         elif V['CurPres'] < self.PID_NA.SetPoint_pres:
             DownBoun = self.PID_NA.SetPoint_pres - 2
             r = V['CurPres'] - DownBoun
+            r = 0 if r <= 0 else r
         else:
             r = 2
 
@@ -117,7 +119,7 @@ class ENVCNS(CNS):
             'CurPres': self.mem['ZINST65']['Val'],
             'CurLevel': self.mem['ZINST63']['Val'],
         }
-
+        r = self.normalize(r, 1, 0, 2)
         d = False
         if V['CurPres'] > 30:
             d = True
@@ -125,9 +127,9 @@ class ENVCNS(CNS):
         if V['CurLevel'] < 80:
             d = True
             r += 1
-            
+
         self.Loger_txt += f'{d}\t'
-        return d, self.normalize(r, 1, 0, 3)
+        return d, self.normalize(r, 1, 0, 2)
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -146,6 +148,8 @@ class ENVCNS(CNS):
         V = {
             'CNSTime': self.mem['KCNTOMS']['Val'],
             'Delta_T': self.mem['DELTAT']['Val'],
+            'ChargingVV': self.mem['BFV122']['Val'],
+            'LetDownSet': self.mem['ZINST36']['Val'],
         }
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
@@ -164,11 +168,25 @@ class ENVCNS(CNS):
             'PZRProHeaterStay': (['KSWO121', 'KSWO122'], [0, 0]),
             'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
 
+            'LetDownSetDown': (['KSWO90', 'KSWO91'], [1, 0]),
+            'LetDownSetStay': (['KSWO90', 'KSWO91'], [0, 0]),
+            'LetDownSetUP': (['KSWO90', 'KSWO91'], [0, 1]),
+
             'ChangeDelta': (['DELTAT'], [1]),
         }
 
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
+
+        if V['ChargingVV'] < 0.13:
+            self._send_control_save(ActOrderBook['ChargingValveOpen'])
+        else:
+            self._send_control_save(ActOrderBook['ChargingValveStay'])
+
+        if V['LetDownSet'] > 25.0:
+            self._send_control_save(ActOrderBook['LetDownSetDown'])
+        else:
+            self._send_control_save(ActOrderBook['LetDownSetStay'])
 
         if self.PID_Mode:
             if V['CNSTime'] % (self.want_tick * 3) == 0:
@@ -257,7 +275,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=20, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=19, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')
