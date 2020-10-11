@@ -156,6 +156,8 @@ class ENVCNS(CNS):
             'ChargingValveStay': (['KSWO101', 'KSWO102'], [0, 0]),
             'ChargingValveClase': (['KSWO101', 'KSWO102'], [1, 0]),
 
+            'ChargingEdit': (['BFV122'], [0.12]),
+
             'LetdownValveOpen': (['KSWO231', 'KSWO232'], [0, 1]),
             'LetdownValveStay': (['KSWO231', 'KSWO232'], [0, 0]),
             'LetdownValveClose': (['KSWO231', 'KSWO232'], [1, 0]),
@@ -178,15 +180,7 @@ class ENVCNS(CNS):
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
 
-        if V['ChargingVV'] < 0.13:
-            self._send_control_save(ActOrderBook['ChargingValveOpen'])
-        else:
-            self._send_control_save(ActOrderBook['ChargingValveStay'])
-
-        if V['LetDownSet'] > 25.0:
-            self._send_control_save(ActOrderBook['LetDownSetDown'])
-        else:
-            self._send_control_save(ActOrderBook['LetDownSetStay'])
+        if V['ChargingVV'] != 0.12: self._send_control_save(ActOrderBook['ChargingEdit'])
 
         if self.PID_Mode:
             if V['CNSTime'] % (self.want_tick * 3) == 0:
