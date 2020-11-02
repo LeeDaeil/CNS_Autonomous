@@ -187,18 +187,13 @@ class PlotCanvas(FigureCanvas):
         FigureCanvas.updateGeometry(self)
 
     def plot(self, val, A_val, reward_mem, ActDis):
-        self.ax1_1.clear()
-        self.ax1_2.clear()
-        self.ax2_1.clear()
-        self.ax2_2.clear()
-        self.ax3.clear()
-        self.ax4.clear()
+        [_.clear() for _ in self.fig.axes]  # all axes clear
 
         self.ax1_1.plot(val['PVCT'], label='VCT_pres')
         self.ax1_2.plot(val['ZVCT'], label='VCT_level')
 
-        self.ax2_1.plot(val['ZINST58'], label='VCT_pres')
-        self.ax2_2.plot(val['ZINST63'], label='VCT_level')
+        self.ax2_1.plot(val['ZINST58'], label='PZR_pres')
+        self.ax2_2.plot(val['ZINST63'], label='PZR_level')
 
         self.ax3.plot(val['BPV145'], label='Letdown_HX_pos')
         self.ax4.plot(val['BFV122'], label='Charging_pos')
@@ -218,20 +213,11 @@ class PlotCanvas(FigureCanvas):
         # self.ax3.plot([0, 0], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
         # self.ax3.plot([1, 1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
 
-        self.ax1_1.legend(loc=0)
-        self.ax1_2.legend(loc=0)
-        self.ax2_1.legend(loc=0)
-        self.ax2_2.legend(loc=0)
-        self.ax3.legend(loc=0)
-        self.ax4.legend(loc=0)
-
-        self.ax1_1.grid()
-        self.ax1_2.grid()
-        self.ax2_1.grid()
-        self.ax2_2.grid()
-        self.ax3.grid()
-        self.ax4.grid()
-
+        def common_fun(axes):
+            axes.legend(loc=0)
+            axes.grid()
+            return 0
+        [common_fun(_) for _ in self.fig.axes]  # all axes clear
         self.fig.set_tight_layout(True)
         self.fig.canvas.draw()
 

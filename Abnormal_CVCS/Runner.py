@@ -324,7 +324,6 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
         action_range = 1.
     elif ENV == 'CNS':
         env = ENVCNS(Name=id, IP='192.168.0.103', PORT=int(f'710{id + 1}'), Monitoring_ENV=Monitoring_ENV)
-        env.PID_Mode = True if id == 4 else False       # PID는 마지막 5번 에이전트가 담당함.
         action_dim = env.action_space
         state_dim = env.observation_space
         action_range = 1.
@@ -333,8 +332,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
     rewards = []
     # training loop
     for eps in range(max_episodes):
-        if not env.PID_Mode:
-            replay_buffer.add_ep()
+        replay_buffer.add_ep()
         episode_reward = 0
         episode_q1 = 0
         episode_q2 = 0
@@ -360,15 +358,14 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
                 print('Finished')
                 sac_trainer.save_model(model_path)
 
-            if env.PID_Mode == False:
-                replay_buffer.push(state, action, reward, next_state, done)
+            replay_buffer.push(state, action, reward, next_state, done)
 
             state = next_state
             episode_reward += reward
             frame_idx += 1
 
             # if len(replay_buffer) > batch_size:
-            if replay_buffer.get_length() > batch_size and env.PID_Mode == False:
+            if replay_buffer.get_length() > batch_size:
                 for i in range(update_itr):
                     _, episode_q1, episode_q2, episode_p = sac_trainer.update(batch_size,
                                                                               reward_scale=10.,

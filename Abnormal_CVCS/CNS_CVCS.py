@@ -23,27 +23,35 @@ class ENVCNS(CNS):
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
             ('PVCT',     1, 0,   100),        # VCT Press
             ('ZVCT',     1, 0,   100),        # VCT Level
+
             ('BLV616',   1, 0,   0),          # LV616, VCT->ChargingPump 유로 밸브
             ('KLAMPO71', 1, 0,   0),          # Charging Pump 1
             ('KLAMPO70', 1, 0,   0),          # Charging Pump 2
-
             ('KLAMPO69', 1, 0,   0),          # Charging Pump 3
+            ('WCMINI',   1, 0,   4),          # Mini Flow
+            ('BHV30',    1, 0,   0),          # HV30 Mini Flow 밸브
             ('BHV50',    1, 0,   0),          # HV50 ChargingPump->RCP Seal 유로 밸브
-            ('WCHGNO',   1, 0,   100),        # ChargingFlow 지시기
             ('BFV122',   1, 0,   1),          # Charging Valve Pos
-            ('UCHGUT',   1, 0,   300),        # Charging Valve->RCS 온도 지시기
+            ('WAUXSP',   1, 0,   10),         # PZR aux spray Flow
+            ('BHV40',    1, 0,   1),          # PZR aux spray HV40, CVCS->HV40->PZR
 
-            ('BHV41',    1, 0,   1),          # Letdown HV41, RCS->HV43->VCT
-            ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->VCT
-            ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
+            ('WNETCH',   1, 0,   10),         # Total_Charging Flow
             ('URHXUT',   1, 0,   300),        # Letdown RCS->VCT 온도 지시기
-            ('BHV1',     1, 0,   1),          # HV1 Pos
+            ('UCHGUT',   1, 0,   300),        # Charging Valve->RCS 온도 지시기
+            ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
+            ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
 
+            ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
+            ('BHV1',     1, 0,   1),          # HV1 Pos
             ('BHV2',     1, 0,   1),          # HV2 Pos
             ('BHV3',     1, 0,   1),          # HV3 Pos
-            ('WNETLD',   1, 0,   100),        # Letdown HX Flow
-            ('UNRHXUT',  1, 0,   300),        # Letdown HX Temp
-            ('ZINST36',  1, 0,   100),        # Letdown HX Press = PV145 Pos
+            ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
+            ('ZINST36',  1, 0,   100),        # Letdown HX Press
+            ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
+            ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
+
+            ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
+            ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
 
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
@@ -95,16 +103,76 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-        V = {
-            'WLETDNO': self.mem['WLETDNO']['Val'],
-            'CWHV1': 2.839
-        }
 
+        V = {
+            'PVCT': self.mem['PVCT']['Val'],            # VCT_pressure : PVCT
+            'ZVCT': self.mem['ZVCT']['Val'],            # VCT_level : ZVCT
+
+            'BLV616': self.mem['BLV616']['Val'],        # LV616_pos : BLV616
+            'KLAMPO71': self.mem['KLAMPO71']['Val'],    # CHP1 : KLAMPO71
+            'KLAMPO72': self.mem['KLAMPO72']['Val'],    # CHP2 : KLAMPO72
+            'KLAMPO73': self.mem['KLAMPO73']['Val'],    # CHP2 : KLAMPO73
+            'WCMINI': self.mem['WCMINI']['Val'],        # Mini Flow : WCMINI
+            'BHV30': self.mem['BHV30']['Val'],          # HV30_pos : BHV30
+            'BHV50': self.mem['BHV50']['Val'],          # HV50_pos : BHV50
+            'BFV122': self.mem['BFV122']['Val'],        # FV122_pos : BFV122
+            'WAUXSP': self.mem['WAUXSP']['Val'],        # AuxSpray_Flow : WAUXSP
+            'BHV40': self.mem['BHV40']['Val'],          # HV40 : BHV40
+
+            'WNETCH': self.mem['WNETCH']['Val'],        # Total_Charging_Flow: WNETCH
+            'URHXUT': self.mem['URHXUT']['Val'],        # Letdown_temp : URHXUT
+            'UCHGUT': self.mem['UCHGUT']['Val'],        # Charging_temp : UCHGUT
+            'ZINST58': self.mem['ZINST58']['Val'],      # PZR_press : ZINST58
+            'ZINST63': self.mem['ZINST63']['Val'],      # PZR_level : ZINST63
+
+            'BLV459': self.mem['BLV459']['Val'],        # Letdown_pos : BLV459
+            'BHV1': self.mem['BHV1']['Val'],            # Orifice_1 : BHV1
+            'BHV2': self.mem['BHV2']['Val'],            # Orifice_2 : BHV2
+            'BHV3': self.mem['BHV3']['Val'],            # Orifice_3 : BHV3
+            'BPV145': self.mem['BPV145']['Val'],        # Letdown_HX_pos : BPV145
+            'ZINST36': self.mem['ZINST36']['Val'],      # Letdown HX Press : ZINST36
+            'BHV41': self.mem['BHV41']['Val'],          # HV41_pos : BHV41
+            'KHV43': self.mem['KHV43']['Val'],          # HV43_pos : KHV43
+
+            'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
+            'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
+        }
         self.Loger_txt += f'R:{r}\t'
         return r
 
     def get_done(self, r):
-        V = {}
+        V = {
+            'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
+            'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
+
+            'BLV616': self.mem['BLV616']['Val'],  # LV616_pos : BLV616
+            'KLAMPO71': self.mem['KLAMPO71']['Val'],  # CHP1 : KLAMPO71
+            'KLAMPO72': self.mem['KLAMPO72']['Val'],  # CHP2 : KLAMPO72
+            'KLAMPO73': self.mem['KLAMPO73']['Val'],  # CHP2 : KLAMPO73
+            'WCMINI': self.mem['WCMINI']['Val'],  # Mini Flow : WCMINI
+            'BHV30': self.mem['BHV30']['Val'],  # HV30_pos : BHV30
+            'BHV50': self.mem['BHV50']['Val'],  # HV50_pos : BHV50
+            'BFV122': self.mem['BFV122']['Val'],  # FV122_pos : BFV122
+            'WAUXSP': self.mem['WAUXSP']['Val'],  # AuxSpray_Flow : WAUXSP
+            'BHV40': self.mem['BHV40']['Val'],  # HV40 : BHV40
+
+            'WNETCH': self.mem['WNETCH']['Val'],  # Total_Charging_Flow: WNETCH
+            'URHXUT': self.mem['URHXUT']['Val'],  # Letdown_temp : URHXUT
+            'UCHGUT': self.mem['UCHGUT']['Val'],  # Charging_temp : UCHGUT
+            'ZINST58': self.mem['ZINST58']['Val'],  # PZR_press : ZINST58
+            'ZINST63': self.mem['ZINST63']['Val'],  # PZR_level : ZINST63
+
+            'BLV459': self.mem['BLV459']['Val'],  # Letdown_pos : BLV459
+            'BHV1': self.mem['BHV1']['Val'],  # Orifice_1 : BHV1
+            'BHV2': self.mem['BHV2']['Val'],  # Orifice_2 : BHV2
+            'BHV3': self.mem['BHV3']['Val'],  # Orifice_3 : BHV3
+            'BPV145': self.mem['BPV145']['Val'],  # Letdown_HX_pos : BPV145
+            'BHV41': self.mem['BHV41']['Val'],  # HV41_pos : BHV41
+            'KHV43': self.mem['KHV43']['Val'],  # HV43_pos : KHV43
+
+            'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
+            'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
+        }
         d = False
 
         self.Loger_txt += f'{d}\t'
@@ -124,7 +192,38 @@ class ENVCNS(CNS):
         :return: AMod: 수정된 액션
         """
         AMod = A
-        V = {}
+        V = {
+            'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
+            'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
+
+            'BLV616': self.mem['BLV616']['Val'],  # LV616_pos : BLV616
+            'KLAMPO71': self.mem['KLAMPO71']['Val'],  # CHP1 : KLAMPO71
+            'KLAMPO72': self.mem['KLAMPO72']['Val'],  # CHP2 : KLAMPO72
+            'KLAMPO73': self.mem['KLAMPO73']['Val'],  # CHP2 : KLAMPO73
+            'WCMINI': self.mem['WCMINI']['Val'],  # Mini Flow : WCMINI
+            'BHV30': self.mem['BHV30']['Val'],  # HV30_pos : BHV30
+            'BHV50': self.mem['BHV50']['Val'],  # HV50_pos : BHV50
+            'BFV122': self.mem['BFV122']['Val'],  # FV122_pos : BFV122
+            'WAUXSP': self.mem['WAUXSP']['Val'],  # AuxSpray_Flow : WAUXSP
+            'BHV40': self.mem['BHV40']['Val'],  # HV40 : BHV40
+
+            'WNETCH': self.mem['WNETCH']['Val'],  # Total_Charging_Flow: WNETCH
+            'URHXUT': self.mem['URHXUT']['Val'],  # Letdown_temp : URHXUT
+            'UCHGUT': self.mem['UCHGUT']['Val'],  # Charging_temp : UCHGUT
+            'ZINST58': self.mem['ZINST58']['Val'],  # PZR_press : ZINST58
+            'ZINST63': self.mem['ZINST63']['Val'],  # PZR_level : ZINST63
+
+            'BLV459': self.mem['BLV459']['Val'],  # Letdown_pos : BLV459
+            'BHV1': self.mem['BHV1']['Val'],  # Orifice_1 : BHV1
+            'BHV2': self.mem['BHV2']['Val'],  # Orifice_2 : BHV2
+            'BHV3': self.mem['BHV3']['Val'],  # Orifice_3 : BHV3
+            'BPV145': self.mem['BPV145']['Val'],  # Letdown_HX_pos : BPV145
+            'BHV41': self.mem['BHV41']['Val'],  # HV41_pos : BHV41
+            'KHV43': self.mem['KHV43']['Val'],  # HV43_pos : KHV43
+
+            'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
+            'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
+        }
         ActOrderBook = {}
 
         # Done Act
