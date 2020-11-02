@@ -17,6 +17,7 @@ class MonitoringMEM:
         self.nub_agent = nub_agent
         self.StepInEachAgent = {i: 0 for i in range(nub_agent)}
         self.ENVVALInEachAgent = {i: {
+            'cMAL': [], 'cMALA': [], 'KCNTOMS': [],
             'PVCT': [], 'ZVCT': [], 'ZINST58': [], 'ZINST63': [],
             'BFV122': [], 'BPV145': [],
         } for i in range(nub_agent)}
@@ -189,14 +190,14 @@ class PlotCanvas(FigureCanvas):
     def plot(self, val, A_val, reward_mem, ActDis):
         [_.clear() for _ in self.fig.axes]  # all axes clear
 
-        self.ax1_1.plot(val['PVCT'], label='VCT_pres')
-        self.ax1_2.plot(val['ZVCT'], label='VCT_level')
+        self.ax1_1.plot(val['KCNTOMS'], val['PVCT'], label='VCT_pres')
+        self.ax1_2.plot(val['KCNTOMS'], val['ZVCT'], label='VCT_level')
 
-        self.ax2_1.plot(val['ZINST58'], label='PZR_pres')
-        self.ax2_2.plot(val['ZINST63'], label='PZR_level')
+        self.ax2_1.plot(val['KCNTOMS'], val['ZINST58'], label='PZR_pres')
+        self.ax2_2.plot(val['KCNTOMS'], val['ZINST63'], label='PZR_level')
 
-        self.ax3.plot(val['BPV145'], label='Letdown_HX_pos')
-        self.ax4.plot(val['BFV122'], label='Charging_pos')
+        self.ax3.plot(val['KCNTOMS'], val['BPV145'], label='Letdown_HX_pos')
+        self.ax4.plot(val['KCNTOMS'], val['BFV122'], label='Charging_pos')
 
         # # Distribution
         # mean, std = ActDis[0], ActDis[1]  # [0, 1]

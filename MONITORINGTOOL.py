@@ -275,4 +275,4 @@ class PlotCanvas(FigureCanvas):
         self.fig.canvas.draw()
 
     def saveFig(self):
-        self.fig.savefig('SaveFIg.png', dpi=100)
+        self.fig.savefig('SaveFIg.svg', format='svg', dpi=1200)

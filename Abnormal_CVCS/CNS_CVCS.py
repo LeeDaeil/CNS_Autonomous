@@ -15,7 +15,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
-        self.want_tick = 5  # 1sec
+        self.want_tick = 10  # 1sec
 
         self.Loger_txt = ''
 
@@ -56,10 +56,9 @@ class ENVCNS(CNS):
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
             # NewValue
-
         ]
 
-        self.action_space = 1       # TODO "
+        self.action_space = 2       # TODO "
         self.observation_space = len(self.input_info)
 
     # ENV Logger
@@ -103,10 +102,10 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-
         V = {
+            'CNSTime': self.mem['KCNTOMS']['Val'],      # CNS Time : KCNTOMS
             'PVCT': self.mem['PVCT']['Val'],            # VCT_pressure : PVCT
-            'ZVCT': self.mem['ZVCT']['Val'],            # VCT_level : ZVCT
+            'VCT_level': self.mem['ZVCT']['Val'],       # VCT_level : ZVCT
 
             'BLV616': self.mem['BLV616']['Val'],        # LV616_pos : BLV616
             'KLAMPO71': self.mem['KLAMPO71']['Val'],    # CHP1 : KLAMPO71
@@ -123,7 +122,7 @@ class ENVCNS(CNS):
             'URHXUT': self.mem['URHXUT']['Val'],        # Letdown_temp : URHXUT
             'UCHGUT': self.mem['UCHGUT']['Val'],        # Charging_temp : UCHGUT
             'ZINST58': self.mem['ZINST58']['Val'],      # PZR_press : ZINST58
-            'ZINST63': self.mem['ZINST63']['Val'],      # PZR_level : ZINST63
+            'PZR_level': self.mem['ZINST63']['Val'],    # PZR_level : ZINST63
 
             'BLV459': self.mem['BLV459']['Val'],        # Letdown_pos : BLV459
             'BHV1': self.mem['BHV1']['Val'],            # Orifice_1 : BHV1
@@ -137,11 +136,28 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
         }
+
+        if V['PZR_level'] < 56.5:
+            r += - (56.5 - V['PZR_level'])
+        elif V['PZR_level'] > 57.5:
+            r += - (V['PZR_level'] - 57.5)
+        else:
+            r += 1
+
+        if V['VCT_level'] < 35:
+            r += - (35 - V['VCT_level'])
+        elif V['VCT_level'] > 45:
+            r += - (V['VCT_level'] - 45)
+        else:
+            r += 1
+
         self.Loger_txt += f'R:{r}\t'
         return r
 
     def get_done(self, r):
         V = {
+            'CNSTime': self.mem['KCNTOMS']['Val'],  # CNS Time : KCNTOMS
+
             'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
             'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
 
@@ -173,7 +189,10 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
         }
-        d = False
+        if V['CNSTime'] >= 5000:
+            d = True
+        else:
+            d = False
 
         self.Loger_txt += f'{d}\t'
         return d, self.normalize(r, 1, 0, 2)
@@ -193,6 +212,8 @@ class ENVCNS(CNS):
         """
         AMod = A
         V = {
+            'CNSTime': self.mem['KCNTOMS']['Val'],  # CNS Time : KCNTOMS
+
             'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
             'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
 
@@ -223,8 +244,22 @@ class ENVCNS(CNS):
 
             'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
+
+            'BPV145MA': self.mem['KLAMPO89']['Val'],  # BPV145 Man(1)/Auto(0) : KLAMPO89
+            'BFV122MA': self.mem['KLAMPO95']['Val'],  # BFV122 Man(1)/Auto(0) : KLAMPO95
         }
-        ActOrderBook = {}
+        ActOrderBook = {
+            'BPV145Man': (['KSWO89'], [1]),
+            'BFV122Man': (['KSWO100'], [1]),
+        }
+        if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
+        if V['BFV122MA'] == 0: self._send_control_save(ActOrderBook['BFV122Man'])
+
+        Charging_pos = np.clip(round(AMod[0] / 10, 2) + V['BFV122'], a_min=0, a_max=1)
+        self._send_control_save((['BFV122'], [Charging_pos]))
+
+        Letdown_pos = np.clip(round(AMod[1] / 10, 2) + V['BPV145'], a_min=0, a_max=1)
+        self._send_control_save((['BPV145'], [Letdown_pos]))
 
         # Done Act
         self._send_control_to_cns()
@@ -238,11 +273,12 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(5)
+        self.want_tick = int(10)
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
-                                                   ['PVCT', 'ZVCT', 'ZINST58', 'ZINST63', 'BFV122', 'BPV145']}
+                                                   ['cMAL', 'cMALA', 'KCNTOMS',
+                                                    'PVCT', 'ZVCT', 'ZINST58', 'ZINST63', 'BFV122', 'BPV145']}
                                          )
 
         self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
