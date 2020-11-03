@@ -21,7 +21,7 @@ class ENVCNS(CNS):
 
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
-            ('PVCT',     1, 0,   100),        # VCT Press
+            ('PVCT',     1, 0,   2),          # VCT Press
             ('ZVCT',     1, 0,   100),        # VCT Level
 
             ('BLV616',   1, 0,   0),          # LV616, VCT->ChargingPump 유로 밸브
@@ -46,7 +46,7 @@ class ENVCNS(CNS):
             ('BHV2',     1, 0,   1),          # HV2 Pos
             ('BHV3',     1, 0,   1),          # HV3 Pos
             ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
-            ('ZINST36',  1, 0,   100),        # Letdown HX Press
+            ('ZINST36',  1, 0,   40),         # Letdown HX Press
             ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
             ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
 
@@ -136,22 +136,25 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
         }
+        PZR_level_set = 50
+        VCT_level_set = 50
 
-        if V['PZR_level'] < 56.5:
-            r += - (56.5 - V['PZR_level'])
-        elif V['PZR_level'] > 57.5:
-            r += - (V['PZR_level'] - 57.5)
+        r1, r2 = 0, 0
+        if V['PZR_level'] < PZR_level_set - 0.5:
+            r1 += - (PZR_level_set - 0.5 - V['PZR_level'])
+        elif V['PZR_level'] > PZR_level_set + 0.5:
+            r1 += - (V['PZR_level'] - PZR_level_set + 0.5)
         else:
-            r += 1
+            r1 += 1
 
-        if V['VCT_level'] < 35:
-            r += - (35 - V['VCT_level'])
-        elif V['VCT_level'] > 45:
-            r += - (V['VCT_level'] - 45)
+        if V['VCT_level'] < VCT_level_set - 5:
+            r2 += - (VCT_level_set - 5 - V['VCT_level'])
+        elif V['VCT_level'] > VCT_level_set + 5:
+            r2 += - (V['VCT_level'] - VCT_level_set + 5)
         else:
-            r += 1
-
-        self.Loger_txt += f'R:{r}\t'
+            r2 += 1
+        r += r1 + r2
+        self.Loger_txt += f'R:,[{r},{r1},{r2}]\t'
         return r
 
     def get_done(self, r):
@@ -252,13 +255,17 @@ class ENVCNS(CNS):
             'BPV145Man': (['KSWO89'], [1]),
             'BFV122Man': (['KSWO100'], [1]),
         }
+        if self.Name == 0:
+            print(f'{self.Name}_PV145:{V["BPV145"]}_BFV122:{V["BFV122"]}')
+            print(round(AMod[0] / 100, 4))
+
         if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
         if V['BFV122MA'] == 0: self._send_control_save(ActOrderBook['BFV122Man'])
 
-        Charging_pos = np.clip(round(AMod[0] / 10, 2) + V['BFV122'], a_min=0, a_max=1)
+        Charging_pos = np.clip(round(AMod[0] / 100, 4) + V['BFV122'], a_min=0.1, a_max=1)
         self._send_control_save((['BFV122'], [Charging_pos]))
 
-        Letdown_pos = np.clip(round(AMod[1] / 10, 2) + V['BPV145'], a_min=0, a_max=1)
+        Letdown_pos = np.clip(round(AMod[1] / 100, 4) + V['BPV145'], a_min=0, a_max=0.8)
         self._send_control_save((['BPV145'], [Letdown_pos]))
 
         # Done Act
@@ -312,7 +319,8 @@ class ENVCNS(CNS):
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0
         self.ENVStep = 0
-        # self.Monitoring_ENV.init_ENV_val(self.Name)
+        # 4.1] Monitoring init
+        self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         self.FixedTime = 0

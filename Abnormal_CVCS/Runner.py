@@ -187,7 +187,8 @@ class PolicyNetwork(nn.Module):
 
         action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
             action.detach().cpu().numpy()[0]
-        return action, mean.item(), std.item()
+        # return action, mean.item(), std.item()
+        return action, 0, 0
 
     def sample_action(self, state):
         # Ep 초기 랜덤 액션 용
