@@ -19,7 +19,7 @@ class MonitoringMEM:
         self.ENVVALInEachAgent = {i: {
             'cMAL': [], 'cMALA': [], 'KCNTOMS': [],
             'PVCT': [], 'ZVCT': [], 'ZINST58': [], 'ZINST63': [],
-            'BFV122': [], 'BPV145': [],
+            'BFV122': [], 'BPV145': [], 'WDEMI':[], 'WNETCH': [], 'WEXLD': [],
         } for i in range(nub_agent)}
 
         self.ENVReward = {i: {
@@ -167,7 +167,7 @@ class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         self.fig = plt.figure(figsize=(width, height), dpi=dpi)
 
-        gs = GridSpec(4, 2, figure=self.fig)
+        gs = GridSpec(5, 2, figure=self.fig)
         self.ax1_1 = self.fig.add_subplot(gs[0:1, 0:1])
         self.ax1_2 = self.fig.add_subplot(gs[1:2, 0:1])
 
@@ -176,6 +176,8 @@ class PlotCanvas(FigureCanvas):
 
         self.ax3 = self.fig.add_subplot(gs[2:4, 0:1])
         self.ax4 = self.fig.add_subplot(gs[2:4, 1:2])
+
+        self.ax5 = self.fig.add_subplot(gs[4:5, 0:1])
 
         # self.ax3 = self.fig.add_subplot(gs[1:2, 0:1], projection='3d')
 
@@ -198,6 +200,9 @@ class PlotCanvas(FigureCanvas):
 
         self.ax3.plot(val['BPV145'], label='Letdown_HX_pos')
         self.ax4.plot(val['BFV122'], label='Charging_pos')
+
+        Dev = [ch - let_1 - let_2 for ch, let_1, let_2 in zip(val['WNETCH'], val['WDEMI'], val['WEXLD'])]
+        self.ax5.plot(Dev, label='Dev')
 
         # # Distribution
         # mean, std = ActDis[0], ActDis[1]  # [0, 1]

@@ -136,21 +136,21 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
         }
-        PZR_level_set = 50
-        VCT_level_set = 50
+        PZR_level_set = 55
+        VCT_level_set = 74
 
         r1, r2 = 0, 0
-        if V['PZR_level'] < PZR_level_set - 0.5:
-            r1 += - (PZR_level_set - 0.5 - V['PZR_level'])
-        elif V['PZR_level'] > PZR_level_set + 0.5:
-            r1 += - (V['PZR_level'] - PZR_level_set + 0.5)
+        if V['PZR_level'] < PZR_level_set - 1:
+            r1 += - (PZR_level_set - 1 - V['PZR_level'])
+        elif V['PZR_level'] > PZR_level_set + 1:
+            r1 += - (V['PZR_level'] - PZR_level_set + 1)
         else:
             r1 += 1
 
-        if V['VCT_level'] < VCT_level_set - 5:
-            r2 += - (VCT_level_set - 5 - V['VCT_level'])
-        elif V['VCT_level'] > VCT_level_set + 5:
-            r2 += - (V['VCT_level'] - VCT_level_set + 5)
+        if V['VCT_level'] < VCT_level_set - 1:
+            r2 += - (VCT_level_set - 1 - V['VCT_level'])
+        elif V['VCT_level'] > VCT_level_set + 1:
+            r2 += - (V['VCT_level'] - VCT_level_set + 1)
         else:
             r2 += 1
         r += r1 + r2
@@ -255,17 +255,17 @@ class ENVCNS(CNS):
             'BPV145Man': (['KSWO89'], [1]),
             'BFV122Man': (['KSWO100'], [1]),
         }
-        if self.Name == 0:
-            print(f'{self.Name}_PV145:{V["BPV145"]}_BFV122:{V["BFV122"]}')
-            print(round(AMod[0] / 100, 4))
+        # if self.Name == 0:
+        #     print(f'{self.Name}_PV145:{V["BPV145"]}_BFV122:{V["BFV122"]}')
+        #     print(round(AMod[0] / 100, 4))
 
         if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
         if V['BFV122MA'] == 0: self._send_control_save(ActOrderBook['BFV122Man'])
 
-        Charging_pos = np.clip(round(AMod[0] / 100, 4) + V['BFV122'], a_min=0.1, a_max=1)
+        Charging_pos = np.clip(round(AMod[0] / 100, 5) + V['BFV122'], a_min=0.1, a_max=1)
         self._send_control_save((['BFV122'], [Charging_pos]))
 
-        Letdown_pos = np.clip(round(AMod[1] / 100, 4) + V['BPV145'], a_min=0, a_max=0.8)
+        Letdown_pos = np.clip(round(AMod[1] / 100, 5) + V['BPV145'], a_min=0, a_max=0.8)
         self._send_control_save((['BPV145'], [Letdown_pos]))
 
         # Done Act
@@ -285,7 +285,8 @@ class ENVCNS(CNS):
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
                                                    ['cMAL', 'cMALA', 'KCNTOMS',
-                                                    'PVCT', 'ZVCT', 'ZINST58', 'ZINST63', 'BFV122', 'BPV145']}
+                                                    'PVCT', 'ZVCT', 'ZINST58', 'ZINST63', 'BFV122', 'BPV145',
+                                                    'WDEMI', 'WNETCH', 'WEXLD']}
                                          )
 
         self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
