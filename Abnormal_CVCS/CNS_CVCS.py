@@ -24,32 +24,32 @@ class ENVCNS(CNS):
             ('PVCT',     1, 0,   2),          # VCT Press
             ('ZVCT',     1, 0,   100),        # VCT Level
 
-            ('BLV616',   1, 0,   0),          # LV616, VCT->ChargingPump 유로 밸브
-            ('KLAMPO71', 1, 0,   0),          # Charging Pump 1
-            ('KLAMPO70', 1, 0,   0),          # Charging Pump 2
-            ('KLAMPO69', 1, 0,   0),          # Charging Pump 3
-            ('WCMINI',   1, 0,   4),          # Mini Flow
-            ('BHV30',    1, 0,   0),          # HV30 Mini Flow 밸브
-            ('BHV50',    1, 0,   0),          # HV50 ChargingPump->RCP Seal 유로 밸브
+            # ('BLV616',   1, 0,   0),          # LV616, VCT->ChargingPump 유로 밸브
+            # ('KLAMPO71', 1, 0,   0),          # Charging Pump 1
+            # ('KLAMPO70', 1, 0,   0),          # Charging Pump 2
+            # ('KLAMPO69', 1, 0,   0),          # Charging Pump 3
+            # ('WCMINI',   1, 0,   4),          # Mini Flow
+            # ('BHV30',    1, 0,   0),          # HV30 Mini Flow 밸브
+            # ('BHV50',    1, 0,   0),          # HV50 ChargingPump->RCP Seal 유로 밸브
             ('BFV122',   1, 0,   1),          # Charging Valve Pos
-            ('WAUXSP',   1, 0,   10),         # PZR aux spray Flow
-            ('BHV40',    1, 0,   1),          # PZR aux spray HV40, CVCS->HV40->PZR
-
+            # ('WAUXSP',   1, 0,   10),         # PZR aux spray Flow
+            # ('BHV40',    1, 0,   1),          # PZR aux spray HV40, CVCS->HV40->PZR
+            #
             ('WNETCH',   1, 0,   10),         # Total_Charging Flow
-            ('URHXUT',   1, 0,   300),        # Letdown RCS->VCT 온도 지시기
-            ('UCHGUT',   1, 0,   300),        # Charging Valve->RCS 온도 지시기
-            ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
-            ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
-
-            ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
-            ('BHV1',     1, 0,   1),          # HV1 Pos
-            ('BHV2',     1, 0,   1),          # HV2 Pos
-            ('BHV3',     1, 0,   1),          # HV3 Pos
+            # ('URHXUT',   1, 0,   300),        # Letdown RCS->VCT 온도 지시기
+            # ('UCHGUT',   1, 0,   300),        # Charging Valve->RCS 온도 지시기
+            # ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
+            # ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
+            #
+            # ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
+            # ('BHV1',     1, 0,   1),          # HV1 Pos
+            # ('BHV2',     1, 0,   1),          # HV2 Pos
+            # ('BHV3',     1, 0,   1),          # HV3 Pos
             ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
             ('ZINST36',  1, 0,   40),         # Letdown HX Press
-            ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
-            ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
-
+            # ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
+            # ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
+            #
             ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
             ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
 
@@ -58,7 +58,7 @@ class ENVCNS(CNS):
             # NewValue
         ]
 
-        self.action_space = 2       # TODO "
+        self.action_space = 1       # TODO "
         self.observation_space = len(self.input_info)
 
     # ENV Logger
@@ -101,7 +101,6 @@ class ENVCNS(CNS):
         R => _
         :return:
         """
-        r = 0
         V = {
             'CNSTime': self.mem['KCNTOMS']['Val'],      # CNS Time : KCNTOMS
             'PVCT': self.mem['PVCT']['Val'],            # VCT_pressure : PVCT
@@ -139,22 +138,14 @@ class ENVCNS(CNS):
         PZR_level_set = 55
         VCT_level_set = 74
 
-        r1, r2 = 0, 0
-        if V['PZR_level'] < PZR_level_set - 1:
-            r1 += - (PZR_level_set - 1 - V['PZR_level'])
-        elif V['PZR_level'] > PZR_level_set + 1:
-            r1 += - (V['PZR_level'] - PZR_level_set + 1)
-        else:
-            r1 += 1
-
-        if V['VCT_level'] < VCT_level_set - 1:
-            r2 += - (VCT_level_set - 1 - V['VCT_level'])
-        elif V['VCT_level'] > VCT_level_set + 1:
-            r2 += - (V['VCT_level'] - VCT_level_set + 1)
-        else:
-            r2 += 1
-        r += r1 + r2
-        self.Loger_txt += f'R:,[{r},{r1},{r2}]\t'
+        r = [0, 0]
+        r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
+                               max_r=0.5, min_r=-5)
+        r[1] = TOOL.generate_r(curr=V['VCT_level'], setpoint=VCT_level_set, distance=0.5,
+                               max_r=0.5, min_r=-5)
+        self.Loger_txt += f'R:,{r},\t'
+        r = self.normalize(sum(r), 0, -10, 1)
+        self.AcumulatedReward += r
         return r
 
     def get_done(self, r):
@@ -197,8 +188,15 @@ class ENVCNS(CNS):
         else:
             d = False
 
+        # 1. 너무 많이 벗어 나면 - 10점
+        if 40 <= V['ZINST63'] <= 70:
+            pass
+        else:
+            d = True
+            r = -10
+
         self.Loger_txt += f'{d}\t'
-        return d, self.normalize(r, 1, 0, 2)
+        return d, r
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -259,14 +257,18 @@ class ENVCNS(CNS):
         #     print(f'{self.Name}_PV145:{V["BPV145"]}_BFV122:{V["BFV122"]}')
         #     print(round(AMod[0] / 100, 4))
 
-        if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
+        # if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
         if V['BFV122MA'] == 0: self._send_control_save(ActOrderBook['BFV122Man'])
 
-        Charging_pos = np.clip(round(AMod[0] / 100, 5) + V['BFV122'], a_min=0.1, a_max=1)
-        self._send_control_save((['BFV122'], [Charging_pos]))
+        if AMod[0] < -0.4: Update_pos = V['BFV122'] + 0.005
+        elif AMod[0] <= abs(0.4): Update_pos = V['BFV122']
+        else: Update_pos = V['BFV122'] - 0.005
 
-        Letdown_pos = np.clip(round(AMod[1] / 100, 5) + V['BPV145'], a_min=0, a_max=0.8)
-        self._send_control_save((['BPV145'], [Letdown_pos]))
+        Update_pos = np.clip(Update_pos, a_min=0.1, a_max=1)
+        self._send_control_save((['BFV122'], [Update_pos]))
+
+        # Letdown_pos = np.clip(round(AMod[1] / 100, 5) + V['BPV145'], a_min=0, a_max=0.8)
+        # self._send_control_save((['BPV145'], [Letdown_pos]))
 
         # Done Act
         self._send_control_to_cns()

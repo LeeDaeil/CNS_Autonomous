@@ -83,6 +83,31 @@ class TOOL:
     def RoundVal(val, div, r):
         return round(val / div, r)
 
+    # 보상 알고리즘 파트
+    @staticmethod
+    def generate_r(curr, setpoint, distance, max_r=None, min_r=None):
+        """
+        특정 setpoint에서 +- distance까지 거리 내는 + 보상을 범위 초과 시 - 보상제공
+        :param curr:
+        :param setpoint:
+        :param distance:
+        :param max_r:
+        :param min_r:
+        :return:
+        """
+        r = 0
+        if curr == setpoint:
+            r = distance
+        else:
+            if curr > setpoint:
+                r = setpoint - curr + distance
+            else:
+                r = curr - setpoint + distance
+
+        if max_r is not None and min_r is not None:
+            r = np.clip(min_r, r, max_r)
+        return r
+
 
 class DB:
     def __init__(self, max_leg=1):
