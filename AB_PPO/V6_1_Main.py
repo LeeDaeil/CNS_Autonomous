@@ -13,7 +13,7 @@ class Work_info:  # 데이터 저장 및 초기 입력 변수 선정
         self.CURNET_COM_IP = '192.168.0.10'
         self.CNS_IP_LIST = ['192.168.0.7', '192.168.0.4', '192.168.0.2']
         self.CNS_PORT_LIST = [7100, 7200, 7300]
-        self.CNS_NUMBERS = [10, 0, 0]
+        self.CNS_NUMBERS = [5, 0, 0]
 
         self.TimeLeg = 15
 

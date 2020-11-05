@@ -422,7 +422,7 @@ def plot(rewards, name):
 
 if __name__ == '__main__':
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
-    num_workers = 4  # mp.cpu_count()    # TODO
+    num_workers = 3  # mp.cpu_count()    # TODO
 
     BaseManager.register('ReplayBuffer', ReplayBuffer)
     BaseManager.register('MonitoringMEM', MonitoringMEM)

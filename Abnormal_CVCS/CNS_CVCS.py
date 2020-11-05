@@ -15,14 +15,14 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
-        self.want_tick = 20  # 1sec
+        self.want_tick = 50  # 1sec
 
         self.Loger_txt = ''
 
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
-            ('PVCT',     1, 0,   2),          # VCT Press
-            ('ZVCT',     1, 0,   100),        # VCT Level
+            # ('PVCT',     1, 0,   2),          # VCT Press
+            # ('ZVCT',     1, 0,   100),        # VCT Level
 
             # ('BLV616',   1, 0,   0),          # LV616, VCT->ChargingPump 유로 밸브
             # ('KLAMPO71', 1, 0,   0),          # Charging Pump 1
@@ -31,27 +31,27 @@ class ENVCNS(CNS):
             # ('WCMINI',   1, 0,   4),          # Mini Flow
             # ('BHV30',    1, 0,   0),          # HV30 Mini Flow 밸브
             # ('BHV50',    1, 0,   0),          # HV50 ChargingPump->RCP Seal 유로 밸브
-            ('BFV122',   1, 0,   1),          # Charging Valve Pos
+            # ('BFV122',   1, 0,   1),          # Charging Valve Pos
             # ('WAUXSP',   1, 0,   10),         # PZR aux spray Flow
             # ('BHV40',    1, 0,   1),          # PZR aux spray HV40, CVCS->HV40->PZR
             #
             ('WNETCH',   1, 0,   10),         # Total_Charging Flow
             # ('URHXUT',   1, 0,   300),        # Letdown RCS->VCT 온도 지시기
             # ('UCHGUT',   1, 0,   300),        # Charging Valve->RCS 온도 지시기
-            # ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
-            # ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
+            ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
+            ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
             #
             # ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
             # ('BHV1',     1, 0,   1),          # HV1 Pos
             # ('BHV2',     1, 0,   1),          # HV2 Pos
             # ('BHV3',     1, 0,   1),          # HV3 Pos
-            ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
-            ('ZINST36',  1, 0,   40),         # Letdown HX Press
+            # ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
+            # ('ZINST36',  1, 0,   40),         # Letdown HX Press
             # ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
             # ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
             #
-            ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
-            ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
+            # ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
+            # ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
 
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
@@ -135,7 +135,7 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
         }
-        PZR_level_set = 55
+        PZR_level_set = 57
         VCT_level_set = 74
 
         r = [0, 0]
@@ -144,7 +144,8 @@ class ENVCNS(CNS):
         # r[1] = TOOL.generate_r(curr=V['VCT_level'], setpoint=VCT_level_set, distance=0.5,
         #                        max_r=0.5, min_r=-5)
         self.Loger_txt += f'R:,{r},\t'
-        r = self.normalize(sum(r), 0, -5, 0.5) / 10
+        r = sum(r)/100
+        # r = self.normalize(sum(r), 0, -5, 0.5) / 10
         self.AcumulatedReward += r
         return r
 
@@ -183,19 +184,23 @@ class ENVCNS(CNS):
             'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
             'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
         }
-        if V['CNSTime'] >= 5000:
+        if V['CNSTime'] >= 25000:
             d = True
         else:
             d = False
 
         # 1. 너무 많이 벗어 나면 - 10점
-        if 40 <= V['ZINST63'] <= 70:
+        if 45 <= V['ZINST63'] <= 60:
             pass
         else:
             d = True
             r = -10
 
         self.Loger_txt += f'{d}\t'
+
+        if self.Name == 0:
+            print(r)
+
         return d, r
 
     def _send_control_save(self, zipParaVal):
@@ -260,9 +265,15 @@ class ENVCNS(CNS):
         # if V['BPV145MA'] == 0: self._send_control_save(ActOrderBook['BPV145Man'])
         if V['BFV122MA'] == 0: self._send_control_save(ActOrderBook['BFV122Man'])
 
-        if AMod[0] < -0.4: Update_pos = V['BFV122'] + 0.005
-        elif AMod[0] <= abs(0.4): Update_pos = V['BFV122']
-        else: Update_pos = V['BFV122'] - 0.005
+        if self.Name == 0:
+            print(AMod)
+
+        if AMod[0] < -0.6: Update_pos = V['BFV122'] + 0.02
+        elif AMod[0] <= abs(0.6):
+            if AMod < - 0.2: Update_pos = V['BFV122'] + 0.01
+            elif AMod[0] <= abs(0.2): Update_pos = V['BFV122']
+            else: Update_pos = V['BFV122'] - 0.01
+        else: Update_pos = V['BFV122'] - 0.02
 
         Update_pos = np.clip(Update_pos, a_min=0.1, a_max=1)
         self._send_control_save((['BFV122'], [Update_pos]))
@@ -282,7 +293,7 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(10)
+        self.want_tick = int(50)
 
         self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
