@@ -15,7 +15,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
-        self.want_tick = 10  # 1sec
+        self.want_tick = 20  # 1sec
 
         self.Loger_txt = ''
 
@@ -141,10 +141,10 @@ class ENVCNS(CNS):
         r = [0, 0]
         r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
                                max_r=0.5, min_r=-5)
-        r[1] = TOOL.generate_r(curr=V['VCT_level'], setpoint=VCT_level_set, distance=0.5,
-                               max_r=0.5, min_r=-5)
+        # r[1] = TOOL.generate_r(curr=V['VCT_level'], setpoint=VCT_level_set, distance=0.5,
+        #                        max_r=0.5, min_r=-5)
         self.Loger_txt += f'R:,{r},\t'
-        r = self.normalize(sum(r), 0, -10, 1)
+        r = self.normalize(sum(r), 0, -5, 0.5) / 10
         self.AcumulatedReward += r
         return r
 
