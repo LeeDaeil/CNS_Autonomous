@@ -50,15 +50,15 @@ class ENVCNS(CNS):
             # ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
             # ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
             #
-            # ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
-            # ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
+            ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
+            ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
 
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
             # NewValue
         ]
 
-        self.action_space = 1       # TODO "
+        self.action_space = 3       # TODO "
         self.observation_space = len(self.input_info)
 
     # ENV Logger
@@ -95,113 +95,6 @@ class ENVCNS(CNS):
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
         self.Loger_txt += f'{state}\t'
         return np.array(state)
-
-    def get_reward(self):
-        """
-        R => _
-        :return:
-        """
-        V = {
-            'CNSTime': self.mem['KCNTOMS']['Val'],      # CNS Time : KCNTOMS
-            'PVCT': self.mem['PVCT']['Val'],            # VCT_pressure : PVCT
-            'VCT_level': self.mem['ZVCT']['Val'],       # VCT_level : ZVCT
-
-            'BLV616': self.mem['BLV616']['Val'],        # LV616_pos : BLV616
-            'KLAMPO71': self.mem['KLAMPO71']['Val'],    # CHP1 : KLAMPO71
-            'KLAMPO72': self.mem['KLAMPO72']['Val'],    # CHP2 : KLAMPO72
-            'KLAMPO73': self.mem['KLAMPO73']['Val'],    # CHP2 : KLAMPO73
-            'WCMINI': self.mem['WCMINI']['Val'],        # Mini Flow : WCMINI
-            'BHV30': self.mem['BHV30']['Val'],          # HV30_pos : BHV30
-            'BHV50': self.mem['BHV50']['Val'],          # HV50_pos : BHV50
-            'BFV122': self.mem['BFV122']['Val'],        # FV122_pos : BFV122
-            'WAUXSP': self.mem['WAUXSP']['Val'],        # AuxSpray_Flow : WAUXSP
-            'BHV40': self.mem['BHV40']['Val'],          # HV40 : BHV40
-
-            'WNETCH': self.mem['WNETCH']['Val'],        # Total_Charging_Flow: WNETCH
-            'URHXUT': self.mem['URHXUT']['Val'],        # Letdown_temp : URHXUT
-            'UCHGUT': self.mem['UCHGUT']['Val'],        # Charging_temp : UCHGUT
-            'ZINST58': self.mem['ZINST58']['Val'],      # PZR_press : ZINST58
-            'PZR_level': self.mem['ZINST63']['Val'],    # PZR_level : ZINST63
-
-            'BLV459': self.mem['BLV459']['Val'],        # Letdown_pos : BLV459
-            'BHV1': self.mem['BHV1']['Val'],            # Orifice_1 : BHV1
-            'BHV2': self.mem['BHV2']['Val'],            # Orifice_2 : BHV2
-            'BHV3': self.mem['BHV3']['Val'],            # Orifice_3 : BHV3
-            'BPV145': self.mem['BPV145']['Val'],        # Letdown_HX_pos : BPV145
-            'ZINST36': self.mem['ZINST36']['Val'],      # Letdown HX Press : ZINST36
-            'BHV41': self.mem['BHV41']['Val'],          # HV41_pos : BHV41
-            'KHV43': self.mem['KHV43']['Val'],          # HV43_pos : KHV43
-
-            'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
-            'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
-        }
-        PZR_level_set = 57
-        VCT_level_set = 74
-
-        r = [0, 0]
-        r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
-                               max_r=0.5, min_r=-5)
-        # r[1] = TOOL.generate_r(curr=V['VCT_level'], setpoint=VCT_level_set, distance=0.5,
-        #                        max_r=0.5, min_r=-5)
-        self.Loger_txt += f'R:,{r},\t'
-        r = sum(r)/100
-        # r = self.normalize(sum(r), 0, -5, 0.5) / 10
-        self.AcumulatedReward += r
-        return r
-
-    def get_done(self, r):
-        V = {
-            'CNSTime': self.mem['KCNTOMS']['Val'],  # CNS Time : KCNTOMS
-
-            'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
-            'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
-
-            'BLV616': self.mem['BLV616']['Val'],  # LV616_pos : BLV616
-            'KLAMPO71': self.mem['KLAMPO71']['Val'],  # CHP1 : KLAMPO71
-            'KLAMPO72': self.mem['KLAMPO72']['Val'],  # CHP2 : KLAMPO72
-            'KLAMPO73': self.mem['KLAMPO73']['Val'],  # CHP2 : KLAMPO73
-            'WCMINI': self.mem['WCMINI']['Val'],  # Mini Flow : WCMINI
-            'BHV30': self.mem['BHV30']['Val'],  # HV30_pos : BHV30
-            'BHV50': self.mem['BHV50']['Val'],  # HV50_pos : BHV50
-            'BFV122': self.mem['BFV122']['Val'],  # FV122_pos : BFV122
-            'WAUXSP': self.mem['WAUXSP']['Val'],  # AuxSpray_Flow : WAUXSP
-            'BHV40': self.mem['BHV40']['Val'],  # HV40 : BHV40
-
-            'WNETCH': self.mem['WNETCH']['Val'],  # Total_Charging_Flow: WNETCH
-            'URHXUT': self.mem['URHXUT']['Val'],  # Letdown_temp : URHXUT
-            'UCHGUT': self.mem['UCHGUT']['Val'],  # Charging_temp : UCHGUT
-            'ZINST58': self.mem['ZINST58']['Val'],  # PZR_press : ZINST58
-            'ZINST63': self.mem['ZINST63']['Val'],  # PZR_level : ZINST63
-
-            'BLV459': self.mem['BLV459']['Val'],  # Letdown_pos : BLV459
-            'BHV1': self.mem['BHV1']['Val'],  # Orifice_1 : BHV1
-            'BHV2': self.mem['BHV2']['Val'],  # Orifice_2 : BHV2
-            'BHV3': self.mem['BHV3']['Val'],  # Orifice_3 : BHV3
-            'BPV145': self.mem['BPV145']['Val'],  # Letdown_HX_pos : BPV145
-            'BHV41': self.mem['BHV41']['Val'],  # HV41_pos : BHV41
-            'KHV43': self.mem['KHV43']['Val'],  # HV43_pos : KHV43
-
-            'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
-            'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
-        }
-        if V['CNSTime'] >= 25000:
-            d = True
-        else:
-            d = False
-
-        # 1. 너무 많이 벗어 나면 - 10점
-        if 45 <= V['ZINST63'] <= 60:
-            pass
-        else:
-            d = True
-            r = -10
-
-        self.Loger_txt += f'{d}\t'
-
-        if self.Name == 0:
-            print(r)
-
-        return d, r
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -268,6 +161,7 @@ class ENVCNS(CNS):
         if self.Name == 0:
             print(AMod)
 
+        # Charging Valve
         if AMod[0] < -0.6: Update_pos = V['BFV122'] + 0.02
         elif AMod[0] <= abs(0.6):
             if AMod < - 0.2: Update_pos = V['BFV122'] + 0.01
@@ -278,12 +172,139 @@ class ENVCNS(CNS):
         Update_pos = np.clip(Update_pos, a_min=0.1, a_max=1)
         self._send_control_save((['BFV122'], [Update_pos]))
 
-        # Letdown_pos = np.clip(round(AMod[1] / 100, 5) + V['BPV145'], a_min=0, a_max=0.8)
-        # self._send_control_save((['BPV145'], [Letdown_pos]))
+        # Letdown Valve Path 1
+        if AMod[1] < 0: self._send_control_save((['BLV459'], [0]))
+
+        # Letdown Valve Path 2
+        if AMod[2] < -0.6:
+            self._send_control_save((['BHV41', 'KHV43'], [1, 0]))
+        elif AMod[2] <= abs(0.6):
+            self._send_control_save((['BHV41', 'KHV43'], [1, 1]))
+        else:
+            self._send_control_save((['BHV41', 'KHV43'], [0, 0]))
 
         # Done Act
         self._send_control_to_cns()
         return AMod
+
+    def get_reward(self, AMod):
+        """
+        R => _
+        :return:
+        """
+        V = {
+            'CNSTime': self.mem['KCNTOMS']['Val'],      # CNS Time : KCNTOMS
+            'MalTime': self.mem['cMALT']['Val'],        # Mal time
+            'PVCT': self.mem['PVCT']['Val'],            # VCT_pressure : PVCT
+            'VCT_level': self.mem['ZVCT']['Val'],       # VCT_level : ZVCT
+
+            'BLV616': self.mem['BLV616']['Val'],        # LV616_pos : BLV616
+            'KLAMPO71': self.mem['KLAMPO71']['Val'],    # CHP1 : KLAMPO71
+            'KLAMPO72': self.mem['KLAMPO72']['Val'],    # CHP2 : KLAMPO72
+            'KLAMPO73': self.mem['KLAMPO73']['Val'],    # CHP2 : KLAMPO73
+            'WCMINI': self.mem['WCMINI']['Val'],        # Mini Flow : WCMINI
+            'BHV30': self.mem['BHV30']['Val'],          # HV30_pos : BHV30
+            'BHV50': self.mem['BHV50']['Val'],          # HV50_pos : BHV50
+            'BFV122': self.mem['BFV122']['Val'],        # FV122_pos : BFV122
+            'WAUXSP': self.mem['WAUXSP']['Val'],        # AuxSpray_Flow : WAUXSP
+            'BHV40': self.mem['BHV40']['Val'],          # HV40 : BHV40
+
+            'WNETCH': self.mem['WNETCH']['Val'],        # Total_Charging_Flow: WNETCH
+            'URHXUT': self.mem['URHXUT']['Val'],        # Letdown_temp : URHXUT
+            'UCHGUT': self.mem['UCHGUT']['Val'],        # Charging_temp : UCHGUT
+            'ZINST58': self.mem['ZINST58']['Val'],      # PZR_press : ZINST58
+            'PZR_level': self.mem['ZINST63']['Val'],    # PZR_level : ZINST63
+
+            'BLV459': self.mem['BLV459']['Val'],        # Letdown_pos : BLV459
+            'BHV1': self.mem['BHV1']['Val'],            # Orifice_1 : BHV1
+            'BHV2': self.mem['BHV2']['Val'],            # Orifice_2 : BHV2
+            'BHV3': self.mem['BHV3']['Val'],            # Orifice_3 : BHV3
+            'BPV145': self.mem['BPV145']['Val'],        # Letdown_HX_pos : BPV145
+            'ZINST36': self.mem['ZINST36']['Val'],      # Letdown HX Press : ZINST36
+            'BHV41': self.mem['BHV41']['Val'],          # HV41_pos : BHV41
+            'KHV43': self.mem['KHV43']['Val'],          # HV43_pos : KHV43
+
+            'WEXLD': self.mem['WEXLD']['Val'],          # VCT_flow : WEXLD
+            'WDEMI': self.mem['WDEMI']['Val'],          # Total_in_VCT : WDEMI
+        }
+        PZR_level_set = 57
+        VCT_level_set = 74
+
+        r = [0, 0]
+        r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
+                               max_r=0.5, min_r=-5)
+
+        if V['CNSTime'] <= V['MalTime']:
+            # Letdown Valve Path 1
+            if AMod[1] < 0: r[1] += -1
+
+            # Letdown Valve Path 2
+            if AMod[2] < -0.6:
+                r[1] += -1
+            elif AMod[2] <= abs(0.6):
+                r[1] += -1
+            else:
+                pass
+
+        self.Loger_txt += f'R:,{r},\t'
+        r = sum(r)/100
+        # r = self.normalize(sum(r), 0, -5, 0.5) / 10
+        self.AcumulatedReward += r
+        return r
+
+    def get_done(self, r):
+        V = {
+            'CNSTime': self.mem['KCNTOMS']['Val'],  # CNS Time : KCNTOMS
+
+            'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
+            'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
+
+            'BLV616': self.mem['BLV616']['Val'],  # LV616_pos : BLV616
+            'KLAMPO71': self.mem['KLAMPO71']['Val'],  # CHP1 : KLAMPO71
+            'KLAMPO72': self.mem['KLAMPO72']['Val'],  # CHP2 : KLAMPO72
+            'KLAMPO73': self.mem['KLAMPO73']['Val'],  # CHP2 : KLAMPO73
+            'WCMINI': self.mem['WCMINI']['Val'],  # Mini Flow : WCMINI
+            'BHV30': self.mem['BHV30']['Val'],  # HV30_pos : BHV30
+            'BHV50': self.mem['BHV50']['Val'],  # HV50_pos : BHV50
+            'BFV122': self.mem['BFV122']['Val'],  # FV122_pos : BFV122
+            'WAUXSP': self.mem['WAUXSP']['Val'],  # AuxSpray_Flow : WAUXSP
+            'BHV40': self.mem['BHV40']['Val'],  # HV40 : BHV40
+
+            'WNETCH': self.mem['WNETCH']['Val'],  # Total_Charging_Flow: WNETCH
+            'URHXUT': self.mem['URHXUT']['Val'],  # Letdown_temp : URHXUT
+            'UCHGUT': self.mem['UCHGUT']['Val'],  # Charging_temp : UCHGUT
+            'ZINST58': self.mem['ZINST58']['Val'],  # PZR_press : ZINST58
+            'ZINST63': self.mem['ZINST63']['Val'],  # PZR_level : ZINST63
+
+            'BLV459': self.mem['BLV459']['Val'],  # Letdown_pos : BLV459
+            'BHV1': self.mem['BHV1']['Val'],  # Orifice_1 : BHV1
+            'BHV2': self.mem['BHV2']['Val'],  # Orifice_2 : BHV2
+            'BHV3': self.mem['BHV3']['Val'],  # Orifice_3 : BHV3
+            'BPV145': self.mem['BPV145']['Val'],  # Letdown_HX_pos : BPV145
+            'BHV41': self.mem['BHV41']['Val'],  # HV41_pos : BHV41
+            'KHV43': self.mem['KHV43']['Val'],  # HV43_pos : KHV43
+
+            'WEXLD': self.mem['WEXLD']['Val'],  # VCT_flow : WEXLD
+            'WDEMI': self.mem['WDEMI']['Val'],  # Total_in_VCT : WDEMI
+        }
+        if V['CNSTime'] >= 25000:
+            d = True
+        else:
+            d = False
+
+        # 1. 너무 많이 벗어 나면 - 10점
+        if 45 <= V['ZINST63'] <= 60:
+            pass
+        else:
+            d = True
+            r = -10
+
+        self.Loger_txt += f'{d}\t'
+
+        if self.Name == 0:
+            print(r)
+
+        return d, r
 
     def step(self, A, mean_, std_):
         """
@@ -311,7 +332,7 @@ class ENVCNS(CNS):
         self._append_val_to_list()
         self.ENVStep += 1
 
-        reward = self.get_reward()
+        reward = self.get_reward(AMod)
         done, reward = self.get_done(reward)
         self.Monitoring_ENV.push_ENV_reward(i=self.Name,
                                             Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
@@ -324,7 +345,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=1, mal=False, mal_case=38, mal_opt=10, mal_time=50, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=1, mal=True, mal_case=38, mal_opt=10, mal_time=10000, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')
