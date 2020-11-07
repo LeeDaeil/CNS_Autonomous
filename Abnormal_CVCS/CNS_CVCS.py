@@ -50,8 +50,8 @@ class ENVCNS(CNS):
             # ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
             # ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
             #
-            ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
-            ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
+            # ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
+            # ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
 
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
@@ -150,6 +150,10 @@ class ENVCNS(CNS):
         ActOrderBook = {
             'BPV145Man': (['KSWO89'], [1]),
             'BFV122Man': (['KSWO100'], [1]),
+            'OpenHV41_HV3': (['BHV41', 'KHV43'], [1, 1]),
+            'CloseHV41_HV3': (['BHV41', 'KHV43'], [0, 0]),
+            'OpenLet': (['BHV1', 'BHV2', 'BLV459'], [1, 1, 1]),
+            'CloseLet': (['BHV1', 'BHV2', 'BLV459'], [0, 0, 0]),
         }
         # if self.Name == 0:
         #     print(f'{self.Name}_PV145:{V["BPV145"]}_BFV122:{V["BFV122"]}')
@@ -164,7 +168,7 @@ class ENVCNS(CNS):
         # Charging Valve
         if AMod[0] < -0.6: Update_pos = V['BFV122'] + 0.02
         elif AMod[0] <= abs(0.6):
-            if AMod < - 0.2: Update_pos = V['BFV122'] + 0.01
+            if AMod[0] < - 0.2: Update_pos = V['BFV122'] + 0.01
             elif AMod[0] <= abs(0.2): Update_pos = V['BFV122']
             else: Update_pos = V['BFV122'] - 0.01
         else: Update_pos = V['BFV122'] - 0.02
@@ -173,15 +177,12 @@ class ENVCNS(CNS):
         self._send_control_save((['BFV122'], [Update_pos]))
 
         # Letdown Valve Path 1
-        if AMod[1] < 0: self._send_control_save((['BLV459'], [0]))
+        if AMod[1] < 0: self._send_control_save(ActOrderBook['OpenLet'])
+        else: self._send_control_save(ActOrderBook['CloseLet'])
 
         # Letdown Valve Path 2
-        if AMod[2] < -0.6:
-            self._send_control_save((['BHV41', 'KHV43'], [1, 0]))
-        elif AMod[2] <= abs(0.6):
-            self._send_control_save((['BHV41', 'KHV43'], [1, 1]))
-        else:
-            self._send_control_save((['BHV41', 'KHV43'], [0, 0]))
+        if AMod[2] < 0: self._send_control_save(ActOrderBook['OpenHV41_HV3'])
+        else: self._send_control_save(ActOrderBook['CloseHV41_HV3'])
 
         # Done Act
         self._send_control_to_cns()
@@ -233,19 +234,7 @@ class ENVCNS(CNS):
         r = [0, 0]
         r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
                                max_r=0.5, min_r=-5)
-
-        if V['CNSTime'] <= V['MalTime']:
-            # Letdown Valve Path 1
-            if AMod[1] < 0: r[1] += -1
-
-            # Letdown Valve Path 2
-            if AMod[2] < -0.6:
-                r[1] += -1
-            elif AMod[2] <= abs(0.6):
-                r[1] += -1
-            else:
-                pass
-
+        r[1] = V['CNSTime']/50
         self.Loger_txt += f'R:,{r},\t'
         r = sum(r)/100
         # r = self.normalize(sum(r), 0, -5, 0.5) / 10
@@ -255,6 +244,8 @@ class ENVCNS(CNS):
     def get_done(self, r):
         V = {
             'CNSTime': self.mem['KCNTOMS']['Val'],  # CNS Time : KCNTOMS
+            'MalTime': self.mem['cMALT']['Val'],  # Mal time
+            'MalActive': self.mem['cMALA']['Val'],  # Mal Active {1, on, 0, off}
 
             'PVCT': self.mem['PVCT']['Val'],  # VCT_pressure : PVCT
             'ZVCT': self.mem['ZVCT']['Val'],  # VCT_level : ZVCT
@@ -298,6 +289,14 @@ class ENVCNS(CNS):
         else:
             d = True
             r = -10
+        # 2. Mal function 전 조작시 - 10점
+        if V['MalActive'] != 1:
+            if V['BHV1'] == 0 or V['BHV2'] == 0:
+                r, d = -10, True
+            if V['BHV41'] == 1:
+                r, d = -10, True
+        else:
+            pass
 
         self.Loger_txt += f'{d}\t'
 
@@ -345,7 +344,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=1, mal=True, mal_case=38, mal_opt=10, mal_time=10000, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=1, mal=True, mal_case=38, mal_opt=100, mal_time=7500, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')

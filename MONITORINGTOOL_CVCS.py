@@ -177,7 +177,8 @@ class PlotCanvas(FigureCanvas):
         self.ax3 = self.fig.add_subplot(gs[2:4, 0:1])
         self.ax4 = self.fig.add_subplot(gs[2:4, 1:2])
 
-        self.ax5 = self.fig.add_subplot(gs[4:5, 0:1])
+        self.ax5_1 = self.fig.add_subplot(gs[4:5, 0:1])
+        self.ax5_2 = self.fig.add_subplot(gs[4:5, 1:2])
 
         # self.ax3 = self.fig.add_subplot(gs[1:2, 0:1], projection='3d')
 
@@ -202,7 +203,9 @@ class PlotCanvas(FigureCanvas):
         self.ax4.plot(val['BFV122'], label='Charging_pos')
 
         Dev = [ch - let_1 - let_2 for ch, let_1, let_2 in zip(val['WNETCH'], val['WDEMI'], val['WEXLD'])]
-        self.ax5.plot(Dev, label='Dev')
+        self.ax5_1.plot(Dev, label='Dev')
+
+        self.ax5_2.plot(val['WNETCH'], label='Total Charging')
 
         # # Distribution
         # mean, std = ActDis[0], ActDis[1]  # [0, 1]
