@@ -143,7 +143,7 @@ class CNS:
         if Mal_time == 0:
             Mal_time = 5
         else:
-            Mal_time = Mal_time * 5
+            Mal_time = Mal_time ## 1초 * 5Tick 고려해서 넣을 것
         return self._send_control_signal(['KFZRUN', 'KSWO280', 'KSWO279', 'KSWO278'],
                                          [10, Mal_nub, Mal_opt, Mal_time])
     # -------

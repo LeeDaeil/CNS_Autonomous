@@ -31,7 +31,7 @@ class ENVCNS(CNS):
             # ('WCMINI',   1, 0,   4),          # Mini Flow
             # ('BHV30',    1, 0,   0),          # HV30 Mini Flow 밸브
             # ('BHV50',    1, 0,   0),          # HV50 ChargingPump->RCP Seal 유로 밸브
-            # ('BFV122',   1, 0,   1),          # Charging Valve Pos
+            ('BFV122',   1, 0,   1),          # Charging Valve Pos
             # ('WAUXSP',   1, 0,   10),         # PZR aux spray Flow
             # ('BHV40',    1, 0,   1),          # PZR aux spray HV40, CVCS->HV40->PZR
             #
@@ -41,17 +41,18 @@ class ENVCNS(CNS):
             ('ZINST58',  1, 0,   200),        # PZR_press : ZINST58
             ('ZINST63',  1, 0,   100),        # PZR_level : ZINST63
             #
-            # ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
+            ('BLV459',   1, 0,   1),          # Letdown LV459, RCS->VCT
             # ('BHV1',     1, 0,   1),          # HV1 Pos
             # ('BHV2',     1, 0,   1),          # HV2 Pos
             # ('BHV3',     1, 0,   1),          # HV3 Pos
             # ('BPV145',   1, 0,   1),          # Letdown_HX_pos = PV145 Pos
             # ('ZINST36',  1, 0,   40),         # Letdown HX Press
-            # ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
+            ('BHV41',    1, 0,   1),          # Letdown HV41, HV43->HV41->VCT
             # ('KHV43',    1, 0,   1),          # Letdown HV43, RCS->HV43->HV41
             #
             # ('WEXLD',    1, 0,   10),         # VCT_flow : WEXLD
             # ('WDEMI',    1, 0,   10),         # Total_in_VCT : WDEMI
+            ('cMALA',      1, 0,   1),          # Malactive
 
             # Boric acid Tank과 Makeup 고려가 필요한지 고민해야됨.
 
@@ -234,7 +235,8 @@ class ENVCNS(CNS):
         r = [0, 0]
         r[0] = TOOL.generate_r(curr=V['PZR_level'], setpoint=PZR_level_set, distance=0.5,
                                max_r=0.5, min_r=-5)
-        r[1] = V['CNSTime']/50
+        r[1] = V['CNSTime']/50 # [1~500] 값 생산
+        r[1] = r[1] / 250   #[1/250 ~ 2]
         self.Loger_txt += f'R:,{r},\t'
         r = sum(r)/100
         # r = self.normalize(sum(r), 0, -5, 0.5) / 10
@@ -290,11 +292,11 @@ class ENVCNS(CNS):
             d = True
             r = -10
         # 2. Mal function 전 조작시 - 10점
-        if V['MalActive'] != 1:
+        if V['MalTime'] > V['CNSTime']:
             if V['BHV1'] == 0 or V['BHV2'] == 0:
-                r, d = -10, True
+                r, d = -50, True
             if V['BHV41'] == 1:
-                r, d = -10, True
+                r, d = -50, True
         else:
             pass
 
@@ -319,7 +321,7 @@ class ENVCNS(CNS):
                                          Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
                                                    ['cMAL', 'cMALA', 'KCNTOMS',
                                                     'PVCT', 'ZVCT', 'ZINST58', 'ZINST63', 'BFV122', 'BPV145',
-                                                    'WDEMI', 'WNETCH', 'WEXLD']}
+                                                    'WDEMI', 'WNETCH', 'WEXLD', 'BLV459', 'BHV41']}
                                          )
 
         self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,

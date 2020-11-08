@@ -20,6 +20,7 @@ class MonitoringMEM:
             'cMAL': [], 'cMALA': [], 'KCNTOMS': [],
             'PVCT': [], 'ZVCT': [], 'ZINST58': [], 'ZINST63': [],
             'BFV122': [], 'BPV145': [], 'WDEMI':[], 'WNETCH': [], 'WEXLD': [],
+            'BLV459': [], 'BHV41': [],
         } for i in range(nub_agent)}
 
         self.ENVReward = {i: {
@@ -167,7 +168,7 @@ class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         self.fig = plt.figure(figsize=(width, height), dpi=dpi)
 
-        gs = GridSpec(5, 2, figure=self.fig)
+        gs = GridSpec(6, 2, figure=self.fig)
         self.ax1_1 = self.fig.add_subplot(gs[0:1, 0:1])
         self.ax1_2 = self.fig.add_subplot(gs[1:2, 0:1])
 
@@ -179,6 +180,9 @@ class PlotCanvas(FigureCanvas):
 
         self.ax5_1 = self.fig.add_subplot(gs[4:5, 0:1])
         self.ax5_2 = self.fig.add_subplot(gs[4:5, 1:2])
+
+        self.ax6_1 = self.fig.add_subplot(gs[5:6, 0:1])
+        self.ax6_2 = self.fig.add_subplot(gs[5:6, 1:2])
 
         # self.ax3 = self.fig.add_subplot(gs[1:2, 0:1], projection='3d')
 
@@ -206,6 +210,12 @@ class PlotCanvas(FigureCanvas):
         self.ax5_1.plot(Dev, label='Dev')
 
         self.ax5_2.plot(val['WNETCH'], label='Total Charging')
+        self.ax5_2.plot(val['cMALA'], label='Total Charging')
+
+        self.ax6_1.plot(val['BLV459'], label='Letpos')
+        self.ax6_1.plot(val['BHV41'], label='HV41')
+
+        self.ax6_2.plot(reward_mem[0], label='Reward')
 
         # # Distribution
         # mean, std = ActDis[0], ActDis[1]  # [0, 1]
