@@ -18,7 +18,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
-        self.want_tick = 5  # 20sec
+        self.want_tick = 5  # 1sec
 
         self.Loger_txt = ''
 
@@ -157,8 +157,9 @@ class ENVCNS(CNS):
         AMod = A
         V = {
             'CNSTime': self.mem['KCNTOMS']['Val'],
-            'Delta_T': self.mem['DELTAT']['Val'],
+            'Delta_T': self.mem['TDELTA']['Val'],
             'ChargingVV': self.mem['BFV122']['Val'],
+            'ChargingVM': self.mem['KLAMPO95']['Val'],  # 1 m 0 a
             'LetDownSet': self.mem['ZINST36']['Val'],
         }
         ActOrderBook = {
@@ -184,7 +185,8 @@ class ENVCNS(CNS):
             'LetDownSetStay': (['KSWO90', 'KSWO91'], [0, 0]),
             'LetDownSetUP': (['KSWO90', 'KSWO91'], [0, 1]),
 
-            'ChangeDelta': (['DELTAT'], [1]),
+            'ChangeDelta': (['TDELTA'], [1.0]),
+            'ChargingAuto': (['KSWO100'], [0])
         }
 
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
@@ -226,6 +228,7 @@ class ENVCNS(CNS):
 
         # Delta
         if V['Delta_T'] != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
+        if V['ChargingVM'] != 0: self._send_control_save(ActOrderBook['ChargingAuto'])
         # Done Act
         self._send_control_to_cns()
         return AMod
