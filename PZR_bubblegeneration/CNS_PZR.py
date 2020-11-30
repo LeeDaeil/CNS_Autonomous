@@ -12,7 +12,7 @@ class ENVCNS(CNS):
     def __init__(self, Name, IP, PORT, Monitoring_ENV=None):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT,
-                                     Remote_IP='192.168.0.10', Remote_Port=PORT, Max_len=10)
+                                     Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
         self.Monitoring_ENV = Monitoring_ENV
         self.Name = Name  # = id
         self.AcumulatedReward = 0
@@ -25,9 +25,18 @@ class ENVCNS(CNS):
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
             ('BHV142',   1, 0,   0),       # Letdown(HV142)
+            ('WRHRCVC',  1, 0,   0),       # RHR to CVCS Flow
+            ('WNETLD',   1, 0,   10),      # Total Letdown Flow
+
             ('BFV122',   1, 0,   0),       # ChargingValve(FV122)
+            ('WNETCH',   1, 0,   10),      # Total Charging Flow
+
             ('ZINST65',  1, 0,   160),     # RCSPressure
             ('ZINST63',  1, 0,   100),     # PZRLevel
+            ('UUPPPL',   1, 0,   200),     # Core Exit Temperature
+            ('UPRZ',     1, 0,   300),     # PZR Temperature
+
+            # ('ZINST36',  1, 0,   0),      # Letdown Pressrue
 
             ('ErrPres',  1, 0,   10),       # RCSPressure - setpoint
             ('UpPres',   1, 0,   10),       # RCSPressure - Up
@@ -37,12 +46,9 @@ class ENVCNS(CNS):
         self.action_space = 1       # TODO "HV142" 만 제어, "FV122"는 제어 않함..?
         self.observation_space = len(self.input_info)
 
-        self.PID_Mode = False
+        self.PID_Mode = True
         self.PID_NA = PID(kp=0.03, ki=0.001, kd=1.0)
-        self.PID_NA.SetPoint_pres = 25.0
-
-        # GP
-        # self.pl = NBPlot3D()
+        self.PID_NA.SetPoint_pres = 27.0
 
     # ENV Logger
     def ENVlogging(self, s):
@@ -118,15 +124,19 @@ class ENVCNS(CNS):
         V = {
             'CurPres': self.mem['ZINST65']['Val'],
             'CurLevel': self.mem['ZINST63']['Val'],
+            'ExitCore': self.mem['UUPPPL']['Val'],
         }
         r = self.normalize(r, 1, 0, 2)
         d = False
-        if V['CurPres'] > 30:
+        if V['ExitCore'] > 120:
             d = True
-
-        if V['CurLevel'] < 80:
-            d = True
-            r += 1
+        # d = False
+        # if V['CurPres'] > 30:
+        #     d = True
+        #
+        # if V['CurLevel'] < 80:
+        #     d = True
+        #     r += 1
 
         self.Loger_txt += f'{d}\t'
         return d, self.normalize(r, 1, 0, 2)
@@ -180,30 +190,39 @@ class ENVCNS(CNS):
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
 
-        if V['ChargingVV'] != 0.12: self._send_control_save(ActOrderBook['ChargingEdit'])
-
+        # if V['ChargingVV'] != 0.12: self._send_control_save(ActOrderBook['ChargingEdit'])
+        #
         if self.PID_Mode:
-            if V['CNSTime'] % (self.want_tick * 3) == 0:
-                # Letdown Valve Control Logic
-                err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
-                PID_out = self.PID_NA.update(err_, 1)
-
-                if PID_out >= 0.005:              self._send_control_save(ActOrderBook['LetdownValveClose'])
-                elif -0.005 < PID_out < 0.005:    self._send_control_save(ActOrderBook['LetdownValveStay'])
-                else:                             self._send_control_save(ActOrderBook['LetdownValveOpen'])
-            else:
+            err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
+            PID_out = self.PID_NA.update(err_, 1)
+            if PID_out >= 0.005:
+                self._send_control_save(ActOrderBook['LetdownValveClose'])
+            elif -0.005 < PID_out < 0.005:
                 self._send_control_save(ActOrderBook['LetdownValveStay'])
-
-        else: # AI Agent
-            if V['CNSTime'] % (self.want_tick * 3) == 0:
-                if AMod[0] > 0.4:
-                    self._send_control_save(ActOrderBook['LetdownValveClose'])
-                elif -0.4 <= AMod[0] <= 0.4:
-                    self._send_control_save(ActOrderBook['LetdownValveStay'])
-                else:
-                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
             else:
-                self._send_control_save(ActOrderBook['LetdownValveStay'])
+                self._send_control_save(ActOrderBook['LetdownValveOpen'])
+
+            # if V['CNSTime'] % (self.want_tick * 3) == 0:
+            #     # Letdown Valve Control Logic
+            #     err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
+            #     PID_out = self.PID_NA.update(err_, 1)
+            #
+            #     if PID_out >= 0.005:              self._send_control_save(ActOrderBook['LetdownValveClose'])
+            #     elif -0.005 < PID_out < 0.005:    self._send_control_save(ActOrderBook['LetdownValveStay'])
+            #     else:                             self._send_control_save(ActOrderBook['LetdownValveOpen'])
+            # else:
+            #     self._send_control_save(ActOrderBook['LetdownValveStay'])
+        #
+        # else: # AI Agent
+        #     if V['CNSTime'] % (self.want_tick * 3) == 0:
+        #         if AMod[0] > 0.4:
+        #             self._send_control_save(ActOrderBook['LetdownValveClose'])
+        #         elif -0.4 <= AMod[0] <= 0.4:
+        #             self._send_control_save(ActOrderBook['LetdownValveStay'])
+        #         else:
+        #             self._send_control_save(ActOrderBook['LetdownValveOpen'])
+        #     else:
+        #         self._send_control_save(ActOrderBook['LetdownValveStay'])
 
         # Delta
         if V['Delta_T'] != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
@@ -241,15 +260,15 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(5)
-
-        self.Monitoring_ENV.push_ENV_val(i=self.Name,
-                                         Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
-                                                   ['BHV142', 'BFV122', 'ZINST65', 'ZINST63']}
-                                         )
-        self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
-                                            Dict_val={'Mean': mean_, 'Std': std_}
-                                            )
+        self.want_tick = int(10)
+        if self.Monitoring_ENV is not None:
+            self.Monitoring_ENV.push_ENV_val(i=self.Name,
+                                             Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
+                                                       ['BHV142', 'BFV122', 'ZINST65', 'ZINST63']}
+                                             )
+            self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
+                                                Dict_val={'Mean': mean_, 'Std': std_}
+                                                )
 
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()
@@ -258,8 +277,9 @@ class ENVCNS(CNS):
 
         reward = self.get_reward()
         done, reward = self.get_done(reward)
-        self.Monitoring_ENV.push_ENV_reward(i=self.Name,
-                                            Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
+        if self.Monitoring_ENV is not None:
+            self.Monitoring_ENV.push_ENV_reward(i=self.Name,
+                                                Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
         next_state = self.get_state()
         # ----------------------------------------------------------
         self.ENVlogging(s=self.Loger_txt)
@@ -269,7 +289,7 @@ class ENVCNS(CNS):
 
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
-        super(ENVCNS, self).reset(initial_nub=19, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
+        super(ENVCNS, self).reset(initial_nub=21, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
         self.ENVlogging('')
@@ -278,7 +298,7 @@ class ENVCNS(CNS):
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0
         self.ENVStep = 0
-        self.Monitoring_ENV.init_ENV_val(self.Name)
+        if self.Monitoring_ENV is not None: self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         self.FixedTime = 0
@@ -288,10 +308,12 @@ class ENVCNS(CNS):
 
 if __name__ == '__main__':
     # ENVCNS TEST
-    env = ENVCNS(Name='Env1', IP='192.168.0.103', PORT=int(f'7101'))
+    env = ENVCNS(Name='Env1', IP='192.168.0.101', PORT=int(f'7101'))
     # Run
     for _ in range(1, 4):
         env.reset(file_name=f'Ep{_}')
-        for __ in range(500):
+        while True:
             A = 0
-            env.step(A)
+            next_state, reward, done, AMod = env.step(A, std_=1, mean_=0)
+            if done:
+                break
