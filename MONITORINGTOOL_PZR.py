@@ -1,8 +1,8 @@
 import time
 import sys
 import multiprocessing
-from PySide2.QtWidgets import QApplication, QWidget, QMainWindow, QSizePolicy, QPushButton
-from PySide2.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QSizePolicy, QPushButton
+from PyQt5.QtCore import QTimer
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt

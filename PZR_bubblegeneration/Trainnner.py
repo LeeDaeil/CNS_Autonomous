@@ -1,4 +1,13 @@
+'''
+Soft Actor-Critic version 2
+using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
+add alpha loss compared with version 1
+paper: https://arxiv.org/pdf/1812.05905.pdf
+'''
+
+import math
 import random
+
 import numpy as np
 
 import torch
@@ -8,30 +17,123 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 
+from IPython.display import clear_output
 import matplotlib.pyplot as plt
-
-import argparse
 
 import torch.multiprocessing as mp
 
-from multiprocessing import Process, Manager
+from multiprocessing import Process
 from multiprocessing.managers import BaseManager
 
 from PZR_bubblegeneration.CNS_PZR import ENVCNS
-from MONITORINGTOOL_PZR import MonitoringMEM, Monitoring
 
-GPU = True
-device_idx = 0
-if GPU:
-    device = torch.device("cuda:" + str(device_idx) if torch.cuda.is_available() else "cpu")
-else:
-    device = torch.device("cpu")
 
-parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
-parser.add_argument('--train', dest='train', action='store_true', default=False)
-parser.add_argument('--test', dest='test', action='store_true', default=False)
+class SharedAdam(optim.Optimizer):
+    r"""Implements Adam algorithm.
+    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
+    Arguments:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+    .. _Adam\: A Method for Stochastic Optimization:
+        https://arxiv.org/abs/1412.6980
+    .. _On the Convergence of Adam and Beyond:
+        https://openreview.net/forum?id=ryQu7f-RZ
+    """
 
-args = parser.parse_args()
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
+                 weight_decay=0, amsgrad=False):
+        if not 0.0 <= lr:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if not 0.0 <= eps:
+            raise ValueError("Invalid epsilon value: {}".format(eps))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
+        defaults = dict(lr=lr, betas=betas, eps=eps,
+                        weight_decay=weight_decay, amsgrad=amsgrad)
+        super(SharedAdam, self).__init__(params, defaults)
+
+    def __setstate__(self, state):
+        super(SharedAdam, self).__setstate__(state)
+        for group in self.param_groups:
+            group.setdefault('amsgrad', False)
+
+    def step(self, closure=None):
+        """Performs a single optimization step.
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        loss = None
+        if closure is not None:
+            loss = closure()
+
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                grad = p.grad.data
+                if grad.is_sparse:
+                    raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+                amsgrad = group['amsgrad']
+
+                state = self.state[p]
+                ### ADD
+                device = p.device
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(device)
+                ### ADD
+
+                # State initialization
+                if len(state) == 0:
+                    state['step'] = 0
+                    # Exponential moving average of gradient values
+                    state['exp_avg'] = torch.zeros_like(p.data)
+                    # Exponential moving average of squared gradient values
+                    state['exp_avg_sq'] = torch.zeros_like(p.data)
+                    if amsgrad:
+                        # Maintains max of all exp. moving avg. of sq. grad. values
+                        state['max_exp_avg_sq'] = torch.zeros_like(p.data)
+
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                if amsgrad:
+                    max_exp_avg_sq = state['max_exp_avg_sq']
+                beta1, beta2 = group['betas']
+
+                state['step'] += 1
+
+                if group['weight_decay'] != 0:
+                    grad.add_(group['weight_decay'], p.data)
+
+                # Decay the first and second moment running average coefficient
+                exp_avg.mul_(beta1).add_(1 - beta1, grad)
+                exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                if amsgrad:
+                    # Maintains the maximum of all 2nd moment running avg. till now
+                    torch.max(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
+                    # Use the max. for normalizing running avg. of gradient
+                    denom = max_exp_avg_sq.sqrt().add_(group['eps'])
+                else:
+                    denom = exp_avg_sq.sqrt().add_(group['eps'])
+
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
+
+                p.data.addcdiv_(-step_size, exp_avg, denom)
+
+        return loss
 
 
 class ReplayBuffer:
@@ -49,7 +151,8 @@ class ReplayBuffer:
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(np.stack, zip(*batch))  # stack for each element
+        state, action, reward, next_state, done = map(np.stack,
+                                                      zip(*batch))  # stack for each element
         ''' 
         the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
         zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
@@ -57,6 +160,10 @@ class ReplayBuffer:
         np.stack((1,2)) => array([1, 2])
         '''
         return state, action, reward, next_state, done
+
+    def __len__(
+            self):  # cannot work in multiprocessing case, len(replay_buffer) is not available in proxy of manager!
+        return len(self.buffer)
 
     def get_length(self):
         return len(self.buffer)
@@ -135,9 +242,9 @@ class PolicyNetwork(nn.Module):
 
         normal = Normal(0, 1)
         z = normal.sample(mean.shape)
-        action_0 = torch.tanh(mean + std * z.to(device))  # TanhNormal distribution as actions; reparameterization trick
+        action_0 = torch.tanh(mean + std * z.cuda())  # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range * action_0
-        log_prob = Normal(mean, std).log_prob(mean + std * z.to(device)) - torch.log(
+        log_prob = Normal(mean, std).log_prob(mean + std * z.cuda()) - torch.log(
             1. - action_0.pow(2) + epsilon) - np.log(self.action_range)
         # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action);
         # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability,
@@ -146,41 +253,55 @@ class PolicyNetwork(nn.Module):
         return action, log_prob, z, mean, log_std
 
     def get_action(self, state, deterministic):
-        state = torch.FloatTensor(state).unsqueeze(0).to(device)
+        state = torch.FloatTensor(state).unsqueeze(0).cuda()
+        # print(state)
         mean, log_std = self.forward(state)
         std = log_std.exp()
 
         normal = Normal(0, 1)
-        z = normal.sample(mean.shape).to(device)
+        z = normal.sample(mean.shape).cuda()
         action = self.action_range * torch.tanh(mean + std * z)
 
         action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
             action.detach().cpu().numpy()[0]
-        return action, mean.item(), std.item()
+        return action, 0, 0
 
     def sample_action(self, state):
-        # Ep 초기 랜덤 액션 용
         a = torch.FloatTensor(self.num_actions).uniform_(-1, 1)
         _, mean, std = self.get_action(state, deterministic=True)
         return self.action_range * a.numpy(), mean, std
 
 
+class Alpha(nn.Module):
+    ''' nn.Module class of alpha variable, for the usage of parallel on gpus '''
+
+    def __init__(self):
+        super(Alpha, self).__init__()
+        self.log_alpha = torch.nn.Parameter(torch.zeros(1))  # initialized as [0.]: alpha->[1.]
+
+    def forward(self):
+        return self.log_alpha
+
+
 class SAC_Trainer():
     def __init__(self, replay_buffer, hidden_dim, action_range):
         self.replay_buffer = replay_buffer
+        self.action_dim = action_dim
 
-        self.soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range).to(device)
-        self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=device)
+        self.soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim)
+        self.soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim)
+        self.target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim)
+        self.target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim)
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range)
+        self.log_alpha = Alpha()
         print('Soft Q Network (1,2): ', self.soft_q_net1)
         print('Policy Network: ', self.policy_net)
 
-        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+        for target_param, param in zip(self.target_soft_q_net1.parameters(),
+                                       self.soft_q_net1.parameters()):
             target_param.data.copy_(param.data)
-        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+        for target_param, param in zip(self.target_soft_q_net2.parameters(),
+                                       self.soft_q_net2.parameters()):
             target_param.data.copy_(param.data)
 
         self.soft_q_criterion1 = nn.MSELoss()
@@ -190,21 +311,30 @@ class SAC_Trainer():
         policy_lr = 3e-4
         alpha_lr = 3e-4
 
-        self.soft_q_optimizer1 = optim.Adam(self.soft_q_net1.parameters(), lr=soft_q_lr)
-        self.soft_q_optimizer2 = optim.Adam(self.soft_q_net2.parameters(), lr=soft_q_lr)
-        self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=policy_lr)
-        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=alpha_lr)
+        self.soft_q_optimizer1 = SharedAdam(self.soft_q_net1.parameters(), lr=soft_q_lr)
+        self.soft_q_optimizer2 = SharedAdam(self.soft_q_net2.parameters(), lr=soft_q_lr)
+        self.policy_optimizer = SharedAdam(self.policy_net.parameters(), lr=policy_lr)
+        self.alpha_optimizer = SharedAdam(self.log_alpha.parameters(), lr=alpha_lr)
 
-    def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99, soft_tau=1e-2):
+    def to_cuda(self):  # copy to specified gpu
+        self.soft_q_net1 = self.soft_q_net1.cuda()
+        self.soft_q_net2 = self.soft_q_net2.cuda()
+        self.target_soft_q_net1 = self.target_soft_q_net1.cuda()
+        self.target_soft_q_net2 = self.target_soft_q_net2.cuda()
+        self.policy_net = self.policy_net.cuda()
+        self.log_alpha = self.log_alpha.cuda()
+
+    def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99,
+               soft_tau=1e-2):
         state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
         # print('sample:', state, action,  reward, done)
 
-        state = torch.FloatTensor(state).to(device)
-        next_state = torch.FloatTensor(next_state).to(device)
-        action = torch.FloatTensor(action).to(device)
-        reward = torch.FloatTensor(reward).unsqueeze(1).to(
-            device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
-        done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
+        state = torch.FloatTensor(state).cuda()
+        next_state = torch.FloatTensor(next_state).cuda()
+        action = torch.FloatTensor(action).cuda()
+        reward = torch.FloatTensor(reward).unsqueeze(
+            1).cuda()  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
+        done = torch.FloatTensor(np.float32(done)).unsqueeze(1).cuda()
 
         predicted_q_value1 = self.soft_q_net1(state, action)
         predicted_q_value2 = self.soft_q_net2(state, action)
@@ -212,22 +342,27 @@ class SAC_Trainer():
         new_next_action, next_log_prob, _, _, _ = self.policy_net.evaluate(next_state)
         reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(
             dim=0) + 1e-6)  # normalize with batch mean and std; plus a small number to prevent numerical problem
+
         # Updating alpha wrt entropy
-        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q)
+        # alpha = 0.0
+        # trade-off between exploration (max entropy) and exploitation (max Q)
         if auto_entropy is True:
-            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
+            alpha_loss = -(self.log_alpha() * (
+                        log_prob - 1.0 * self.action_dim).detach()).mean()  # self.log_alpha as forward function to get value
             # print('alpha loss: ',alpha_loss)
             self.alpha_optimizer.zero_grad()
             alpha_loss.backward()
             self.alpha_optimizer.step()
-            self.alpha = self.log_alpha.exp()
+            self.alpha = self.log_alpha().exp()
         else:
             self.alpha = 1.
             alpha_loss = 0
 
+        # print(self.alpha)
         # Training Q Function
         target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),
-                                 self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+                                 self.target_soft_q_net2(next_state,
+                                                         new_next_action)) - self.alpha * next_log_prob
         target_q_value = reward + (1 - done) * gamma * target_q_min  # if done==1, only reward
         q_value_loss1 = self.soft_q_criterion1(predicted_q_value1,
                                                target_q_value.detach())  # detach: no gradients for the variable
@@ -241,7 +376,8 @@ class SAC_Trainer():
         self.soft_q_optimizer2.step()
 
         # Training Policy Function
-        predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action), self.soft_q_net2(state, new_action))
+        predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action),
+                                          self.soft_q_net2(state, new_action))
         policy_loss = (self.alpha * log_prob - predicted_new_q_value).mean()
 
         self.policy_optimizer.zero_grad()
@@ -249,46 +385,51 @@ class SAC_Trainer():
         self.policy_optimizer.step()
 
         # print('q loss: ', q_value_loss1, q_value_loss2)
-        # print('policy loss: ', policy_loss)
+        # print('policy loss: ', policy_loss )
 
         # Soft update the target value net
-        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+        for target_param, param in zip(self.target_soft_q_net1.parameters(),
+                                       self.soft_q_net1.parameters()):
             target_param.data.copy_(  # copy data value into target parameters
                 target_param.data * (1.0 - soft_tau) + param.data * soft_tau
             )
-        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+        for target_param, param in zip(self.target_soft_q_net2.parameters(),
+                                       self.soft_q_net2.parameters()):
             target_param.data.copy_(  # copy data value into target parameters
                 target_param.data * (1.0 - soft_tau) + param.data * soft_tau
             )
-        return predicted_new_q_value.mean(), q_value_loss1.tolist(), q_value_loss2.tolist(), policy_loss.tolist()
+        return predicted_new_q_value.mean()
 
     def save_model(self, path):
-        torch.save(self.soft_q_net1.state_dict(), path + '_q1')
+        torch.save(self.soft_q_net1.state_dict(),
+                   path + '_q1')  # have to specify different path name here!
         torch.save(self.soft_q_net2.state_dict(), path + '_q2')
         torch.save(self.policy_net.state_dict(), path + '_policy')
 
     def load_model(self, path):
-        self.soft_q_net1.load_state_dict(torch.load(path + '_q1'))
-        self.soft_q_net2.load_state_dict(torch.load(path + '_q2'))
-        self.policy_net.load_state_dict(torch.load(path + '_policy'))
+        self.soft_q_net1.load_state_dict(
+            torch.load(path + '_q1', map_location='cuda:0'))  # map model on single gpu for testing
+        self.soft_q_net2.load_state_dict(torch.load(path + '_q2', map_location='cuda:0'))
+        self.policy_net.load_state_dict(torch.load(path + '_policy', map_location='cuda:0'))
 
         self.soft_q_net1.eval()
         self.soft_q_net2.eval()
         self.policy_net.eval()
 
 
-def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Monitoring_ENV, \
-           replay_buffer, max_episodes, max_steps, batch_size, explore_steps, \
-           update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path):
+def worker(id, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size,
+           explore_steps, \
+           update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path):
+    '''
+    the function for sampling with multi-processing
+    '''
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
-        print(sac_trainer, replay_buffer)
-        # sac_tainer are not the same, but all networks and optimizers
-        # in it are the same; replay  buffer is the same one.
+        print(sac_trainer, replay_buffer)  # sac_tainer are not the same, but all networks and optimizers in it are the same; replay  buffer is the same one.
 
-        env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'), Monitoring_ENV=Monitoring_ENV)
-        env.PID_Mode = True if id == 4 else False       # PID는 마지막 5번 에이전트가 담당함.
+        env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'), Monitoring_ENV=None)
+        env.PID_Mode = True if id == 4 else False  # PID는 마지막 5번 에이전트가 담당함.
         action_dim = env.action_space
         state_dim = env.observation_space
         action_range = 1.
@@ -342,16 +483,12 @@ def worker(id, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Mon
                 if done:
                     print('Done')
                     break
-            print('Episode: ', replay_buffer.get_ep(), eps, '| Episode Reward: ', episode_reward, episode_q1, episode_q2,
+            print('Episode: ', replay_buffer.get_ep(), eps, '| Episode Reward: ', episode_reward, episode_q1,
+                  episode_q2,
                   episode_p)
             # if len(rewards) == 0: rewards.append(episode_reward)
             # else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
             rewards_queue.put(episode_reward)
-            q1_queue.put(episode_q1)
-            q2_queue.put(episode_q2)
-            p_queue.put(episode_p)
-
-        sac_trainer.save_model(model_path)
 
 
 def ShareParameters(adamoptim):
@@ -369,51 +506,35 @@ def ShareParameters(adamoptim):
             state['exp_avg_sq'].share_memory_()
 
 
-def plot(rewards, name):
-    # clear_output(True)
-    plt.figure(figsize=(20, 5))
-    plt.plot(rewards)
-    plt.savefig(f'sac_v2_multi{name}.png')
-    # plt.show()
-    plt.clf()
-
-
 if __name__ == '__main__':
+
+    replay_buffer_size = 1e6
+
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
-    num_workers = 2  # mp.cpu_count()    # TODO\
-
     BaseManager.register('ReplayBuffer', ReplayBuffer)
-    BaseManager.register('MonitoringMEM', MonitoringMEM)
-
     manager = BaseManager()
     manager.start()
-
-    replay_buffer_size = 2e6
-    replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
-    #
-
-    Monitoring_ENV = manager.MonitoringMEM(num_workers)
+    replay_buffer = manager.ReplayBuffer(
+        replay_buffer_size)  # share the replay buffer through manager
 
     # choose env
-    ENV = 'CNS'
-
     env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
     action_dim = env.action_space
     state_dim = env.observation_space
     action_range = 1.
 
+
     # hyper-parameters for RL training, no need for sharing across processes
-    max_episodes = 10000
-    max_steps = 4000 if ENV == 'CNS' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
-    # max_steps = 12 if ENV == 'CNS' else 10  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
-    batch_size = 128
-    # batch_size = 10
+    max_episodes = 1000
+    max_steps = 20
     explore_steps = 0  # for random action sampling in the beginning of training
+    batch_size = 640
     update_itr = 1
+    action_itr = 3
     AUTO_ENTROPY = True
     DETERMINISTIC = False
     hidden_dim = 512
-    model_path = './model'
+    model_path = ''
 
     sac_trainer = SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range)
 
@@ -422,53 +543,25 @@ if __name__ == '__main__':
     sac_trainer.soft_q_net2.share_memory()
     sac_trainer.target_soft_q_net1.share_memory()
     sac_trainer.target_soft_q_net2.share_memory()
-    sac_trainer.policy_net.share_memory()  # model
-    sac_trainer.log_alpha.share_memory_()  # variable
+    sac_trainer.policy_net.share_memory()
     ShareParameters(sac_trainer.soft_q_optimizer1)
     ShareParameters(sac_trainer.soft_q_optimizer2)
     ShareParameters(sac_trainer.policy_optimizer)
     ShareParameters(sac_trainer.alpha_optimizer)
 
     rewards_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
-    q1_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
-    q2_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
-    p_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
 
+    num_workers = 2  # or: mp.cpu_count()
     processes = []
-    rewards = []
-    q1_q = []
-    q2_q = []
-    p_q = []
-
+    rewards = [0]
 
     for i in range(num_workers):
-        process = mp.Process(target=worker, args=(
-            i, sac_trainer, ENV, rewards_queue, q1_queue, q2_queue, p_queue, Monitoring_ENV,
-            replay_buffer, max_episodes, max_steps, batch_size, explore_steps,
-            update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
+        process = Process(target=worker, args=(
+            i, sac_trainer, None, rewards_queue, replay_buffer, max_episodes, max_steps, \
+            batch_size, explore_steps, update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC,
+            hidden_dim, model_path))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
 
-    # MoProcess = Process(target=Monitoring, args=(Monitoring_ENV, ), daemon=True)
-    # processes.append(MoProcess)
-
-    if ENV == 'CNS':
-        processes.append(Monitoring(Monitoring_ENV=Monitoring_ENV))
-        pass
-
     [p.start() for p in processes]
-    while True:  # keep geting the episode reward from the queue
-        for Qu_, Qu_box in zip([rewards_queue, q1_queue, q2_queue, p_queue], [rewards, q1_q, q2_q, p_q]):
-            GetedQu = Qu_.get()
-            if GetedQu is not None:
-                Qu_box.append(GetedQu)
-            else:
-                pass
-
-        if len(rewards) % 20 == 0 and len(rewards) > 0:
-            plot(rewards, name=f'{len(rewards)}R')
-            plot(q1_q, name=f'{len(rewards)}q1')
-            plot(q2_q, name=f'{len(rewards)}q2')
-            plot(p_q, name=f'{len(rewards)}p_q')
-
     [p.join() for p in processes]  # finished at the same time
