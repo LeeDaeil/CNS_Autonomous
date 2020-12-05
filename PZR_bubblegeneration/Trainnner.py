@@ -426,7 +426,7 @@ def worker(id, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
-        print(sac_trainer, replay_buffer)  # sac_tainer are not the same, but all networks and optimizers in it are the same; replay  buffer is the same one.
+        print(sac_trainer, replay_buffer)
 
         env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'), Monitoring_ENV=None)
         env.PID_Mode = True if id == 4 else False  # PID는 마지막 5번 에이전트가 담당함.
