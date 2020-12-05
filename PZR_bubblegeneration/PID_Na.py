@@ -32,7 +32,7 @@ class PID:
         self.Kp = kp   # proportional gain
         self.Ki = ki   # integral gain
         self.Kd = kd   # derivative gain
-        self.SetPoint_pres = 0
+        self.SetPoint = 0
 
         #  self.sample_time = 0.00
         #  self.current_time = t0
@@ -55,7 +55,7 @@ class PID:
 
         self.output = 0.0
 
-    def update(self, error, delta_time):
+    def update(self, current_val, delta_time):
         """Calculates PID control output for a given error
             u(t) = K_p e(t) + K_i \int_{0}^{t} e(t)dt + K_d {de}/{dt}
         """
@@ -63,6 +63,9 @@ class PID:
 
         # self.current_time = tf
         # delta_time = self.current_time - self.last_time
+
+        error = self.SetPoint - current_val
+
         delta_error = error - self.last_error
 
         # if (delta_time >= self.sample_time):

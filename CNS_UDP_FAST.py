@@ -33,6 +33,10 @@ class CNS:
         self.SaveControlPara = []
         self.SaveControlVal = []
 
+    def _make_mem_initial(self):
+        for pid_ in self.mem.keys():
+            self.mem[pid_]['Val'] = 0
+
     def _make_mem_structure(self, max_len):
         # 초기 shared_mem의 구조를 선언한다.
         idx = 0
@@ -227,7 +231,8 @@ class CNS:
         self.init_line()
 
         # mem reset
-        self.mem = self._make_mem_structure(max_len=self.max_len)
+        # self.mem = self._make_mem_structure(max_len=self.max_len)
+        self._make_mem_initial()
 
         self.mem['cINIT']['Val'] = initial_nub
         self.mem['cMAL']['Val'] = 1 if mal is True else 0

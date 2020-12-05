@@ -1,4 +1,4 @@
-from COMMONTOOL import TOOL, PTCureve, CSFTree, NBPlot3D
+from COMMONTOOL import *
 from CNS_UDP_FAST import CNS
 from PZR_bubblegeneration.PID_Na import PID
 import numpy as np
@@ -6,6 +6,26 @@ import time
 import random
 import copy
 import matplotlib.pylab as plt
+
+
+class CMem:
+    def __init__(self, mem):
+        self.m = mem  # Line CNSmem -> getmem
+        self.update()
+
+    def update(self):
+        self.CTIME = self.m['KCNTOMS']['Val']       # CNS Time
+        self.CDelt = self.m['TDELTA']['Val']
+        self.PZRPres = self.m['ZINST65']['Val']
+        self.PZRLevl = self.m['ZINST63']['Val']
+        self.ExitCoreT = self.m['UUPPPL']['Val']
+
+        self.FV122 = self.m['BFV122']['Val']
+        self.FV122M = self.m['KLAMPO95']['Val']
+
+        self.HV142 = self.m['BHV142']['Val']
+
+        self.LetdownSet = self.m['ZINST36']['Val']  # Letdown setpoint
 
 
 class ENVCNS(CNS):
@@ -21,6 +41,8 @@ class ENVCNS(CNS):
         self.want_tick = 5  # 1sec
 
         self.Loger_txt = ''
+
+        self.CMem = CMem(self.mem)
 
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
@@ -43,12 +65,15 @@ class ENVCNS(CNS):
             ('DownPres', 1, 0,   10),       # RCSPressure - Down
         ]
 
-        self.action_space = 1       # TODO "HV142" 만 제어, "FV122"는 제어 않함..?
+        self.action_space = 3       # TODO Spray, HV142, FV122
         self.observation_space = len(self.input_info)
 
+        # PID Part
         self.PID_Mode = True
-        self.PID_NA = PID(kp=0.03, ki=0.001, kd=1.0)
-        self.PID_NA.SetPoint_pres = 27.0
+        self.PID_Prs = PID(kp=0.03, ki=0.001, kd=1.0)
+        self.PID_Lev = PID(kp=0.03, ki=0.001, kd=1.0)
+        self.PID_Prs.SetPoint = 27.0           # Press set-point
+        self.PID_Lev.SetPoint = 25.0           # Level set-point
 
     # ENV Logger
     def ENVlogging(self, s):
@@ -80,15 +105,15 @@ class ENVCNS(CNS):
             else:
                 # ADD logic ----- 계산된 값을 사용하고 싶을 때
                 if para == 'ErrPres':
-                    v_ = - abs(self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val'])
+                    v_ = - abs(self.PID_Prs.SetPoint_pres - self.mem['ZINST65']['Val'])
                     # setpoint - 현재 압력 한뒤에 - abs
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'UpPres':
-                    v_ = self.PID_NA.SetPoint_pres + 2
+                    v_ = self.PID_Prs.SetPoint_pres + 2
                     v_ = v_ - self.mem['ZINST65']['Val']
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'DownPres':
-                    v_ = self.PID_NA.SetPoint_pres - 2
+                    v_ = self.PID_Prs.SetPoint_pres - 2
                     v_ = self.mem['ZINST65']['Val'] - v_
                     state.append(self.normalize(v_, x_round, x_min, x_max))
 
@@ -102,41 +127,14 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-        V = {
-            'CurPres': self.mem['ZINST65']['Val'],
-        }
-
-        if V['CurPres'] > self.PID_NA.SetPoint_pres:
-            UpBoun = self.PID_NA.SetPoint_pres + 2
-            r = UpBoun - V['CurPres']
-            r = 0 if r <= 0 else r
-        elif V['CurPres'] < self.PID_NA.SetPoint_pres:
-            DownBoun = self.PID_NA.SetPoint_pres - 2
-            r = V['CurPres'] - DownBoun
-            r = 0 if r <= 0 else r
-        else:
-            r = 2
-
         self.Loger_txt += f'R:{r}\t'
         return r
 
     def get_done(self, r):
-        V = {
-            'CurPres': self.mem['ZINST65']['Val'],
-            'CurLevel': self.mem['ZINST63']['Val'],
-            'ExitCore': self.mem['UUPPPL']['Val'],
-        }
         r = self.normalize(r, 1, 0, 2)
         d = False
-        if V['ExitCore'] > 120:
+        if self.CMem.ExitCoreT > 176:
             d = True
-        # d = False
-        # if V['CurPres'] > 30:
-        #     d = True
-        #
-        # if V['CurLevel'] < 80:
-        #     d = True
-        #     r += 1
 
         self.Loger_txt += f'{d}\t'
         return d, self.normalize(r, 1, 0, 2)
@@ -155,17 +153,10 @@ class ENVCNS(CNS):
         :return: AMod: 수정된 액션
         """
         AMod = A
-        V = {
-            'CNSTime': self.mem['KCNTOMS']['Val'],
-            'Delta_T': self.mem['TDELTA']['Val'],
-            'ChargingVV': self.mem['BFV122']['Val'],
-            'ChargingVM': self.mem['KLAMPO95']['Val'],  # 1 m 0 a
-            'LetDownSet': self.mem['ZINST36']['Val'],
-        }
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
             'ChargingValveStay': (['KSWO101', 'KSWO102'], [0, 0]),
-            'ChargingValveClase': (['KSWO101', 'KSWO102'], [1, 0]),
+            'ChargingValveClose': (['KSWO101', 'KSWO102'], [1, 0]),
 
             'ChargingEdit': (['BFV122'], [0.12]),
 
@@ -181,6 +172,10 @@ class ENVCNS(CNS):
             'PZRProHeaterStay': (['KSWO121', 'KSWO122'], [0, 0]),
             'PZRProHeaterUp': (['KSWO121', 'KSWO122'], [0, 1]),
 
+            'PZRSprayOpen': (['KSWO126', 'KSWO127'], [0, 1]),
+            'PZRSprayStay': (['KSWO126', 'KSWO127'], [0, 0]),
+            'PZRSprayClose': (['KSWO126', 'KSWO127'], [1, 0]),
+
             'LetDownSetDown': (['KSWO90', 'KSWO91'], [1, 0]),
             'LetDownSetStay': (['KSWO90', 'KSWO91'], [0, 0]),
             'LetDownSetUP': (['KSWO90', 'KSWO91'], [0, 1]),
@@ -191,44 +186,55 @@ class ENVCNS(CNS):
 
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
-
-        # if V['ChargingVV'] != 0.12: self._send_control_save(ActOrderBook['ChargingEdit'])
-        #
-        if self.PID_Mode:
-            err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
-            PID_out = self.PID_NA.update(err_, 1)
-            if PID_out >= 0.005:
-                self._send_control_save(ActOrderBook['LetdownValveClose'])
-            elif -0.005 < PID_out < 0.005:
-                self._send_control_save(ActOrderBook['LetdownValveStay'])
-            else:
-                self._send_control_save(ActOrderBook['LetdownValveOpen'])
-
-            # if V['CNSTime'] % (self.want_tick * 3) == 0:
-            #     # Letdown Valve Control Logic
-            #     err_ = self.PID_NA.SetPoint_pres - self.mem['ZINST65']['Val']
-            #     PID_out = self.PID_NA.update(err_, 1)
-            #
-            #     if PID_out >= 0.005:              self._send_control_save(ActOrderBook['LetdownValveClose'])
-            #     elif -0.005 < PID_out < 0.005:    self._send_control_save(ActOrderBook['LetdownValveStay'])
-            #     else:                             self._send_control_save(ActOrderBook['LetdownValveOpen'])
-            # else:
-            #     self._send_control_save(ActOrderBook['LetdownValveStay'])
-        #
-        # else: # AI Agent
-        #     if V['CNSTime'] % (self.want_tick * 3) == 0:
-        #         if AMod[0] > 0.4:
-        #             self._send_control_save(ActOrderBook['LetdownValveClose'])
-        #         elif -0.4 <= AMod[0] <= 0.4:
-        #             self._send_control_save(ActOrderBook['LetdownValveStay'])
-        #         else:
-        #             self._send_control_save(ActOrderBook['LetdownValveOpen'])
-        #     else:
-        #         self._send_control_save(ActOrderBook['LetdownValveStay'])
-
+        # =========================================================================================
+        #  CORE!!!
+        # =========================================================================================
+        if self.CMem.PZRLevl >= 95:                                         # 가압기 기포 생성 이전
+            # ----------------------------- PRESS -------------------------------------------------
+            if self.PID_Mode:
+                PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['LetdownValveStay'])
+                else:
+                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
+            # ----------------------------- Level -------------------------------------------------
+            if self.PID_Mode:
+                PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveClose'])
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveStay'])
+                else:
+                    self._send_control_save(ActOrderBook['ChargingValveOpen'])
+            # ----------------------------- ----- -------------------------------------------------
+        else:                                                               # 가압기 기포 생성 이후
+            self.PID_Prs.SetPoint = 30
+            # ----------------------------- PRESS -------------------------------------------------
+            if self.PID_Mode:
+                PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['PZRSprayClose'])
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['PZRSprayStay'])
+                else:
+                    self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                if self.CMem.HV142 != 0:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+            # ----------------------------- Level -------------------------------------------------
+            if self.PID_Mode:
+                PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveClose'])
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveStay'])
+                else:
+                    self._send_control_save(ActOrderBook['ChargingValveOpen'])
+            # ----------------------------- ----- -------------------------------------------------
+        # =========================================================================================
         # Delta
-        if V['Delta_T'] != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
-        if V['ChargingVM'] != 0: self._send_control_save(ActOrderBook['ChargingAuto'])
+        if self.CMem.CDelt != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
         # Done Act
         self._send_control_to_cns()
         return AMod
@@ -274,7 +280,9 @@ class ENVCNS(CNS):
                                                 )
 
         # New Data (time t+1) -------------------------------------
-        super(ENVCNS, self).step()
+        super(ENVCNS, self).step()                  # 전체 CNS mem run-Freeze 하고 mem 업데이트
+        self.CMem.update()                          # 선택 변수 mem 업데이트
+
         self._append_val_to_list()
         self.ENVStep += 1
 
