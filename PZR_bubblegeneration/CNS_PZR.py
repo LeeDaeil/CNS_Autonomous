@@ -169,6 +169,10 @@ class ENVCNS(CNS):
             'LetdownValveStay': (['KSWO231', 'KSWO232'], [0, 0]),
             'LetdownValveClose': (['KSWO231', 'KSWO232'], [1, 0]),
 
+            'LetdownPresSetUp':(['KSWO90', 'KSWO91'], [0, 1]),
+            'LetdownPresSetStay': (['KSWO90', 'KSWO91'], [0, 1]),
+            'LetdownPresSetDown': (['KSWO90', 'KSWO91'], [1, 0]),
+
             'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
 
             'PZRProHeaterMan': (['KSWO120'], [1]), 'PZRProHeaterAuto': (['KSWO120'], [0]),
@@ -188,7 +192,7 @@ class ENVCNS(CNS):
             'ChangeDelta': (['TDELTA'], [1.0]),
             'ChargingAuto': (['KSWO100'], [0])
         }
-
+        # ZINST 36
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
         # =========================================================================================
@@ -217,6 +221,12 @@ class ENVCNS(CNS):
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
             self.PID_Prs.SetPoint = 30
+            self.PID_Prs_S.SetPoint = 30
+            # ----------------------------- PRESS SetPoint-----------------------------------------
+            if self.CMem.LetdownSet <= 30:
+                self._send_control_save(ActOrderBook['LetDownSetUP'])
+            else:
+                self._send_control_save(ActOrderBook['LetDownSetStay'])
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
@@ -234,7 +244,7 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['PZRSprayStay'])
                 else:
                     self._send_control_save(ActOrderBook['PZRSprayOpen'])
-                print(f'GetPoint|'
+                print(f'GetPoint|{self.CMem.PZRPres}, {self.CMem.PZRPres}|\n'
                       f'LetdownPos:{self.CMem.HV142}:{self.CMem.HV142Flow}|'
                       f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
             # ----------------------------- Level -------------------------------------------------
