@@ -29,6 +29,7 @@ class CMem:
         self.PZRSprayPos = self.m['ZINST66']['Val']
 
         self.LetdownSet = self.m['ZINST36']['Val']  # Letdown setpoint
+        self.LetdownSetM = self.m['KLAMPO89']['Val']  # Letdown setpoint Man0/Auto1
 
 
 class ENVCNS(CNS):
@@ -172,6 +173,7 @@ class ENVCNS(CNS):
             'LetdownPresSetUp':(['KSWO90', 'KSWO91'], [0, 1]),
             'LetdownPresSetStay': (['KSWO90', 'KSWO91'], [0, 1]),
             'LetdownPresSetDown': (['KSWO90', 'KSWO91'], [1, 0]),
+            'LetdownPresSetA': (['KSWO89'], [0]),
 
             'PZRBackHeaterOff': (['KSWO125'], [0]), 'PZRBackHeaterOn': (['KSWO125'], [1]),
 
@@ -222,6 +224,7 @@ class ENVCNS(CNS):
         else:                                                               # 가압기 기포 생성 이후
             self.PID_Prs.SetPoint = 30
             self.PID_Prs_S.SetPoint = 30
+            self.PID_Lev.SetPoint = 30
             # ----------------------------- PRESS SetPoint-----------------------------------------
             if self.CMem.LetdownSet <= 30:
                 self._send_control_save(ActOrderBook['LetDownSetUP'])
@@ -229,14 +232,18 @@ class ENVCNS(CNS):
                 self._send_control_save(ActOrderBook['LetDownSetStay'])
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
+                # HV142 ----------------------------------------------------------
                 PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
-                if PID_out >= 0.005:
+                if self.CMem.HV142 != 0:
                     self._send_control_save(ActOrderBook['LetdownValveClose'])
-                elif -0.005 < PID_out < 0.005:
-                    self._send_control_save(ActOrderBook['LetdownValveStay'])
-                else:
-                    self._send_control_save(ActOrderBook['LetdownValveOpen'])
+                # if PID_out >= 0.005:
+                #     self._send_control_save(ActOrderBook['LetdownValveClose'])
+                # elif -0.005 < PID_out < 0.005:
+                #     self._send_control_save(ActOrderBook['LetdownValveStay'])
+                # else:
+                #     self._send_control_save(ActOrderBook['LetdownValveOpen'])
 
+                # Spray ----------------------------------------------------------
                 PID_out = self.PID_Prs_S.update(self.CMem.PZRPres, 1)
                 if PID_out >= 0.005:
                     self._send_control_save(ActOrderBook['PZRSprayClose'])
@@ -244,23 +251,27 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['PZRSprayStay'])
                 else:
                     self._send_control_save(ActOrderBook['PZRSprayOpen'])
+                # LetPress ----------------------------------------------------------
+                if self.CMem.LetdownSetM == 1:
+                    self._send_control_save(ActOrderBook['LetdownPresSetA'])
+
                 print(f'GetPoint|{self.CMem.PZRPres}, {self.CMem.PZRPres}|\n'
                       f'LetdownPos:{self.CMem.HV142}:{self.CMem.HV142Flow}|'
                       f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
-                # if PID_out >= 0.005:
-                #     self._send_control_save(ActOrderBook['ChargingValveOpen'])
-                # elif -0.005 < PID_out < 0.005:
-                #     self._send_control_save(ActOrderBook['ChargingValveStay'])
-                # else:
-                #     self._send_control_save(ActOrderBook['ChargingValveClose'])
+                if PID_out >= 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveOpen'])
+                elif -0.005 < PID_out < 0.005:
+                    self._send_control_save(ActOrderBook['ChargingValveStay'])
+                else:
+                    self._send_control_save(ActOrderBook['ChargingValveClose'])
             # ----------------------------- ----- -------------------------------------------------
         # =========================================================================================
         # Delta
         if self.CMem.CDelt != 1: self._send_control_save(ActOrderBook['ChangeDelta'])
-        if self.CMem.FV122M != 0: self._send_control_save(ActOrderBook['ChargingAuto'])
+        # if self.CMem.FV122M != 0: self._send_control_save(ActOrderBook['ChargingAuto'])
         # Done Act
         self._send_control_to_cns()
         return AMod
@@ -295,7 +306,7 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(20)
+        self.want_tick = int(25)
         if self.Monitoring_ENV is not None:
             self.Monitoring_ENV.push_ENV_val(i=self.Name,
                                              Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
