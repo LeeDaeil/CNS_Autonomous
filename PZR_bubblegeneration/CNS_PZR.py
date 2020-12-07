@@ -5,7 +5,9 @@ import numpy as np
 import time
 import random
 import copy
-import matplotlib.pylab as plt
+
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 
 class CMem:
@@ -18,6 +20,7 @@ class CMem:
         self.CDelt = self.m['TDELTA']['Val']
         self.PZRPres = self.m['ZINST65']['Val']
         self.PZRLevl = self.m['ZINST63']['Val']
+        self.PZRTemp = self.m['UPRZ']['Val']
         self.ExitCoreT = self.m['UUPPPL']['Val']
 
         self.FV122 = self.m['BFV122']['Val']
@@ -37,51 +40,58 @@ class ENVCNS(CNS):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT,
                                      Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
+
+        # Plot --------------------------------------------------------------------------------
         self.Monitoring_ENV = Monitoring_ENV
+        # -------------------------------------------------------------------------------------
+        # Initial and Memory
         self.Name = Name  # = id
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
         self.want_tick = 5  # 1sec
-
         self.Loger_txt = ''
-
         self.CMem = CMem(self.mem)
-
+        # RL ----------------------------------------------------------------------------------
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
-            ('BHV142',   1, 0,   0),       # Letdown(HV142)
-            ('WRHRCVC',  1, 0,   0),       # RHR to CVCS Flow
-            ('WNETLD',   1, 0,   10),      # Total Letdown Flow
-
-            ('BFV122',   1, 0,   0),       # ChargingValve(FV122)
-            ('WNETCH',   1, 0,   10),      # Total Charging Flow
-
-            ('ZINST65',  1, 0,   160),     # RCSPressure
-            ('ZINST63',  1, 0,   100),     # PZRLevel
-            ('UUPPPL',   1, 0,   200),     # Core Exit Temperature
-            ('UPRZ',     1, 0,   300),     # PZR Temperature
+            ('BHV142',     1, 0,   0),       # Letdown(HV142)
+            ('WRHRCVC',    1, 0,   0),       # RHR to CVCS Flow
+            ('WNETLD',     1, 0,   10),      # Total Letdown Flow
+            ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
+            ('WNETCH',     1, 0,   10),      # Total Charging Flow
+            ('ZINST66',    1, 0,   30),      # PZR spray
+            ('ZINST65',    1, 0,   160),     # RCSPressure
+            ('ZINST63',    1, 0,   100),     # PZRLevel
+            ('UUPPPL',     1, 0,   200),     # Core Exit Temperature
+            ('UPRZ',       1, 0,   300),     # PZR Temperature
 
             # ('ZINST36',  1, 0,   0),      # Letdown Pressrue
 
-            ('ErrPres',  1, 0,   10),       # RCSPressure - setpoint
-            ('UpPres',   1, 0,   10),       # RCSPressure - Up
-            ('DownPres', 1, 0,   10),       # RCSPressure - Down
+            ('SetPres',    1, 0,   30),      # Pres-Setpoint
+            ('SetLevel',   1, 0,   30),      # Level-Setpoint
+            ('ErrPres',    1, 0,   100),     # RCSPressure - setpoint
+            ('UpPres',     1, 0,   100),     # RCSPressure - Up
+            ('DownPres',   1, 0,   100),     # RCSPressure - Down
+            ('ErrLevel',   1, 0,   100),     # PZRLevel - setpoint
+            ('UpLevel',    1, 0,   100),     # PZRLevel - Up
+            ('DownLevel',  1, 0,   100),     # PZRLevel - Down
         ]
 
         self.action_space = 3       # TODO Spray, HV142, FV122
         self.observation_space = len(self.input_info)
-
+        # -------------------------------------------------------------------------------------
         # PID Part
         self.PID_Mode = True
         self.PID_Prs = PID(kp=0.03, ki=0.001, kd=1.0)
         self.PID_Prs_S = PID(kp=0.03, ki=0.001, kd=1.0)
         self.PID_Lev = PID(kp=0.03, ki=0.001, kd=1.0)
         self.PID_Prs.SetPoint = 27.0           # Press set-point
-        self.PID_Prs_S.SetPoint = 27.0           # Press set-point
-        self.PID_Lev.SetPoint = 25.0           # Level set-point
+        self.PID_Prs_S.SetPoint = 27.0         # Press set-point
+        self.PID_Lev.SetPoint = 30.0           # Level set-point
+        # -------------------------------------------------------------------------------------
 
-    # ENV Logger
+    # ENV TOOLs =======================================================================================================
     def ENVlogging(self, s):
         cr_time = time.strftime('%c', time.localtime(time.time()))
         if self.ENVStep == 0:
@@ -103,6 +113,7 @@ class ENVCNS(CNS):
             x = (x - x_min) / (x_max - x_min)
         return x
 
+    # ENV RL TOOLs ====================================================================================================
     def get_state(self):
         state = []
         for para, x_round, x_min, x_max in self.input_info:
@@ -110,29 +121,52 @@ class ENVCNS(CNS):
                 state.append(self.normalize(self.mem[para]['Val'], x_round, x_min, x_max))
             else:
                 # ADD logic ----- 계산된 값을 사용하고 싶을 때
+                if para == 'SetPres':
+                    v_ = self.PID_Prs.SetPoint
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'SetLevel':
+                    v_ = self.PID_Lev.SetPoint
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'ErrPres':
-                    v_ = - abs(self.PID_Prs.SetPoint - self.mem['ZINST65']['Val'])
+                    v_ = - abs(self.PID_Prs.SetPoint - self.CMem.PZRPres)
                     # setpoint - 현재 압력 한뒤에 - abs
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'UpPres':
                     v_ = self.PID_Prs.SetPoint + 2
-                    v_ = v_ - self.mem['ZINST65']['Val']
+                    v_ = v_ - self.CMem.PZRPres
                     state.append(self.normalize(v_, x_round, x_min, x_max))
                 if para == 'DownPres':
                     v_ = self.PID_Prs.SetPoint - 2
-                    v_ = self.mem['ZINST65']['Val'] - v_
+                    v_ = self.CMem.PZRPres - v_
                     state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'ErrLevel':
+                    v_ = - abs(self.PID_Lev.SetPoint - self.CMem.PZRLevl)
+                    # setpoint - 현재 압력 한뒤에 - abs
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'UpLevel':
+                    v_ = self.PID_Lev.SetPoint + 2
+                    v_ = v_ - self.CMem.PZRLevl
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                if para == 'DownLevel':
+                    v_ = self.PID_Lev.SetPoint - 2
+                    v_ = self.CMem.PZRLevl - v_
+                    state.append(self.normalize(v_, x_round, x_min, x_max))
+                pass
 
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
         self.Loger_txt += f'{state}\t'
         return np.array(state)
 
-    def get_reward(self):
+    def get_reward(self, A):
         """
         R => nor(0 ~ 2)
         :return:
         """
         r = 0
+        if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
+            r += abs(self.CMem.PZRLevl - self.PID_Prs.SetPoint)
+        else:                                       # 기포 생성 이후
+            r += abs(self.CMem.PZRLevl - self.PID_Prs.SetPoint)
         self.Loger_txt += f'R:{r}\t'
         return r
 
@@ -194,7 +228,6 @@ class ENVCNS(CNS):
             'ChangeDelta': (['TDELTA'], [1.0]),
             'ChargingAuto': (['KSWO100'], [0])
         }
-        # ZINST 36
         self._send_control_save(ActOrderBook['PZRBackHeaterOn'])
         self._send_control_save(ActOrderBook['PZRProHeaterUp'])
         # =========================================================================================
@@ -211,6 +244,8 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['LetdownValveStay'])
                 else:
                     self._send_control_save(ActOrderBook['LetdownValveOpen'])
+            else:
+                pass #A[0] # TODO 여기서 부터
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
@@ -225,11 +260,6 @@ class ENVCNS(CNS):
             self.PID_Prs.SetPoint = 30
             self.PID_Prs_S.SetPoint = 30
             self.PID_Lev.SetPoint = 30
-            # ----------------------------- PRESS SetPoint-----------------------------------------
-            if self.CMem.LetdownSet <= 30:
-                self._send_control_save(ActOrderBook['LetDownSetUP'])
-            else:
-                self._send_control_save(ActOrderBook['LetDownSetStay'])
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
                 # HV142 ----------------------------------------------------------
@@ -298,6 +328,7 @@ class ENVCNS(CNS):
         self._send_control_to_cns()
         return 0
 
+    # ENV Main TOOLs ==================================================================================================
     def step(self, A, mean_, std_):
         """
         A를 받고 1 step 전진
@@ -323,7 +354,7 @@ class ENVCNS(CNS):
         self._append_val_to_list()
         self.ENVStep += 1
 
-        reward = self.get_reward()
+        reward = self.get_reward(A)
         done, reward = self.get_done(reward)
         if self.Monitoring_ENV is not None:
             self.Monitoring_ENV.push_ENV_reward(i=self.Name,
@@ -355,19 +386,25 @@ class ENVCNS(CNS):
         return state
 
 
+class CNSTestEnv:
+    def __init__(self):
+        self.env = ENVCNS(Name='Env1', IP='192.168.0.101', PORT=int(f'7101'))
+
+    def run_(self, iter_=1):
+        for i in range(1, iter_+1):  # iter = 1 이면 1번 동작
+            self.env.reset(file_name=f'Ep{i}')
+            start = time.time()
+            max_iter = 0
+            while True:
+                A = 0
+                max_iter += 1
+                next_state, reward, done, AMod = self.env.step(A, std_=1, mean_=0)
+                print(f'Doo--{start}->{time.time()} [{time.time() - start}]')
+                if done or max_iter >= 2000:
+                    print(f'END--{start}->{time.time()} [{time.time() - start}]')
+                    break
+
+
 if __name__ == '__main__':
-    # ENVCNS TEST
-    env = ENVCNS(Name='Env1', IP='192.168.0.101', PORT=int(f'7101'))
-    # Run
-    for _ in range(1, 2):
-        env.reset(file_name=f'Ep{_}')
-        start = time.time()
-        max_iter = 0
-        while True:
-            A = 0
-            max_iter += 1
-            next_state, reward, done, AMod = env.step(A, std_=1, mean_=0)
-            print(f'Doo--{start}->{time.time()} [{time.time() - start}]')
-            if done or max_iter >= 2000:
-                print(f'END--{start}->{time.time()} [{time.time() - start}]')
-                break
+    Model = CNSTestEnv()
+    Model.run_()

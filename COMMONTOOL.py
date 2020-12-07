@@ -1014,31 +1014,12 @@ class NBPlot3D(object):
             # data = np.random.random(2)
             send(data)
 
-#
-# from mpl_toolkits.mplot3d import axes3d
-# X, Y, Z = axes3d.get_test_data(0.05)
-# print(np.shape(X))
-# print(np.shape(Y))
-# print(np.shape(Z))
-#
-# fig = plt.figure()
-# ax = fig.gca(projection='3d')
-#
-# X = np.array([[1, 1], [0.5, 0.5], [0, 0]])
-# Y = np.array([[0, 1], [0, 1], [0, 1]])
-# Z = np.array([[1, 1], [0.5, 0.5], [0, 0]])
-#
-# print(np.shape(X))
-#
-# # fix_xy = np.array([[1], [0.5], [0]])
-# # Y = np.hstack([Y, np.array([[3], [3], [3]])])
-# # print(Y)
-#
-# ax.scatter(X, Y, Z, marker='*')
-# # ax.plot_wireframe(X, Y, Z, rstride=10, cstride=10)
-# ax.plot_surface(X, Y, Z, rstride=8, cstride=8, alpha=0.3)
-#
-# ax.set_xlabel('X Label=Temp')
-# ax.set_ylabel('Y Label=Time')
-# ax.set_zlabel('Z Label=Pres')
-# plt.show()
+
+# ---------------------------------------
+class CNSPlot:
+    def __init__(self):
+        # 공통 그래프
+        self.fig, self.ax = plt.subplots()
+
+        # show
+        plt.show()

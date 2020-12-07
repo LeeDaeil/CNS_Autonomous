@@ -1,17 +1,10 @@
-'''
-Soft Actor-Critic version 2
-using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
-add alpha loss compared with version 1
-paper: https://arxiv.org/pdf/1812.05905.pdf
-'''
-
 import math
 import random
 
 import numpy as np
 
 import torch
-torch.multiprocessing.set_start_method('spawn', force=True)
+
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -26,7 +19,9 @@ from multiprocessing import Process
 from multiprocessing.managers import BaseManager
 
 from PZR_bubblegeneration.CNS_PZR import ENVCNS
+from MONITORINGTOOL_PZR import MonitoringMEM
 
+torch.multiprocessing.set_start_method('spawn', force=True)
 
 class SharedAdam(optim.Optimizer):
     r"""Implements Adam algorithm.
@@ -332,8 +327,8 @@ class SAC_Trainer():
         state = torch.FloatTensor(state).cuda()
         next_state = torch.FloatTensor(next_state).cuda()
         action = torch.FloatTensor(action).cuda()
-        reward = torch.FloatTensor(reward).unsqueeze(
-            1).cuda()  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
+        # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
+        reward = torch.FloatTensor(reward).unsqueeze(1).cuda()
         done = torch.FloatTensor(np.float32(done)).unsqueeze(1).cuda()
 
         predicted_q_value1 = self.soft_q_net1(state, action)
@@ -347,8 +342,9 @@ class SAC_Trainer():
         # alpha = 0.0
         # trade-off between exploration (max entropy) and exploitation (max Q)
         if auto_entropy is True:
+            # self.log_alpha as forward function to get value
             alpha_loss = -(self.log_alpha() * (
-                        log_prob - 1.0 * self.action_dim).detach()).mean()  # self.log_alpha as forward function to get value
+                        log_prob - 1.0 * self.action_dim).detach()).mean()
             # print('alpha loss: ',alpha_loss)
             self.alpha_optimizer.zero_grad()
             alpha_loss.backward()
@@ -417,12 +413,16 @@ class SAC_Trainer():
         self.policy_net.eval()
 
 
-def worker(id, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size,
-           explore_steps, \
-           update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path):
+def worker(id, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size,
+           explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC):
     '''
     the function for sampling with multi-processing
     '''
+
+    # process = Process(target=worker, args=(
+    #     i, sac_trainer, None, rewards_queue, replay_buffer, max_episodes, max_steps, \
+    #     batch_size, explore_steps, update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC,
+    #     hidden_dim, model_path))  # the args contain shared and not shared
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
@@ -431,15 +431,11 @@ def worker(id, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max
         env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'), Monitoring_ENV=None)
         env.PID_Mode = True if id == 4 else False  # PID는 마지막 5번 에이전트가 담당함.
         action_dim = env.action_space
-        state_dim = env.observation_space
-        action_range = 1.
 
         frame_idx = 0
-        rewards = []
         # training loop
         for eps in range(max_episodes):
-            if not env.PID_Mode:
-                replay_buffer.add_ep()
+            replay_buffer.add_ep()
             episode_reward = 0
             episode_q1 = 0
             episode_q2 = 0
@@ -471,8 +467,6 @@ def worker(id, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max
                                                                                   reward_scale=10.,
                                                                                   auto_entropy=AUTO_ENTROPY,
                                                                                   target_entropy=-1. * action_dim)
-                        # print(episode_q1, episode_q2, episode_p)
-                        # print(type(episode_q1), type(episode_q2), type(episode_p))
                         episode_q1 += episode_q1
                         episode_q2 += episode_q2
                         episode_p += episode_p
@@ -512,10 +506,10 @@ if __name__ == '__main__':
 
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)
+    # BaseManager.register('MonitoringMEM', MonitoringMEM)
     manager = BaseManager()
     manager.start()
-    replay_buffer = manager.ReplayBuffer(
-        replay_buffer_size)  # share the replay buffer through manager
+    replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
 
     # choose env
     env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
@@ -523,10 +517,9 @@ if __name__ == '__main__':
     state_dim = env.observation_space
     action_range = 1.
 
-
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
-    max_steps = 20
+    max_steps = 2000
     explore_steps = 0  # for random action sampling in the beginning of training
     batch_size = 640
     update_itr = 1
@@ -544,6 +537,7 @@ if __name__ == '__main__':
     sac_trainer.target_soft_q_net1.share_memory()
     sac_trainer.target_soft_q_net2.share_memory()
     sac_trainer.policy_net.share_memory()
+
     ShareParameters(sac_trainer.soft_q_optimizer1)
     ShareParameters(sac_trainer.soft_q_optimizer2)
     ShareParameters(sac_trainer.policy_optimizer)
@@ -557,9 +551,9 @@ if __name__ == '__main__':
 
     for i in range(num_workers):
         process = Process(target=worker, args=(
-            i, sac_trainer, None, rewards_queue, replay_buffer, max_episodes, max_steps, \
-            batch_size, explore_steps, update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC,
-            hidden_dim, model_path))  # the args contain shared and not shared
+            i, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_steps, \
+            batch_size, explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC
+        ))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
 
