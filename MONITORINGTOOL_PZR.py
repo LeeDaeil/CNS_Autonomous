@@ -1,7 +1,7 @@
 import time
 import sys
 import multiprocessing
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QSizePolicy, QPushButton
+from PyQt5.QtWidgets import QApplication, QWidget, QSizePolicy, QPushButton, QVBoxLayout, QHBoxLayout
 from PyQt5.QtCore import QTimer
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -17,7 +17,8 @@ class MonitoringMEM:
         self.nub_agent = nub_agent
         self.StepInEachAgent = {i: 0 for i in range(nub_agent)}
         self.ENVVALInEachAgent = {i: {
-            'BHV142': [], 'BFV122': [], 'ZINST65': [], 'ZINST63': [],
+            'UUPPPL': [], 'UPRZ': [], 'ZINST58': [], 'ZINST63': [],
+            'BHV142': [], 'BFV122': [], 'ZINST66': [],
         } for i in range(nub_agent)}
 
         self.ENVReward = {i: {
@@ -81,7 +82,7 @@ class MonitoringMEM:
         return [self.ENVActDis[i]['Mean'], self.ENVActDis[i]['Std']]
 
     def get_ENV_reward_val(self, i):
-        return [self.ENVReward[i]['R'], self.ENVReward['AcuR']]
+        return [self.ENVReward[i]['R'], self.ENVReward['AcuR/Ep']]
 
     def get_ENV_nub(self):
         return self.nub_agent
@@ -94,12 +95,13 @@ class Monitoring(multiprocessing.Process):
         self.mem = Monitoring_ENV
 
     def run(self):
+        print('Run Monitoring TOOL')
         app = QApplication(sys.argv)
         w = Mainwindow(self.mem)
         sys.exit(app.exec_())
 
 
-class Mainwindow(QMainWindow):
+class Mainwindow(QWidget):
     def __init__(self, mem):
         super().__init__()
         self.mem = mem
@@ -113,28 +115,41 @@ class Mainwindow(QMainWindow):
 
     def initUI(self):
         self.setGeometry(100, 100, 640, 400)
+        main_layout = QVBoxLayout(self)
+        layout_1 = QHBoxLayout()
+        layout_2 = QVBoxLayout()
 
-        self.GP = PlotCanvas(self, width=16, height=8)
-        self.GP.move(0, 0)
-
-        self.button = QPushButton('Next', self)
+        # Layout_1
+        self.button = QPushButton('Next')
         self.button.nub = 0
         self.button.setToolTip('Next')
         self.button.move(0, 0)
         self.button.resize(50, 20)
         self.button.clicked.connect(self.NEXTPAGE)
 
-        self.stopbutton = QPushButton('', self)
+        self.stopbutton = QPushButton('-')
         self.stopbutton.cond_stop = False
         if not self.stopbutton.cond_stop: self.stopbutton.setText('Run')
         self.stopbutton.move(50, 0)
         self.stopbutton.resize(50, 20)
         self.stopbutton.clicked.connect(self.PAUSE)
 
-        self.SaveFig = QPushButton('Save', self)
+        self.SaveFig = QPushButton('Save')
         self.SaveFig.move(100, 0)
         self.SaveFig.resize(50, 20)
         self.SaveFig.clicked.connect(self.Savefig)
+
+        layout_1.addWidget(self.button)
+        layout_1.addWidget(self.stopbutton)
+        layout_1.addWidget(self.SaveFig)
+
+        # Layout_2
+        self.GP = PlotCanvas()
+        layout_2.addWidget(self.GP)
+
+        # MainClose --
+        main_layout.addLayout(layout_1)
+        main_layout.addLayout(layout_2)
 
         self.show()
 
@@ -142,9 +157,8 @@ class Mainwindow(QMainWindow):
         self.setWindowTitle(f'AGENT_{self.button.nub}')
         if not self.stopbutton.cond_stop:
             self.GP.plot(self.mem.get_ENV_val(self.button.nub),
-                         self.mem.get_ENV_all_val(),
-                         self.mem.get_ENV_reward_val(self.button.nub),
                          self.mem.get_ENV_ActDis(self.button.nub),
+                         self.mem.get_ENV_reward_val(self.button.nub),
                          )
 
     def NEXTPAGE(self):
@@ -165,56 +179,79 @@ class Mainwindow(QMainWindow):
 
 
 class PlotCanvas(FigureCanvas):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = plt.figure(figsize=(width, height), dpi=dpi)
+    def __init__(self):
+        FigureCanvas.__init__(self, plt.figure())
 
-        gs = GridSpec(2, 2, figure=self.fig)
-        self.ax1 = self.fig.add_subplot(gs[0:1, 0:1])
-        self.ax2 = self.fig.add_subplot(gs[0:1, 1:2])
-        self.ax3 = self.fig.add_subplot(gs[1:2, 0:1], projection='3d')
+        self.gs = GridSpec(6, 2, figure=self.figure)
+        self.axes = [
+            # left
+            self.figure.add_subplot(self.gs[0:3, 0:1]),
+            self.figure.add_subplot(self.gs[3:5, 0:1]),
+            self.figure.add_subplot(self.gs[5:6, 0:1], projection='3d'),
+            # right
+            self.figure.add_subplot(self.gs[0:2, 1:2]), # temp
+            self.figure.add_subplot(self.gs[2:4, 1:2]), # pres,level
+            self.figure.add_subplot(self.gs[4:6, 1:2]), # pos
+        ]
 
-        FigureCanvas.__init__(self, self.fig)
-        self.setParent(parent)
+        self.figure.set_tight_layout(True)
 
-        FigureCanvas.setSizePolicy(self,
-                                   QSizePolicy.Expanding,
-                                   QSizePolicy.Expanding)
-        FigureCanvas.updateGeometry(self)
-
-    def plot(self, val, A_val, reward_mem, ActDis):
-        self.ax1.clear()
-        self.ax2.clear()
-        self.ax3.clear()
-
-        self.ax1.plot(val['BHV142'])
-        self.ax1.plot(val['BFV122'])
-
-        for _ in range(0, 4):
-            self.ax2.plot(A_val[_]['ZINST65'], label=f'Agent{_}')
-        self.ax2.plot(A_val[4]['ZINST65'], label='PID')
-        self.ax2.legend(loc=0)
+    def plot(self, val, a_dis, r_val):
+        [ax.clear() for ax in self.axes]
+        y = [_ for _ in range(len(val['UUPPPL']))]
+        self.axes[0].plot(r_val[0], label='Current Reward')
+        self.axes[1].plot(r_val[1], label='Accumulated Reward/Ep')
 
         # Distribution
-        mean, std = ActDis[0], ActDis[1]  # [0, 1]
-        mean_x = mean[-1]
-        mean = np.array(mean[-50:])
-        mean = mean.reshape(len(mean), 1)
-        std = np.array(std[-50:])
-        std = std.reshape(len(std), 1)
-        x = np.array([np.arange(-1, 1, 0.01) for _ in range(0, len(mean))])
-        y1 = stats.norm(mean, std).pdf(x)
-        for _ in range(0, len(mean)):
-            self.ax3.plot(x[_], y1[_], zs=-_, zdir='y', color='blue', alpha=0.02 * _)
-        self.ax3.plot([-1, -1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
-        self.ax3.plot([0, 0], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
-        self.ax3.plot([1, 1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
+        # mean, std = a_dis[0], a_dis[1]  # [0, 1]
+        # mean_x = mean[-1]
+        # mean = np.array(mean[-50:])
+        # print(np.shape(mean))
+        # print(mean)
+        # mean = mean.reshape(len(mean), 1)
+        # std = np.array(std[-50:])
+        # std = std.reshape(len(std), 1)
+        # x = np.array([np.arange(-1, 1, 0.01) for _ in range(0, len(mean))])
+        # y1 = stats.norm(mean, std).pdf(x)
+        # for _ in range(0, len(mean)):
+        #     self.axes[2].plot(x[_], y1[_], zs=-_, zdir='y', color='blue', alpha=0.02 * _)
+        #     self.axes[2].plot([-1, -1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
+        #     self.axes[2].plot([0, 0], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
+        #     self.axes[2].plot([1, 1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
 
-        self.ax1.grid()
-        self.ax2.grid()
-        self.ax3.grid()
+        self.axes[3].plot(val['UUPPPL'], label='CoreExitTemp')
+        self.axes[3].plot(val['UPRZ'], label='PzrTemp')
 
-        self.fig.set_tight_layout(True)
-        self.fig.canvas.draw()
+        self.axes[4].plot(val['ZINST58'], label='PZR Pres')
+        self.axes[4].plot(val['ZINST63'], label='PZR Level')
+
+        self.axes[5].step(y, val['BHV142'], label='Letdown Pos')
+        self.axes[5].step(y, val['BFV122'], label='Charging Pos')
+        self.axes[5].step(y, [_/31 for _ in val['ZINST66']], label='PZR Spray Pos')
+
+        for ax_, i in zip(self.axes, range(len(self.axes))):
+            if i in [3, 4, 5]:
+                ax_.legend(bbox_to_anchor=(1.01, 1.0), loc='upper left', borderaxespad=0.)
+            else:
+                if i != 2: ax_.legend(loc=2)
+
+            # get_tick_ = ax_.get_yticks()  # List
+            # if i == 3: ax_.set_yticklabels([f'{_:0.0f}[℃]' for _ in get_tick_])
+            # if i == 4: ax_.set_yticklabels([f'{_:0.0f}' for _ in get_tick_])
+            # if i == 5: ax_.set_yticklabels([f'{_ * 100:0.0f}[%]' for _ in get_tick_])
+
+            ax_.grid()
+
+        self.figure.set_tight_layout(True)
+        self.figure.canvas.draw()
 
     def saveFig(self):
-        self.fig.savefig('SaveFIg.svg', format='svg', dpi=1200)
+        self.figure.savefig('SaveFIg.svg', format='svg', dpi=1200)
+
+
+if __name__ == '__main__':
+    # Test UI
+    print('Run Monitoring TOOL')
+    app = QApplication(sys.argv)
+    w = Mainwindow(None)
+    sys.exit(app.exec_())

@@ -254,13 +254,14 @@ class PolicyNetwork(nn.Module):
         mean, log_std = self.forward(state)
         std = log_std.exp()
 
+
         normal = Normal(0, 1)
         z = normal.sample(mean.shape).cuda()
         action = self.action_range * torch.tanh(mean + std * z)
 
         action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
             action.detach().cpu().numpy()[0]
-        return action, 0, 0
+        return action, mean.data.tolist()[0], std.data.tolist()[0]
 
     def sample_action(self, state):
         a = torch.FloatTensor(self.num_actions).uniform_(-1, 1)
@@ -530,7 +531,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-    num_workers = 3  # or: mp.cpu_count()
+    num_workers = 1  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
@@ -583,8 +584,7 @@ if __name__ == '__main__':
         processes.append(process)
 
     # Monitoring process
-    m_process = Process(target=Monitoring, args=(monitoring_mem))
-    m_process.daemon = True
+    m_process = Monitoring(monitoring_mem)
     processes.append(m_process)
 
     [p.start() for p in processes]
