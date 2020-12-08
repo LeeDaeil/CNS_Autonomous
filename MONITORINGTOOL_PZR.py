@@ -28,21 +28,25 @@ class MonitoringMEM:
             'Mean': [], 'Std': []
         } for i in range(nub_agent)}
 
-        self.ENVReward['AcuR'] = []
+        self.ENVReward['AcuR/Ep'] = []
+        self.ENVReward['q1/Ep'] = []
+        self.ENVReward['q2/Ep'] = []
+        self.ENVReward['p/Ep'] = []
 
     def push_currentEP(self, i, ep):
         self.StepInEachAgent[i] = ep
 
-    def push_ENV_val(self, i, Dict_val):
+    def push_ENV_epinfo(self, Dict_val):
+        for key in Dict_val:
+            self.ENVReward[key].append()
+
+    def push_ENV_val(self, i, CNSMem):
         """
-        :param i: 에이전트 넘버
-        :param Dict_val: {'Para': Val}
+        :param i: 에이전트 넘버 <-
+        :param CNSMem: ...
         """
-        for key in Dict_val.keys():
-            if key == 'KCNTOMS':
-                self.ENVVALInEachAgent[i][key].append(- Dict_val[key])
-            else:
-                self.ENVVALInEachAgent[i][key].append(Dict_val[key])
+        for key in self.ENVVALInEachAgent[i].keys():
+            self.ENVVALInEachAgent[i][key].append(CNSMem[key]['Val'])
 
     def push_ENV_reward(self, i, Dict_val):
         self.ENVReward[i]['R'].append(Dict_val['R'])
@@ -54,10 +58,9 @@ class MonitoringMEM:
 
     def init_ENV_val(self, i):
         # 종료 또는 초기화로
-        self.ENVReward['AcuR'].append(self.ENVReward[i]['CurAcuR'])
-
         for key in self.ENVVALInEachAgent[i].keys():
             self.ENVVALInEachAgent[i][key] = []
+
         self.ENVReward[i]['R'] = []
         self.ENVReward[i]['CurAcuR'] = 0
 

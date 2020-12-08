@@ -36,13 +36,12 @@ class CMem:
 
 
 class ENVCNS(CNS):
-    def __init__(self, Name, IP, PORT, Monitoring_ENV=None):
+    def __init__(self, Name, IP, PORT):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT,
                                      Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
 
         # Plot --------------------------------------------------------------------------------
-        self.Monitoring_ENV = Monitoring_ENV
         # -------------------------------------------------------------------------------------
         # Initial and Memory
         self.Name = Name  # = id
@@ -82,7 +81,7 @@ class ENVCNS(CNS):
         self.observation_space = len(self.input_info)
         # -------------------------------------------------------------------------------------
         # PID Part
-        self.PID_Mode = True
+        self.PID_Mode = False
         self.PID_Prs = PID(kp=0.03, ki=0.001, kd=1.0)
         self.PID_Prs_S = PID(kp=0.03, ki=0.001, kd=1.0)
         self.PID_Lev = PID(kp=0.03, ki=0.001, kd=1.0)
@@ -329,7 +328,7 @@ class ENVCNS(CNS):
         return 0
 
     # ENV Main TOOLs ==================================================================================================
-    def step(self, A, mean_, std_):
+    def step(self, A):
         """
         A를 받고 1 step 전진
         :param A: [Act], numpy.ndarry, Act는 numpy.float32
@@ -338,14 +337,6 @@ class ENVCNS(CNS):
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
         self.want_tick = int(25)
-        if self.Monitoring_ENV is not None:
-            self.Monitoring_ENV.push_ENV_val(i=self.Name,
-                                             Dict_val={f'{Para}': self.mem[f'{Para}']['Val'] for Para in
-                                                       ['BHV142', 'BFV122', 'ZINST65', 'ZINST63']}
-                                             )
-            self.Monitoring_ENV.push_ENV_ActDis(i=self.Name,
-                                                Dict_val={'Mean': mean_, 'Std': std_}
-                                                )
 
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()                  # 전체 CNS mem run-Freeze 하고 mem 업데이트
@@ -356,9 +347,6 @@ class ENVCNS(CNS):
 
         reward = self.get_reward(A)
         done, reward = self.get_done(reward)
-        if self.Monitoring_ENV is not None:
-            self.Monitoring_ENV.push_ENV_reward(i=self.Name,
-                                                Dict_val={'R': reward, 'AcuR': self.AcumulatedReward, 'Done': done})
         next_state = self.get_state()
         # ----------------------------------------------------------
         self.ENVlogging(s=self.Loger_txt)
@@ -377,7 +365,6 @@ class ENVCNS(CNS):
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0
         self.ENVStep = 0
-        if self.Monitoring_ENV is not None: self.Monitoring_ENV.init_ENV_val(self.Name)
         # 5] FIX RADVAL
         self.FixedRad = random.randint(0, 20) * 5
         self.FixedTime = 0

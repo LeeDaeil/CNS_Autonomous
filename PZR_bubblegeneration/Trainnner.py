@@ -19,9 +19,10 @@ from multiprocessing import Process
 from multiprocessing.managers import BaseManager
 
 from PZR_bubblegeneration.CNS_PZR import ENVCNS
-from MONITORINGTOOL_PZR import MonitoringMEM
+from MONITORINGTOOL_PZR import MonitoringMEM, Monitoring
 
 torch.multiprocessing.set_start_method('spawn', force=True)
+
 
 class SharedAdam(optim.Optimizer):
     r"""Implements Adam algorithm.
@@ -413,35 +414,45 @@ class SAC_Trainer():
         self.policy_net.eval()
 
 
-def worker(id, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size,
+def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_steps, batch_size,
            explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC):
-    '''
+    """
     the function for sampling with multi-processing
-    '''
 
-    # process = Process(target=worker, args=(
-    #     i, sac_trainer, None, rewards_queue, replay_buffer, max_episodes, max_steps, \
-    #     batch_size, explore_steps, update_itr, action_itr, AUTO_ENTROPY, DETERMINISTIC,
-    #     hidden_dim, model_path))  # the args contain shared and not shared
+    :param id:
+    :param sac_trainer:
+    :param replay_buffer:
+    :param monitoring_mem:
+    :param max_episodes:
+    :param max_steps:
+    :param batch_size:
+    :param explore_steps:
+    :param update_itr:
+    :param AUTO_ENTROPY:
+    :param DETERMINISTIC:
+    :return: 0
+    """
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
-        print(sac_trainer, replay_buffer)
+        # Agent info and get_shared mem
+        print(f'Agent {id}|Trainer {sac_trainer}|'
+              f'ReplayBuffer {replay_buffer}|MonitoringMem {monitoring_mem}|')
 
-        env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'), Monitoring_ENV=None)
-        env.PID_Mode = True if id == 4 else False  # PID는 마지막 5번 에이전트가 담당함.
+        # Set CNS
+        env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'))
+        env.PID_Mode = True if id == 2 else False  # PID는 마지막 2번 에이전트가 담당함.
         action_dim = env.action_space
+
+        # Worker mem
+        Wm = {'ep_acur': 0, 'ep_q1': 0, 'ep_q2': 0, 'ep_p': 0}
 
         frame_idx = 0
         # training loop
         for eps in range(max_episodes):
+            # Buffer <-
             replay_buffer.add_ep()
-            episode_reward = 0
-            episode_q1 = 0
-            episode_q2 = 0
-            episode_p = 0
-
-            # CNS reset
+            # CNS reset <-
             state = env.reset(file_name=f'{id}_{eps}')
 
             for step in range(max_steps):
@@ -449,15 +460,23 @@ def worker(id, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_step
                     action, mean_, std_ = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
                 else:
                     action, mean_, std_ = sac_trainer.policy_net.sample_action(state)
+                # MonitoringMem <-
+                monitoring_mem.push_ENV_ActDis(id, Dict_val={'Mean': mean_, 'Std': std_})
+                monitoring_mem.push_ENV_val(id, CNSMem=env.mem)
 
-                next_state, reward, done, action = env.step(action, mean_, std_)
-                # sac_trainer.save_model(model_path)
+                # CNS Step <-
+                next_state, reward, done, action = env.step(action)
 
+                # MonitoringMem <- last order ...
+                Wm['ep_acur'] += reward
+                monitoring_mem.push_ENV_reward(id, Dict_val={'R': reward, 'AcuR': Wm['ep_acur']})
+
+                # Buffer <-
                 if env.PID_Mode == False:
                     replay_buffer.push(state, action, reward, next_state, done)
 
+                # s <- next_s
                 state = next_state
-                episode_reward += reward
                 frame_idx += 1
 
                 # if len(replay_buffer) > batch_size:
@@ -467,22 +486,30 @@ def worker(id, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_step
                                                                                   reward_scale=10.,
                                                                                   auto_entropy=AUTO_ENTROPY,
                                                                                   target_entropy=-1. * action_dim)
-                        episode_q1 += episode_q1
-                        episode_q2 += episode_q2
-                        episode_p += episode_p
+                        Wm['ep_q1'] += episode_q1
+                        Wm['ep_q2'] += episode_q2
+                        Wm['ep_p'] += episode_p
 
-                # if eps % 10 == 0 and eps > 0:
-                # plot(rewards, id)
-                # sac_trainer.save_model(model_path)
+                # Done ep ??
                 if done:
-                    print('Done')
+                    print(f"END_EP [{replay_buffer.get_ep()}]|"
+                          f"Ep AccR [{Wm['ep_acur']}]|"
+                          f"EP q1 [{Wm['ep_q1']}]|"
+                          f"EP q2 [{Wm['ep_q2']}]|"
+                          f"EP p [{Wm['ep_p']}]")
+                    # MonitoringMem < - last order...
+                    monitoring_mem.push_ENV_epinfo({'AcuR/Ep': Wm['ep_acur'], 'q1/Ep': Wm['ep_q1'],
+                                                    'q2/Ep': Wm['ep_q2'], 'p/Ep': Wm['ep_p']})
+                    monitoring_mem.init_ENV_val(id)
+                    for _ in Wm.keys():
+                        Wm[_] = 0
                     break
-            print('Episode: ', replay_buffer.get_ep(), eps, '| Episode Reward: ', episode_reward, episode_q1,
-                  episode_q2,
-                  episode_p)
-            # if len(rewards) == 0: rewards.append(episode_reward)
-            # else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
-            rewards_queue.put(episode_reward)
+                else:
+                    # every step ...
+                    pass
+
+            # Keep ...
+            # sac_trainer.save_model(model_path)
 
 
 def ShareParameters(adamoptim):
@@ -503,20 +530,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-
-    # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
-    BaseManager.register('ReplayBuffer', ReplayBuffer)
-    # BaseManager.register('MonitoringMEM', MonitoringMEM)
-    manager = BaseManager()
-    manager.start()
-    replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
-
-    # choose env
-    env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
-    action_dim = env.action_space
-    state_dim = env.observation_space
-    action_range = 1.
-
+    num_workers = 3  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
@@ -528,6 +542,20 @@ if __name__ == '__main__':
     DETERMINISTIC = False
     hidden_dim = 512
     model_path = ''
+
+    # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
+    BaseManager.register('ReplayBuffer', ReplayBuffer)
+    BaseManager.register('MonitoringMEM', MonitoringMEM)
+    manager = BaseManager()
+    manager.start()
+    replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
+    monitoring_mem = manager.MonitoringMEM(num_workers)
+
+    # choose env
+    env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
+    action_dim = env.action_space
+    state_dim = env.observation_space
+    action_range = 1.
 
     sac_trainer = SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range)
 
@@ -543,19 +571,21 @@ if __name__ == '__main__':
     ShareParameters(sac_trainer.policy_optimizer)
     ShareParameters(sac_trainer.alpha_optimizer)
 
-    rewards_queue = mp.Queue()  # used for get rewards from all processes and plot the curve
-
-    num_workers = 3  # or: mp.cpu_count()
+    # process ------------------------------------------------------------------------------------------
     processes = []
-    rewards = [0]
-
+    # Worker process
     for i in range(num_workers):
         process = Process(target=worker, args=(
-            i, sac_trainer, rewards_queue, replay_buffer, max_episodes, max_steps, \
+            i, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_steps, \
             batch_size, explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC
         ))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
+
+    # Monitoring process
+    m_process = Process(target=Monitoring, args=(monitoring_mem))
+    m_process.daemon = True
+    processes.append(m_process)
 
     [p.start() for p in processes]
     [p.join() for p in processes]  # finished at the same time
