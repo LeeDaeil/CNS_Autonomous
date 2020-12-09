@@ -445,7 +445,7 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
 
         # Set CNS
         env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'))
-        env.PID_Mode = True if id == 2 else False  # PID는 마지막 2번 에이전트가 담당함.
+        # env.PID_Mode = True if id == 2 else False  # PID는 마지막 2번 에이전트가 담당함.
         action_dim = env.action_space
 
         # Worker mem
@@ -542,7 +542,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-    num_workers = 3  # or: mp.cpu_count()
+    num_workers = 4  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000

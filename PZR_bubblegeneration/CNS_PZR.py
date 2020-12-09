@@ -94,10 +94,12 @@ class ENVCNS(CNS):
     def ENVlogging(self, s):
         cr_time = time.strftime('%c', time.localtime(time.time()))
         if self.ENVStep == 0:
+            # with open(f'{self.Name}.txt', 'a') as f:
+            #     f.write('==' * 20 + '\n')
+            #     f.write(f'[{cr_time}]\n')
+            #     f.write('==' * 20 + '\n')
             with open(f'{self.Name}.txt', 'a') as f:
-                f.write('==' * 20 + '\n')
-                f.write(f'[{cr_time}]\n')
-                f.write('==' * 20 + '\n')
+                f.write(f'[{cr_time}] {self.Loger_txt}\n')
         else:
             with open(f'{self.Name}.txt', 'a') as f:
                 f.write(f'[{cr_time}] {self.Loger_txt}\n')
@@ -170,7 +172,7 @@ class ENVCNS(CNS):
                 r1 += 0.1                                                       # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
-            r1 = np.clip(r1, 0, 1)
+            r1 = np.clip(r1, -1, 1)
             # 수위
             # 제어
             if abs(A[0]) < 0.6: c += 0.01
@@ -183,13 +185,13 @@ class ENVCNS(CNS):
                 r1 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
-            r1 = np.clip(r1, 0, 1)
+            r1 = np.clip(r1, -1, 1)
             # 수위
             if abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint) < 0.25:
                 r2 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r2 += - abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint)
-            r2 = np.clip(r2, 0, 1)
+            r2 = np.clip(r2, -1, 1)
             # 제어
             if abs(A[0]) < 0.6: c += 0.01
             if abs(A[1]) < 0.6: c += 0.01
