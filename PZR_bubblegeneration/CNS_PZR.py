@@ -189,6 +189,7 @@ class ENVCNS(CNS):
                 r2 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r2 += - abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint)
+            r2 = np.clip(r2, 0, 1)
             # 제어
             if abs(A[0]) < 0.6: c += 0.01
             if abs(A[1]) < 0.6: c += 0.01
@@ -203,6 +204,9 @@ class ENVCNS(CNS):
         d = False
         if self.CMem.ExitCoreT > 176:
             d = True
+        if self.CMem.PZRPres < 20 or self.CMem.PZRPres > 32 or self.CMem.PZRLevl < 25:
+            d = True
+            r = - 0.1
 
         self.Loger_txt += f'{d}\t'
         return d, r #self.normalize(r, 1, 0, 2)
@@ -280,7 +284,7 @@ class ENVCNS(CNS):
                     if A[0] < 0: self._send_control_save(ActOrderBook['LetdownValveClose'])
                     else: self._send_control_save(ActOrderBook['LetdownValveOpen'])
                 # A[1] PZR spray
-                AMod[1] = 0
+                # AMod[1] = 0
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
@@ -292,7 +296,8 @@ class ENVCNS(CNS):
                 #     self._send_control_save(ActOrderBook['ChargingValveClose'])
             else:
                 # A[2] FV122
-                AMod[2] = 0
+                # AMod[2] = 0
+                pass
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
             self.PID_Prs.SetPoint = 30
@@ -328,7 +333,7 @@ class ENVCNS(CNS):
                 #       f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
             else:
                 # A[0] HV142
-                AMod[0] = -1
+                # AMod[0] = -1
                 if self.CMem.HV142 != 0:
                     self._send_control_save(ActOrderBook['LetdownValveClose'])
                 # A[1] PZR spray

@@ -396,7 +396,10 @@ class SAC_Trainer():
             target_param.data.copy_(  # copy data value into target parameters
                 target_param.data * (1.0 - soft_tau) + param.data * soft_tau
             )
-        return predicted_new_q_value.mean()
+        # return predicted_new_q_value.mean()
+        q1_, q2_, po_ = q_value_loss1.detach(), q_value_loss2.detach(), policy_loss.detach()
+
+        return 0, q1_.item(), q2_.item(), po_.item()
 
     def save_model(self, path):
         torch.save(self.soft_q_net1.state_dict(),

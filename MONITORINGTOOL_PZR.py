@@ -39,7 +39,7 @@ class MonitoringMEM:
 
     def push_ENV_epinfo(self, Dict_val):
         for key in Dict_val:
-            self.ENVReward[key].append()
+            self.ENVReward[key].append(Dict_val[key])
 
     def push_ENV_val(self, i, CNSMem):
         """
@@ -97,8 +97,8 @@ class MonitoringMEM:
                 self.ENVActDis[i]['A2'], self.ENVActDis[i]['OA2']]
 
     def get_ENV_reward_val(self, i):
-        return [self.ENVReward[i]['R'], self.ENVReward['AcuR/Ep']]
-
+        return [self.ENVReward[i]['R'], self.ENVReward['AcuR/Ep'],
+                self.ENVReward['q1/Ep'], self.ENVReward['q2/Ep'], self.ENVReward['p/Ep']]
     def get_ENV_nub(self):
         return self.nub_agent
 
@@ -218,12 +218,15 @@ class PlotCanvas(FigureCanvas):
         y = [_ for _ in range(len(val['UUPPPL']))]
         self.axes[0].plot(r_val[0], label='Current Reward')
         self.axes[1].plot(r_val[1], label='Accumulated Reward/Ep')
-        self.axes[2].plot(a_dis[2], label='A0')
-        self.axes[2].plot(a_dis[4], label='A1')
-        self.axes[2].plot(a_dis[6], label='A2')
-        self.axes[3].plot(a_dis[3], label='A0')
-        self.axes[3].plot(a_dis[5], label='A1')
-        self.axes[3].plot(a_dis[7], label='A2')
+        self.axes[2].plot(r_val[2], label='Q1')
+        self.axes[2].plot(r_val[3], label='Q2')
+        self.axes[3].plot(r_val[4], label='p')
+        # self.axes[2].plot(a_dis[2], label='A0')
+        # self.axes[2].plot(a_dis[4], label='A1')
+        # self.axes[2].plot(a_dis[6], label='A2')
+        # self.axes[3].plot(a_dis[3], label='A0')
+        # self.axes[3].plot(a_dis[5], label='A1')
+        # self.axes[3].plot(a_dis[7], label='A2')
 
         # Distribution
         # mean, std = a_dis[0], a_dis[1]  # [0, 1]
