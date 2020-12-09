@@ -77,7 +77,7 @@ class ENVCNS(CNS):
             ('DownLevel',  1, 0,   100),     # PZRLevel - Down
         ]
 
-        self.action_space = 3       # TODO Spray, HV142, FV122
+        self.action_space = 3       # TODO HV142 [0], Spray [1], FV122 [2]
         self.observation_space = len(self.input_info)
         # -------------------------------------------------------------------------------------
         # PID Part
@@ -158,25 +158,54 @@ class ENVCNS(CNS):
 
     def get_reward(self, A):
         """
-        R => nor(0 ~ 2)
+
+        :param A: tanh (-1 ~ 1) 사이 값
         :return:
         """
         r = 0
         if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
-            r += abs(self.CMem.PZRLevl - self.PID_Prs.SetPoint)
+            r1, r2, c = 0, 0, 0
+            # 압력
+            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
+                r1 += 0.1                                                       # 압력 저정 범위 안에 존재 + 조작 x
+            else:
+                r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
+            r1 = np.clip(r1, 0, 1)
+            # 수위
+            # 제어
+            if abs(A[0]) < 0.6: c += 0.01
+            if abs(A[1]) < 0.6: c += 0.01
+            if abs(A[2]) < 0.6: c += 0.01
         else:                                       # 기포 생성 이후
-            r += abs(self.CMem.PZRLevl - self.PID_Prs.SetPoint)
-        self.Loger_txt += f'R:{r}\t'
+            r1, r2, c = 0, 0, 0
+            # 압력
+            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
+                r1 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
+            else:
+                r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
+            r1 = np.clip(r1, 0, 1)
+            # 수위
+            if abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint) < 0.25:
+                r2 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
+            else:
+                r2 += - abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint)
+            # 제어
+            if abs(A[0]) < 0.6: c += 0.01
+            if abs(A[1]) < 0.6: c += 0.01
+            if abs(A[2]) < 0.6: c += 0.01
+
+        r = r1 + r2 + c
+        self.Loger_txt += f'R:{r}|{r1}|{r2}|{c}\t'
         return r
 
     def get_done(self, r):
-        r = self.normalize(r, 1, 0, 2)
+        # r = self.normalize(r, 1, 0, 2)
         d = False
         if self.CMem.ExitCoreT > 176:
             d = True
 
         self.Loger_txt += f'{d}\t'
-        return d, self.normalize(r, 1, 0, 2)
+        return d, r #self.normalize(r, 1, 0, 2)
 
     def _send_control_save(self, zipParaVal):
         super(ENVCNS, self)._send_control_save(para=zipParaVal[0], val=zipParaVal[1])
@@ -244,7 +273,14 @@ class ENVCNS(CNS):
                 else:
                     self._send_control_save(ActOrderBook['LetdownValveOpen'])
             else:
-                pass #A[0] # TODO 여기서 부터
+                # A[0] HV142
+                if abs(A[0]) < 0.6:
+                    self._send_control_save(ActOrderBook['LetdownValveStay'])
+                else:
+                    if A[0] < 0: self._send_control_save(ActOrderBook['LetdownValveClose'])
+                    else: self._send_control_save(ActOrderBook['LetdownValveOpen'])
+                # A[1] PZR spray
+                AMod[1] = 0
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
@@ -254,6 +290,9 @@ class ENVCNS(CNS):
                 #     self._send_control_save(ActOrderBook['ChargingValveStay'])
                 # else:
                 #     self._send_control_save(ActOrderBook['ChargingValveClose'])
+            else:
+                # A[2] FV122
+                AMod[2] = 0
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
             self.PID_Prs.SetPoint = 30
@@ -284,9 +323,22 @@ class ENVCNS(CNS):
                 if self.CMem.LetdownSetM == 1:
                     self._send_control_save(ActOrderBook['LetdownPresSetA'])
 
-                print(f'GetPoint|{self.CMem.PZRPres}, {self.CMem.PZRPres}|\n'
-                      f'LetdownPos:{self.CMem.HV142}:{self.CMem.HV142Flow}|'
-                      f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
+                # print(f'GetPoint|{self.CMem.PZRPres}, {self.CMem.PZRPres}|\n'
+                #       f'LetdownPos:{self.CMem.HV142}:{self.CMem.HV142Flow}|'
+                #       f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
+            else:
+                # A[0] HV142
+                AMod[0] = -1
+                if self.CMem.HV142 != 0:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+                # A[1] PZR spray
+                if abs(A[1]) < 0.6:
+                    self._send_control_save(ActOrderBook['PZRSprayStay'])
+                else:
+                    if A[1] < 0:
+                        self._send_control_save(ActOrderBook['PZRSprayClose'])
+                    else:
+                        self._send_control_save(ActOrderBook['PZRSprayOpen'])
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
@@ -296,6 +348,13 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['ChargingValveStay'])
                 else:
                     self._send_control_save(ActOrderBook['ChargingValveClose'])
+            else:
+                # A[2] FV122
+                if abs(A[2]) < 0.6:
+                    self._send_control_save(ActOrderBook['ChargingValveStay'])
+                else:
+                    if A[2] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
+                    else: self._send_control_save(ActOrderBook['ChargingValveOpen'])
             # ----------------------------- ----- -------------------------------------------------
         # =========================================================================================
         # Delta
@@ -345,7 +404,7 @@ class ENVCNS(CNS):
         self._append_val_to_list()
         self.ENVStep += 1
 
-        reward = self.get_reward(A)
+        reward = self.get_reward(AMod)
         done, reward = self.get_done(reward)
         next_state = self.get_state()
         # ----------------------------------------------------------

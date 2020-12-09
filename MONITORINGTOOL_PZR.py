@@ -26,7 +26,7 @@ class MonitoringMEM:
         } for i in range(nub_agent)}
 
         self.ENVActDis = {i: {
-            'Mean': [], 'Std': []
+            'Mean': [], 'Std': [], 'A0': [], 'A1': [], 'A2': [], 'OA0': [], 'OA1': [], 'OA2': [],
         } for i in range(nub_agent)}
 
         self.ENVReward['AcuR/Ep'] = []
@@ -56,6 +56,12 @@ class MonitoringMEM:
     def push_ENV_ActDis(self, i, Dict_val):
         self.ENVActDis[i]['Mean'].append(Dict_val['Mean'])
         self.ENVActDis[i]['Std'].append(Dict_val['Std'])
+        self.ENVActDis[i]['A0'].append(Dict_val['A0'])
+        self.ENVActDis[i]['A1'].append(Dict_val['A1'])
+        self.ENVActDis[i]['A2'].append(Dict_val['A2'])
+        self.ENVActDis[i]['OA0'].append(Dict_val['OA0'])
+        self.ENVActDis[i]['OA1'].append(Dict_val['OA1'])
+        self.ENVActDis[i]['OA2'].append(Dict_val['OA2'])
 
     def init_ENV_val(self, i):
         # 종료 또는 초기화로
@@ -67,6 +73,12 @@ class MonitoringMEM:
 
         self.ENVActDis[i]['Mean'] = []
         self.ENVActDis[i]['Std'] = []
+        self.ENVActDis[i]['A0'] = []
+        self.ENVActDis[i]['A1'] = []
+        self.ENVActDis[i]['A2'] = []
+        self.ENVActDis[i]['OA0'] = []
+        self.ENVActDis[i]['OA1'] = []
+        self.ENVActDis[i]['OA2'] = []
 
     def get_currentEP(self):
         get_db = self.StepInEachAgent
@@ -79,7 +91,10 @@ class MonitoringMEM:
         return self.ENVVALInEachAgent
 
     def get_ENV_ActDis(self, i):
-        return [self.ENVActDis[i]['Mean'], self.ENVActDis[i]['Std']]
+        return [self.ENVActDis[i]['Mean'], self.ENVActDis[i]['Std'],
+                self.ENVActDis[i]['A0'], self.ENVActDis[i]['OA0'],
+                self.ENVActDis[i]['A1'], self.ENVActDis[i]['OA1'],
+                self.ENVActDis[i]['A2'], self.ENVActDis[i]['OA2']]
 
     def get_ENV_reward_val(self, i):
         return [self.ENVReward[i]['R'], self.ENVReward['AcuR/Ep']]
@@ -185,9 +200,11 @@ class PlotCanvas(FigureCanvas):
         self.gs = GridSpec(6, 2, figure=self.figure)
         self.axes = [
             # left
-            self.figure.add_subplot(self.gs[0:3, 0:1]),
-            self.figure.add_subplot(self.gs[3:5, 0:1]),
-            self.figure.add_subplot(self.gs[5:6, 0:1], projection='3d'),
+            self.figure.add_subplot(self.gs[0:2, 0:1]),
+            self.figure.add_subplot(self.gs[2:4, 0:1]),
+            # self.figure.add_subplot(self.gs[5:6, 0:1], projection='3d'),
+            self.figure.add_subplot(self.gs[4:5, 0:1]),
+            self.figure.add_subplot(self.gs[5:6, 0:1]),
             # right
             self.figure.add_subplot(self.gs[0:2, 1:2]), # temp
             self.figure.add_subplot(self.gs[2:4, 1:2]), # pres,level
@@ -201,6 +218,12 @@ class PlotCanvas(FigureCanvas):
         y = [_ for _ in range(len(val['UUPPPL']))]
         self.axes[0].plot(r_val[0], label='Current Reward')
         self.axes[1].plot(r_val[1], label='Accumulated Reward/Ep')
+        self.axes[2].plot(a_dis[2], label='A0')
+        self.axes[2].plot(a_dis[4], label='A1')
+        self.axes[2].plot(a_dis[6], label='A2')
+        self.axes[3].plot(a_dis[3], label='A0')
+        self.axes[3].plot(a_dis[5], label='A1')
+        self.axes[3].plot(a_dis[7], label='A2')
 
         # Distribution
         # mean, std = a_dis[0], a_dis[1]  # [0, 1]
@@ -219,21 +242,22 @@ class PlotCanvas(FigureCanvas):
         #     self.axes[2].plot([0, 0], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
         #     self.axes[2].plot([1, 1], [0, 1], zs=-_, zdir='y', color='red', alpha=0.5)
 
-        self.axes[3].plot(val['UUPPPL'], label='CoreExitTemp')
-        self.axes[3].plot(val['UPRZ'], label='PzrTemp')
+        self.axes[4].plot(val['UUPPPL'], label='CoreExitTemp')
+        self.axes[4].plot(val['UPRZ'], label='PzrTemp')
 
-        self.axes[4].plot(val['ZINST58'], label='PZR Pres')
-        self.axes[4].plot(val['ZINST63'], label='PZR Level')
+        self.axes[5].plot(val['ZINST58'], label='PZR Pres')
+        self.axes[5].plot(val['ZINST63'], label='PZR Level')
 
-        self.axes[5].step(y, val['BHV142'], label='Letdown Pos')
-        self.axes[5].step(y, val['BFV122'], label='Charging Pos')
-        self.axes[5].step(y, [_/31 for _ in val['ZINST66']], label='PZR Spray Pos')
+        self.axes[6].step(y, val['BHV142'], label='Letdown Pos')
+        self.axes[6].step(y, val['BFV122'], label='Charging Pos')
+        self.axes[6].step(y, [_/31 for _ in val['ZINST66']], label='PZR Spray Pos')
 
         for ax_, i in zip(self.axes, range(len(self.axes))):
-            if i in [3, 4, 5]:
+            if i in [4, 5, 6]:
                 ax_.legend(bbox_to_anchor=(1.01, 1.0), loc='upper left', borderaxespad=0.)
             else:
-                if i != 2: ax_.legend(loc=2)
+                # if i != 2: ax_.legend(loc=2)
+                ax_.legend(loc=2)
 
             # get_tick_ = ax_.get_yticks()  # List
             # if i == 3: ax_.set_yticklabels([f'{_:0.0f}[℃]' for _ in get_tick_])

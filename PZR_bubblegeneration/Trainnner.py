@@ -1,6 +1,6 @@
 import math
 import random
-
+from copy import deepcopy
 import numpy as np
 
 import torch
@@ -461,12 +461,20 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                     action, mean_, std_ = sac_trainer.policy_net.get_action(state, deterministic=DETERMINISTIC)
                 else:
                     action, mean_, std_ = sac_trainer.policy_net.sample_action(state)
+                old_action = deepcopy(action)
+
                 # MonitoringMem <-
-                monitoring_mem.push_ENV_ActDis(id, Dict_val={'Mean': mean_, 'Std': std_})
                 monitoring_mem.push_ENV_val(id, CNSMem=env.mem)
 
                 # CNS Step <-
                 next_state, reward, done, action = env.step(action)
+
+                # MonitoringMem <-
+                monitoring_mem.push_ENV_ActDis(id, Dict_val={'Mean': mean_, 'Std': std_,
+                                                             'OA0': old_action[0], 'A0': action[0],
+                                                             'OA1': old_action[1], 'A1': action[1],
+                                                             'OA2': old_action[2], 'A2': action[2],
+                                                             })
 
                 # MonitoringMem <- last order ...
                 Wm['ep_acur'] += reward
@@ -531,7 +539,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-    num_workers = 1  # or: mp.cpu_count()
+    num_workers = 3  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
