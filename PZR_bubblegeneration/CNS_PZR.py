@@ -93,16 +93,15 @@ class ENVCNS(CNS):
     # ENV TOOLs =======================================================================================================
     def ENVlogging(self, s):
         cr_time = time.strftime('%c', time.localtime(time.time()))
-        if self.ENVStep == 0:
+        if self.ENVStep <= 1:
             # with open(f'{self.Name}.txt', 'a') as f:
             #     f.write('==' * 20 + '\n')
             #     f.write(f'[{cr_time}]\n')
             #     f.write('==' * 20 + '\n')
-            with open(f'{self.Name}.txt', 'a') as f:
-                f.write(f'[{cr_time}] {self.Loger_txt}\n')
+            pass
         else:
             with open(f'{self.Name}.txt', 'a') as f:
-                f.write(f'[{cr_time}] {self.Loger_txt}\n')
+                f.write(f'[{cr_time}]|{self.Loger_txt}\n')
 
     def normalize(self, x, x_round, x_min, x_max):
         if x_max == 0 and x_min == 0:
@@ -155,7 +154,7 @@ class ENVCNS(CNS):
                 pass
 
         # state = [self.mem[para]['Val'] / Round_val for para, Round_val in self.input_info]
-        self.Loger_txt += f'{state}\t'
+        self.Loger_txt += f'S|{state}|'
         return np.array(state)
 
     def get_reward(self, A):
@@ -165,7 +164,7 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-        if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
+        if self.CMem.PZRLevl >= 99:                 # 기포 생성 이전
             r1, r2, c = 0, 0, 0
             # 압력
             if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
@@ -198,7 +197,7 @@ class ENVCNS(CNS):
             if abs(A[2]) < 0.6: c += 0.01
 
         r = r1 + r2 + c
-        self.Loger_txt += f'R:{r}|{r1}|{r2}|{c}\t'
+        self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|'
         return r
 
     def get_done(self, r):
@@ -210,7 +209,7 @@ class ENVCNS(CNS):
             d = True
             r = - 0.1
 
-        self.Loger_txt += f'{d}\t'
+        self.Loger_txt += f'D|{d}|'
         return d, r #self.normalize(r, 1, 0, 2)
 
     def _send_control_save(self, zipParaVal):
@@ -267,7 +266,7 @@ class ENVCNS(CNS):
         # =========================================================================================
         #  CORE!!!
         # =========================================================================================
-        if self.CMem.PZRLevl >= 95:                                         # 가압기 기포 생성 이전
+        if self.CMem.PZRLevl >= 99:                                         # 가압기 기포 생성 이전
             self.PID_Prs.SetPoint = 27
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
@@ -425,7 +424,7 @@ class ENVCNS(CNS):
         super(ENVCNS, self).reset(initial_nub=21, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
         # 2] 업데이트된 'Val'를 'List'에 추가 및 ENVLogging 초기화
         self._append_val_to_list()
-        self.ENVlogging('')
+        # self.ENVlogging('')
         # 3] 'Val'을 상태로 제작후 반환
         state = self.get_state()
         # 4] 보상 누적치 및 ENVStep 초기화
