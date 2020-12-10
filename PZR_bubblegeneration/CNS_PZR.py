@@ -164,8 +164,8 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
+        r1, r2, c, g = 0, 0, 0, 0
         if self.CMem.PZRLevl >= 99:                 # 기포 생성 이전
-            r1, r2, c = 0, 0, 0
             # 압력
             if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
                 r1 += 0.1                                                       # 압력 저정 범위 안에 존재 + 조작 x
@@ -175,10 +175,9 @@ class ENVCNS(CNS):
             # 수위
             # 제어
             if abs(A[0]) < 0.6: c += 0.01
-            if abs(A[1]) < 0.6: c += 0.01
-            if abs(A[2]) < 0.6: c += 0.01
+            # if abs(A[1]) < 0.6: c += 0.01
+            # if abs(A[2]) < 0.6: c += 0.01
         else:                                       # 기포 생성 이후
-            r1, r2, c = 0, 0, 0
             # 압력
             if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
                 r1 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
@@ -195,8 +194,10 @@ class ENVCNS(CNS):
             if abs(A[0]) < 0.6: c += 0.01
             if abs(A[1]) < 0.6: c += 0.01
             if abs(A[2]) < 0.6: c += 0.01
+            # 단계적 목표
+            g += 0.1
 
-        r = r1 + r2 + c
+        r = r1 + r2 + c + g
         self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|'
         return r
 
