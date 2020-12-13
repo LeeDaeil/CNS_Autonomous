@@ -67,7 +67,7 @@ class ENVCNS(CNS):
 
             # ('ZINST36',  1, 0,   0),      # Letdown Pressrue
 
-            ('SetPres',    1, 0,   30),      # Pres-Setpoint
+            ('SetPres',    1, 0,   100),      # Pres-Setpoint
             # ('SetLevel',   1, 0,   30),      # Level-Setpoint
             ('ErrPres',    1, 0,   100),     # RCSPressure - setpoint
             ('UpPres',     1, 0,   100),     # RCSPressure - Up
@@ -77,7 +77,7 @@ class ENVCNS(CNS):
             ('DownLevel',  1, 0,   100),     # PZRLevel - Down
         ]
 
-        self.action_space = 3       # TODO HV142 [0], Spray [1], FV122 [2]
+        self.action_space = 2       # TODO HV142 [0], Spray [1], FV122 [2]
         self.observation_space = len(self.input_info)
         # -------------------------------------------------------------------------------------
         # PID Part
@@ -164,51 +164,61 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-        r1, r2, c, g = 0, 0, 0, 0
+        r1, r2, c, g, step = 0, 0, 0, 0, 1
+
+        def get_distance_r(curent_val, set_val, max_val, distance_normal):
+            r = 0
+            if curent_val - set_val == 0:
+                r += max_val
+            else:
+                if curent_val > set_val:
+                    r += (distance_normal - (curent_val - set_val)) / distance_normal
+                else:
+                    r += (distance_normal - (- curent_val + set_val)) / distance_normal
+            r = np.clip(r, 0, max_val)
+            return r
+
         if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
             # 압력
-            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.01:
-                r1 += 0.1                                                       # 압력 저정 범위 안에 존재 + 조작 x
-            else:
-                r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
-            r1 = np.clip(r1, -1, 1)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
             # 제어
-            if abs(A[0]) < 0.6: c += 0.01
-            # if abs(A[1]) < 0.6: c += 0.01
-            # if abs(A[2]) < 0.6: c += 0.01
+            if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
         else:                                       # 기포 생성 이후
             # 압력
-            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.01:
-                r1 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
-            else:
-                r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
-            r1 = np.clip(r1, -1, 1)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
-            if abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint) < 0.01:
-                r2 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
-            else:
-                r2 += - abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint)
-            r2 = np.clip(r2, -1, 1)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
             # 제어
-            if abs(A[0]) < 0.6: c += 0.01
-            if abs(A[1]) < 0.6: c += 0.01
-            if abs(A[2]) < 0.6: c += 0.01
+            if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
             # 단계적 목표
-            g += 1.0
 
-        r = r1 + r2 + c + g
-        self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|'
+        r = r1 + r2 + c + g + step
+        self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|{step}|'
         return r
 
     def get_done(self, r):
         # r = self.normalize(r, 1, 0, 2)
         d = False
+
+        cond = {
+            1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) <= 5,
+            2: self.CMem.PZRLevl <= 25,
+
+            3: self.CMem.CTIME > 500 * 25,
+            4: self.CMem.PZRLevl > 98,
+        }
+
         if self.CMem.ExitCoreT > 176:
             d = True
-        if self.CMem.PZRPres < 20 or self.CMem.PZRPres > 32 or self.CMem.PZRLevl < 25:
-            d = True
-            r = - 0.1
+            r += 100
+        else:
+            if cond[1] or cond[2] or (cond[3] and cond[4]):
+                d = True
+                r = -100
+            else:
+                pass
 
         self.Loger_txt += f'D|{d}|'
         return d, r #self.normalize(r, 1, 0, 2)
@@ -340,11 +350,11 @@ class ENVCNS(CNS):
                 # AMod[0] = -1
                 if self.CMem.HV142 != 0:
                     self._send_control_save(ActOrderBook['LetdownValveClose'])
-                # A[1] PZR spray
-                if abs(A[1]) < 0.6:
+                # A[0] PZR spray ## 12.14
+                if abs(A[0]) < 0.6:
                     self._send_control_save(ActOrderBook['PZRSprayStay'])
                 else:
-                    if A[1] < 0:
+                    if A[0] < 0:
                         self._send_control_save(ActOrderBook['PZRSprayClose'])
                     else:
                         self._send_control_save(ActOrderBook['PZRSprayOpen'])
@@ -359,10 +369,10 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['ChargingValveClose'])
             else:
                 # A[2] FV122
-                if abs(A[2]) < 0.6:
+                if abs(A[1]) < 0.6:
                     self._send_control_save(ActOrderBook['ChargingValveStay'])
                 else:
-                    if A[2] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
+                    if A[1] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
                     else: self._send_control_save(ActOrderBook['ChargingValveOpen'])
             # ----------------------------- ----- -------------------------------------------------
         # =========================================================================================
