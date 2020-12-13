@@ -54,21 +54,21 @@ class ENVCNS(CNS):
         # RL ----------------------------------------------------------------------------------
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
-            ('BHV142',     1, 0,   0),       # Letdown(HV142)
-            ('WRHRCVC',    1, 0,   0),       # RHR to CVCS Flow
-            ('WNETLD',     1, 0,   10),      # Total Letdown Flow
-            ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
-            ('WNETCH',     1, 0,   10),      # Total Charging Flow
-            ('ZINST66',    1, 0,   30),      # PZR spray
+            # ('BHV142',     1, 0,   0),       # Letdown(HV142)
+            # ('WRHRCVC',    1, 0,   0),       # RHR to CVCS Flow
+            # ('WNETLD',     1, 0,   10),      # Total Letdown Flow
+            # ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
+            # ('WNETCH',     1, 0,   10),      # Total Charging Flow
+            # ('ZINST66',    1, 0,   30),      # PZR spray
             ('ZINST65',    1, 0,   160),     # RCSPressure
             ('ZINST63',    1, 0,   100),     # PZRLevel
-            ('UUPPPL',     1, 0,   200),     # Core Exit Temperature
+            # ('UUPPPL',     1, 0,   200),     # Core Exit Temperature
             ('UPRZ',       1, 0,   300),     # PZR Temperature
 
             # ('ZINST36',  1, 0,   0),      # Letdown Pressrue
 
             ('SetPres',    1, 0,   30),      # Pres-Setpoint
-            ('SetLevel',   1, 0,   30),      # Level-Setpoint
+            # ('SetLevel',   1, 0,   30),      # Level-Setpoint
             ('ErrPres',    1, 0,   100),     # RCSPressure - setpoint
             ('UpPres',     1, 0,   100),     # RCSPressure - Up
             ('DownPres',   1, 0,   100),     # RCSPressure - Down
@@ -165,9 +165,9 @@ class ENVCNS(CNS):
         """
         r = 0
         r1, r2, c, g = 0, 0, 0, 0
-        if self.CMem.PZRLevl >= 99:                 # 기포 생성 이전
+        if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
             # 압력
-            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
+            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.01:
                 r1 += 0.1                                                       # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
@@ -179,13 +179,13 @@ class ENVCNS(CNS):
             # if abs(A[2]) < 0.6: c += 0.01
         else:                                       # 기포 생성 이후
             # 압력
-            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.25:
+            if abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) < 0.01:
                 r1 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r1 += - abs(self.CMem.PZRPres - self.PID_Prs.SetPoint)/100
             r1 = np.clip(r1, -1, 1)
             # 수위
-            if abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint) < 0.25:
+            if abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint) < 0.01:
                 r2 += 0.1  # 압력 저정 범위 안에 존재 + 조작 x
             else:
                 r2 += - abs(self.CMem.PZRLevl - self.PID_Lev.SetPoint)
@@ -195,7 +195,7 @@ class ENVCNS(CNS):
             if abs(A[1]) < 0.6: c += 0.01
             if abs(A[2]) < 0.6: c += 0.01
             # 단계적 목표
-            g += 0.1
+            g += 1.0
 
         r = r1 + r2 + c + g
         self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|'
@@ -309,8 +309,10 @@ class ENVCNS(CNS):
             if self.PID_Mode:
                 # HV142 ----------------------------------------------------------
                 PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
-                if self.CMem.HV142 != 0:
-                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+
+                # if self.CMem.HV142 != 0:
+                #     self._send_control_save(ActOrderBook['LetdownValveClose'])
+
                 # if PID_out >= 0.005:
                 #     self._send_control_save(ActOrderBook['LetdownValveClose'])
                 # elif -0.005 < PID_out < 0.005:
