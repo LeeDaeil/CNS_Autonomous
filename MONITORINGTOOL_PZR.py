@@ -26,7 +26,10 @@ class MonitoringMEM:
         } for i in range(nub_agent)}
 
         self.ENVActDis = {i: {
-            'Mean': [], 'Std': [], 'A0': [], 'A1': [], 'A2': [], 'OA0': [], 'OA1': [], 'OA2': [],
+            'Mean': [], 'Std': [],
+            'A0': [], 'OA0': [],
+            'A1': [], 'OA1': [],
+            # 'A2': [], 'OA2': [],
         } for i in range(nub_agent)}
 
         self.ENVReward['AcuR/Ep'] = []
@@ -58,10 +61,10 @@ class MonitoringMEM:
         self.ENVActDis[i]['Std'].append(Dict_val['Std'])
         self.ENVActDis[i]['A0'].append(Dict_val['A0'])
         self.ENVActDis[i]['A1'].append(Dict_val['A1'])
-        self.ENVActDis[i]['A2'].append(Dict_val['A2'])
+        # self.ENVActDis[i]['A2'].append(Dict_val['A2'])
         self.ENVActDis[i]['OA0'].append(Dict_val['OA0'])
         self.ENVActDis[i]['OA1'].append(Dict_val['OA1'])
-        self.ENVActDis[i]['OA2'].append(Dict_val['OA2'])
+        # self.ENVActDis[i]['OA2'].append(Dict_val['OA2'])
 
     def init_ENV_val(self, i):
         # 종료 또는 초기화로
@@ -75,10 +78,10 @@ class MonitoringMEM:
         self.ENVActDis[i]['Std'] = []
         self.ENVActDis[i]['A0'] = []
         self.ENVActDis[i]['A1'] = []
-        self.ENVActDis[i]['A2'] = []
+        # self.ENVActDis[i]['A2'] = []
         self.ENVActDis[i]['OA0'] = []
         self.ENVActDis[i]['OA1'] = []
-        self.ENVActDis[i]['OA2'] = []
+        # self.ENVActDis[i]['OA2'] = []
 
     def get_currentEP(self):
         get_db = self.StepInEachAgent
@@ -94,7 +97,8 @@ class MonitoringMEM:
         return [self.ENVActDis[i]['Mean'], self.ENVActDis[i]['Std'],
                 self.ENVActDis[i]['A0'], self.ENVActDis[i]['OA0'],
                 self.ENVActDis[i]['A1'], self.ENVActDis[i]['OA1'],
-                self.ENVActDis[i]['A2'], self.ENVActDis[i]['OA2']]
+                # self.ENVActDis[i]['A2'], self.ENVActDis[i]['OA2']
+                ]
 
     def get_ENV_reward_val(self, i):
         return [self.ENVReward[i]['R'], self.ENVReward['AcuR/Ep'],

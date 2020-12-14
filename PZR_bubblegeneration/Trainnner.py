@@ -481,7 +481,7 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                 monitoring_mem.push_ENV_ActDis(id, Dict_val={'Mean': mean_, 'Std': std_,
                                                              'OA0': old_action[0], 'A0': action[0],
                                                              'OA1': old_action[1], 'A1': action[1],
-                                                             'OA2': old_action[2], 'A2': action[2],
+                                                             # 'OA2': old_action[2], 'A2': action[2],
                                                              })
 
                 # MonitoringMem <- last order ...

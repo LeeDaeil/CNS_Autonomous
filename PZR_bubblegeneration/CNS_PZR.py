@@ -203,18 +203,17 @@ class ENVCNS(CNS):
         d = False
 
         cond = {
-            1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) <= 5,
+            1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) >= 5,
             2: self.CMem.PZRLevl <= 25,
 
-            3: self.CMem.CTIME > 500 * 25,
-            4: self.CMem.PZRLevl > 98,
+            3: self.CMem.CTIME > 500 * 25 and self.CMem.PZRLevl > 98,
         }
 
         if self.CMem.ExitCoreT > 176:
             d = True
             r += 100
         else:
-            if cond[1] or cond[2] or (cond[3] and cond[4]):
+            if cond[1] or cond[2] or cond[3]:
                 d = True
                 r = -100
             else:
