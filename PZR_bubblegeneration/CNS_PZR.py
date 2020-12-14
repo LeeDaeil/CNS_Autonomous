@@ -172,9 +172,9 @@ class ENVCNS(CNS):
                 r += max_val
             else:
                 if curent_val > set_val:
-                    r += (distance_normal - (curent_val - set_val)) / distance_normal
+                    r += (distance_normal - (curent_val - set_val)) / 10
                 else:
-                    r += (distance_normal - (- curent_val + set_val)) / distance_normal
+                    r += (distance_normal - (- curent_val + set_val)) / 10
             r = np.clip(r, 0, max_val)
             return r
 
@@ -203,10 +203,10 @@ class ENVCNS(CNS):
         d = False
 
         cond = {
-            1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) >= 5,
+            1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) >= 10,
             2: self.CMem.PZRLevl <= 25,
 
-            3: self.CMem.CTIME > 500 * 25 and self.CMem.PZRLevl > 98,
+            3: self.CMem.CTIME > 550 * 25 and self.CMem.PZRLevl > 98,
         }
 
         if self.CMem.ExitCoreT > 176:
@@ -218,8 +218,8 @@ class ENVCNS(CNS):
                 r = -100
             else:
                 pass
-
-        self.Loger_txt += f'D|{d}|'
+        if d: print(cond)
+        self.Loger_txt += f'D|{d}|{cond}|'
         return d, r #self.normalize(r, 1, 0, 2)
 
     def _send_control_save(self, zipParaVal):
@@ -235,6 +235,7 @@ class ENVCNS(CNS):
         :param A: A 액션 [0, 0, 0] <- act space에 따라서
         :return: AMod: 수정된 액션
         """
+        A = [round(A[_], 1) for _ in range(len(A))]
         AMod = A
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
