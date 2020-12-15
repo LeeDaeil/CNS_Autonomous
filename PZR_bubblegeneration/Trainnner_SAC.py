@@ -9,11 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
+from torch.utils.tensorboard import SummaryWriter
 
-from IPython.display import clear_output
-import matplotlib.pyplot as plt
-
-import torch.multiprocessing as mp
 
 from multiprocessing import Process
 from multiprocessing.managers import BaseManager

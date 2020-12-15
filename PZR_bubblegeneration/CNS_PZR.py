@@ -49,17 +49,18 @@ class ENVCNS(CNS):
         self.ENVStep = 0
         self.LoggerPath = 'DB'
         self.want_tick = 5  # 1sec
+        self.time_leg = 1
         self.Loger_txt = ''
         self.CMem = CMem(self.mem)
         # RL ----------------------------------------------------------------------------------
         self.input_info = [
             # (para, x_round, x_min, x_max), (x_min=0, x_max=0 is not normalized.)
-            # ('BHV142',     1, 0,   0),       # Letdown(HV142)
+            ('BHV142',     1, 0,   0),       # Letdown(HV142)
             # ('WRHRCVC',    1, 0,   0),       # RHR to CVCS Flow
             # ('WNETLD',     1, 0,   10),      # Total Letdown Flow
-            # ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
+            ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
             # ('WNETCH',     1, 0,   10),      # Total Charging Flow
-            # ('ZINST66',    1, 0,   30),      # PZR spray
+            ('ZINST66',    1, 0,   30),      # PZR spray
             ('ZINST65',    1, 0,   160),     # RCSPressure
             ('ZINST63',    1, 0,   100),     # PZRLevel
             # ('UUPPPL',     1, 0,   200),     # Core Exit Temperature
@@ -78,7 +79,7 @@ class ENVCNS(CNS):
         ]
 
         self.action_space = 2       # TODO HV142 [0], Spray [1], FV122 [2]
-        self.observation_space = len(self.input_info)
+        self.observation_space = len(self.input_info) * self.time_leg
         # -------------------------------------------------------------------------------------
         # PID Part
         self.PID_Mode = False
