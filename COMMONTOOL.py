@@ -5,6 +5,7 @@ from datetime import datetime
 from collections import deque
 import torch
 import matplotlib.pylab as plt
+from matplotlib.pyplot import GridSpec
 
 import mpl_toolkits.mplot3d.art3d as art3d
 
@@ -1016,10 +1017,68 @@ class NBPlot3D(object):
 
 
 # ---------------------------------------
-class CNSPlot:
+class TensorFig:
     def __init__(self):
         # 공통 그래프
-        self.fig, self.ax = plt.subplots()
+        self.fig = plt.figure()
+        self.gs = GridSpec(3, 1, figure=self.fig)
 
-        # show
-        plt.show()
+        self.fig_db = {
+            'PZRPres': [],
+            'PZRLevl': [],
+            'FV122': [],
+            'HV142': [],
+            'PZRSpray': [],
+            'PZRTemp': [],
+            'ExitCoreT': [],
+        }
+
+        self.axes = [
+            # Left
+            self.fig.add_subplot(self.gs[0:1, :]),
+            self.fig.add_subplot(self.gs[1:2, :]),
+            self.fig.add_subplot(self.gs[2:3, :]),
+        ]
+
+    def _set_init_fig_mem(self):
+        return [self.fig_db[key].clear() for key in self.fig_db.keys()]
+
+    def add_fig_mem(self, db={}):
+        [self.fig_db[key].append(db[key]) for key in self.fig_db.keys()]
+        return 0
+
+    def get_fig(self):
+        # Draw Fig
+        [ax.clear() for ax in self.axes]
+        y = [_ for _ in range(len(self.fig_db['PZRPres']))]
+
+        self.axes[0].plot(self.fig_db['ExitCoreT'], label='CoreExitTemp')
+        self.axes[0].plot(self.fig_db['PZRTemp'], label='PzrTemp')
+
+        self.axes[1].plot(self.fig_db['PZRPres'], label='PZR Pres')
+        self.axes[1].plot(self.fig_db['PZRLevl'], label='PZR Level')
+
+        self.axes[2].step(y, self.fig_db['HV142'], label='Letdown Pos')
+        self.axes[2].step(y, self.fig_db['FV122'], label='Charging Pos')
+        self.axes[2].step(y, [_ / 31 for _ in self.fig_db['PZRSpray']], label='PZR Spray Pos')
+
+        for ax_, i in zip(self.axes, range(len(self.axes))):
+            if i in [0, 1, 2]:
+                ax_.legend(bbox_to_anchor=(1.01, 1.0), loc='upper left', borderaxespad=0.)
+            else:
+                # if i != 2: ax_.legend(loc=2)
+                ax_.legend(loc=2)
+
+            # get_tick_ = ax_.get_yticks()  # List
+            # if i == 3: ax_.set_yticklabels([f'{_:0.0f}[℃]' for _ in get_tick_])
+            # if i == 4: ax_.set_yticklabels([f'{_:0.0f}' for _ in get_tick_])
+            # if i == 5: ax_.set_yticklabels([f'{_ * 100:0.0f}[%]' for _ in get_tick_])
+
+            ax_.grid()
+
+        self.fig.set_tight_layout(True)
+        self.fig.canvas.draw()
+
+        # Initial All fig DB
+        self._set_init_fig_mem()
+        return self.fig
