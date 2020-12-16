@@ -16,7 +16,6 @@ from multiprocessing import Process
 from multiprocessing.managers import BaseManager
 
 from PZR_bubblegeneration.CNS_PZR import ENVCNS
-from MONITORINGTOOL_PZR import MonitoringMEM, Monitoring
 from COMMONTOOL import TensorFig
 
 torch.multiprocessing.set_start_method('spawn', force=True)
@@ -421,7 +420,7 @@ class SAC_Trainer():
         self.policy_net.eval()
 
 
-def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_steps, batch_size,
+def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
            explore_steps, update_itr, TENSORBOARD_LOG, AUTO_ENTROPY, DETERMINISTIC):
     """
     the function for sampling with multi-processing
@@ -440,12 +439,13 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
     :param DETERMINISTIC:
     :return: 0
     """
+    TENSORBOARD_LOG = SummaryWriter(f'run')
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
         # Agent info and get_shared mem
         print(f'Agent {id}|Trainer {sac_trainer}|'
-              f'ReplayBuffer {replay_buffer}|MonitoringMem {monitoring_mem}|')
+              f'ReplayBuffer {replay_buffer}')
 
         # Set CNS
         env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'))
@@ -478,13 +478,13 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                 # MonitoringMem <-
                 monitoring_mem.push_ENV_val(id, CNSMem=env.mem)
                 # TENSORBOARD_LOG <- 플랜트 변수 로그
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Pres', {f'Ep{cur_ep_}', env.CMem.PZRPres}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Level', {f'Ep{cur_ep_}', env.CMem.PZRLevl}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Chaging', {f'Ep{cur_ep_}', env.CMem.FV122}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Letdown', {f'Ep{cur_ep_}', env.CMem.HV142}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Spray', {f'Ep{cur_ep_}', env.CMem.PZRSprayPos}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZRTemp', {f'Ep{cur_ep_}', env.CMem.PZRTemp}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/CoreTemp', {f'Ep{cur_ep_}', env.CMem.ExitCoreT}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Pres', {f'Ep{cur_ep_}': env.CMem.PZRPres}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Level', {f'Ep{cur_ep_}': env.CMem.PZRLevl}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Chaging', {f'Ep{cur_ep_}': env.CMem.FV122}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Letdown', {f'Ep{cur_ep_}': env.CMem.HV142}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Spray', {f'Ep{cur_ep_}': env.CMem.PZRSprayPos}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZRTemp', {f'Ep{cur_ep_}': env.CMem.PZRTemp}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Plant_log/CoreTemp', {f'Ep{cur_ep_}': env.CMem.ExitCoreT}, step)
                 # <<- COMMONTOOL
                 fig_db = {
                     'PZRPres': env.CMem.PZRPres,
@@ -500,18 +500,9 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                 # CNS Step <-
                 next_state, reward, done, action = env.step(action)
 
-                # MonitoringMem <-
-                monitoring_mem.push_ENV_ActDis(id, Dict_val={'Mean': mean_, 'Std': std_,
-                                                             'OA0': old_action[0], 'A0': action[0],
-                                                             'OA1': old_action[1], 'A1': action[1],
-                                                             # 'OA2': old_action[2], 'A2': action[2],
-                                                             })
-
-                # MonitoringMem <- last order ...
-                Wm['ep_acur'] += reward
-                monitoring_mem.push_ENV_reward(id, Dict_val={'R': reward, 'AcuR': Wm['ep_acur']})
                 # TENSORBOARD_LOG <-
-                TENSORBOARD_LOG.add_scalars('Log/Reward', {f'Ep{cur_ep_}', reward}, step)
+                Wm['ep_acur'] += reward
+                TENSORBOARD_LOG.add_scalars('Log/Reward', {f'Ep{cur_ep_}': reward}, step)
 
                 # Buffer <-
                 if env.PID_Mode == False:
@@ -539,10 +530,6 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                           f"EP q1 [{Wm['ep_q1']}]|"
                           f"EP q2 [{Wm['ep_q2']}]|"
                           f"EP p [{Wm['ep_p']}]")
-                    # MonitoringMem < - last order...
-                    monitoring_mem.push_ENV_epinfo({'AcuR/Ep': Wm['ep_acur'], 'q1/Ep': Wm['ep_q1'],
-                                                    'q2/Ep': Wm['ep_q2'], 'p/Ep': Wm['ep_p']})
-                    monitoring_mem.init_ENV_val(id)
 
                     # TENSORBOARD_LOG < -
                     TENSORBOARD_LOG.add_scalar('Log/Training_AccR', Wm['ep_acur'], cur_ep_)
@@ -594,15 +581,14 @@ if __name__ == '__main__':
     hidden_dim = 512
     model_path = ''
 
-    TENSORBOARD_LOG = SummaryWriter('run')
+    # TENSORBOARD_LOG = SummaryWriter('run')
+    TENSORBOARD_LOG = 0
 
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)
-    BaseManager.register('MonitoringMEM', MonitoringMEM)
     manager = BaseManager()
     manager.start()
     replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
-    monitoring_mem = manager.MonitoringMEM(num_workers)
 
     # choose env
     env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
@@ -629,15 +615,11 @@ if __name__ == '__main__':
     # Worker process
     for i in range(num_workers):
         process = Process(target=worker, args=(
-            i, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_steps, \
+            i, sac_trainer, replay_buffer, max_episodes, max_steps, \
             batch_size, explore_steps, update_itr, TENSORBOARD_LOG, AUTO_ENTROPY, DETERMINISTIC
         ))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
-
-    # Monitoring process
-    m_process = Monitoring(monitoring_mem)
-    processes.append(m_process)
 
     [p.start() for p in processes]
     [p.join() for p in processes]  # finished at the same time
