@@ -433,6 +433,9 @@ class ENVCNS(CNS):
         self.Loger_txt = ''
         return next_state, reward, done, AMod
 
+    def one_step(self):
+        self.step(A=[0 for _ in range(self.action_space)])
+
     def reset(self, file_name):
         # 1] CNS 상태 초기화 및 초기화된 정보 메모리에 업데이트
         super(ENVCNS, self).reset(initial_nub=21, mal=False, mal_case=0, mal_opt=0, mal_time=0, file_name=file_name)
@@ -440,6 +443,7 @@ class ENVCNS(CNS):
         self._append_val_to_list()
         # self.ENVlogging('')
         # 3] 'Val'을 상태로 제작후 반환
+        self.one_step()
         state = self.get_state()
         # 4] 보상 누적치 및 ENVStep 초기화
         self.AcumulatedReward = 0

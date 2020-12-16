@@ -20,6 +20,8 @@ from COMMONTOOL import TensorFig
 
 torch.multiprocessing.set_start_method('spawn', force=True)
 
+TENSORBOARD_LOG = SummaryWriter(f'run')
+
 
 class SharedAdam(optim.Optimizer):
     r"""Implements Adam algorithm.
@@ -140,6 +142,7 @@ class ReplayBuffer:
         self.buffer = []
         self.position = 0
         self.tot_ep = 0
+        self.tot_time_ep = 0
 
     def push(self, state, action, reward, next_state, done):
         if len(self.buffer) < self.capacity:
@@ -171,6 +174,10 @@ class ReplayBuffer:
 
     def get_ep(self):
         return self.tot_ep
+
+    def add_time_ep(self):
+        self.tot_time_ep += 1
+
 
 
 class SoftQNetwork(nn.Module):
@@ -421,7 +428,7 @@ class SAC_Trainer():
 
 
 def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
-           explore_steps, update_itr, TENSORBOARD_LOG, AUTO_ENTROPY, DETERMINISTIC):
+           explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC):
     """
     the function for sampling with multi-processing
 
@@ -439,7 +446,7 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
     :param DETERMINISTIC:
     :return: 0
     """
-    TENSORBOARD_LOG = SummaryWriter(f'run')
+    # TENSORBOARD_LOG = SummaryWriter(f'run')
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
@@ -475,8 +482,6 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
                     action, mean_, std_ = sac_trainer.policy_net.sample_action(state)
                 old_action = deepcopy(action)
 
-                # MonitoringMem <-
-                monitoring_mem.push_ENV_val(id, CNSMem=env.mem)
                 # TENSORBOARD_LOG <- 플랜트 변수 로그
                 TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Pres', {f'Ep{cur_ep_}': env.CMem.PZRPres}, step)
                 TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Level', {f'Ep{cur_ep_}': env.CMem.PZRLevl}, step)
@@ -536,7 +541,6 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
                     TENSORBOARD_LOG.add_scalar('Log/Training_q1', Wm['ep_q1'], cur_ep_)
                     TENSORBOARD_LOG.add_scalar('Log/Training_q2', Wm['ep_q2'], cur_ep_)
                     TENSORBOARD_LOG.add_scalar('Log/Training_p', Wm['ep_p'], cur_ep_)
-
                     TENSORBOARD_LOG.add_figure('Log/Monitoring', TFig.get_fig(), cur_ep_)
 
                     for _ in Wm.keys():
@@ -582,7 +586,7 @@ if __name__ == '__main__':
     model_path = ''
 
     # TENSORBOARD_LOG = SummaryWriter('run')
-    TENSORBOARD_LOG = 0
+    # TENSORBOARD_LOG = 0
 
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)
@@ -616,7 +620,7 @@ if __name__ == '__main__':
     for i in range(num_workers):
         process = Process(target=worker, args=(
             i, sac_trainer, replay_buffer, max_episodes, max_steps, \
-            batch_size, explore_steps, update_itr, TENSORBOARD_LOG, AUTO_ENTROPY, DETERMINISTIC
+            batch_size, explore_steps, update_itr, AUTO_ENTROPY, DETERMINISTIC
         ))  # the args contain shared and not shared
         process.daemon = True  # all processes closed when the main stops
         processes.append(process)
