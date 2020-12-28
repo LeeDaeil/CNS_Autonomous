@@ -441,14 +441,32 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
 
     with torch.cuda.device(id % torch.cuda.device_count()):
         sac_trainer.to_cuda()
-        # Agent info and get_shared mem
-        print(f'Agent {id}|Trainer {sac_trainer}|'
-              f'ReplayBuffer {replay_buffer}|MonitoringMem {monitoring_mem}|')
+        # Divide agents according to below information
+        # 'id' is 0, 1, 2, 3, ...
+
+        _CNS_info = {
+            0: ['192.168.0.4', 7101],
+            1: ['192.168.0.4', 7102],
+            2: ['192.168.0.4', 7103],
+            3: ['192.168.0.4', 7104],
+            4: ['192.168.0.4', 7105],
+
+            5: ['192.168.0.9', 7201],
+            6: ['192.168.0.9', 7202],
+            7: ['192.168.0.9', 7203],
+            8: ['192.168.0.9', 7204],
+            9: ['192.168.0.9', 7205],
+        }
 
         # Set CNS
-        env = ENVCNS(Name=id, IP='192.168.0.101', PORT=int(f'710{id + 1}'))
+        env = ENVCNS(Name=id, IP=_CNS_info[id][0], PORT=_CNS_info[id][1])
         # env.PID_Mode = True if id == 2 else False  # PID는 마지막 2번 에이전트가 담당함.
         action_dim = env.action_space
+
+        # Agent info and get_shared mem
+        print(f'Agent {id}|Trainer {sac_trainer}|'
+              f'ReplayBuffer {replay_buffer}|MonitoringMem {monitoring_mem}|'
+              f'ENV CNSIP{env.CNS_ip}-CNSPort{env.CNS_port}-ComIP{env.Remote_ip}-ComPort{env.Remote_port}')
 
         # Worker mem
         Wm = {'ep_acur': 0, 'ep_q1': 0, 'ep_q2': 0, 'ep_p': 0}
@@ -544,7 +562,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-    num_workers = 4  # or: mp.cpu_count()
+    num_workers = 10  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
@@ -566,7 +584,7 @@ if __name__ == '__main__':
     monitoring_mem = manager.MonitoringMEM(num_workers)
 
     # choose env
-    env = ENVCNS(Name='GETINFO', IP='192.168.0.7', PORT=int(f'7100'))
+    env = ENVCNS(Name='GETINFO', IP='192.168.0.4', PORT=int(f'7100'))
     action_dim = env.action_space
     state_dim = env.observation_space
     action_range = 1.

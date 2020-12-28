@@ -39,7 +39,7 @@ class ENVCNS(CNS):
     def __init__(self, Name, IP, PORT):
         super(ENVCNS, self).__init__(threrad_name=Name,
                                      CNS_IP=IP, CNS_Port=PORT,
-                                     Remote_IP='192.168.0.29', Remote_Port=PORT, Max_len=10)
+                                     Remote_IP='192.168.0.10', Remote_Port=PORT, Max_len=10)
 
         # Plot --------------------------------------------------------------------------------
         # -------------------------------------------------------------------------------------
