@@ -445,21 +445,22 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
         # 'id' is 0, 1, 2, 3, ...
 
         _CNS_info = {
-            0: ['192.168.0.4', 7101],
-            1: ['192.168.0.4', 7102],
-            2: ['192.168.0.4', 7103],
-            3: ['192.168.0.4', 7104],
-            4: ['192.168.0.4', 7105],
+            0: ['192.168.0.4', 7101, False],
+            1: ['192.168.0.4', 7102, False],
+            2: ['192.168.0.4', 7103, False],
+            3: ['192.168.0.4', 7104, False],
+            4: ['192.168.0.4', 7105, False],
 
-            5: ['192.168.0.9', 7201],
-            6: ['192.168.0.9', 7202],
-            7: ['192.168.0.9', 7203],
-            8: ['192.168.0.9', 7204],
-            9: ['192.168.0.9', 7205],
+            5: ['192.168.0.9', 7201, False],
+            6: ['192.168.0.9', 7202, False],
+            7: ['192.168.0.9', 7203, False],
+            8: ['192.168.0.9', 7204, False],
+            9: ['192.168.0.9', 7205, False],
         }
 
         # Set CNS
         env = ENVCNS(Name=id, IP=_CNS_info[id][0], PORT=_CNS_info[id][1])
+        env.PID_Mode = _CNS_info[id][2]
         # env.PID_Mode = True if id == 2 else False  # PID는 마지막 2번 에이전트가 담당함.
         action_dim = env.action_space
 
@@ -529,6 +530,7 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                           f"EP q1 [{Wm['ep_q1']}]|"
                           f"EP q2 [{Wm['ep_q2']}]|"
                           f"EP p [{Wm['ep_p']}]")
+
                     # MonitoringMem < - last order...
                     monitoring_mem.push_ENV_epinfo({'AcuR/Ep': Wm['ep_acur'], 'q1/Ep': Wm['ep_q1'],
                                                     'q2/Ep': Wm['ep_q2'], 'p/Ep': Wm['ep_p']})

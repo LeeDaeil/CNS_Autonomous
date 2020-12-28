@@ -321,8 +321,8 @@ class ENVCNS(CNS):
                 # HV142 ----------------------------------------------------------
                 PID_out = self.PID_Prs.update(self.CMem.PZRPres, 1)
 
-                # if self.CMem.HV142 != 0:
-                #     self._send_control_save(ActOrderBook['LetdownValveClose'])
+                if self.CMem.HV142 != 0:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
 
                 # if PID_out >= 0.005:
                 #     self._send_control_save(ActOrderBook['LetdownValveClose'])
@@ -347,10 +347,13 @@ class ENVCNS(CNS):
                 #       f'LetdownPos:{self.CMem.HV142}:{self.CMem.HV142Flow}|'
                 #       f'PZRSpray:{self.CMem.PZRSprayPos}|{PID_out}')
             else:
+                # HV142 ----------------------------------------------------------
                 # A[0] HV142
                 # AMod[0] = -1
-                if self.CMem.HV142 != 0:
-                    self._send_control_save(ActOrderBook['LetdownValveClose'])
+                # if self.CMem.HV142 != 0:
+                #     self._send_control_save(ActOrderBook['LetdownValveClose'])
+
+                # Spray ----------------------------------------------------------
                 # A[0] PZR spray ## 12.14
                 if abs(A[0]) < 0.6:
                     self._send_control_save(ActOrderBook['PZRSprayStay'])
@@ -359,6 +362,11 @@ class ENVCNS(CNS):
                         self._send_control_save(ActOrderBook['PZRSprayClose'])
                     else:
                         self._send_control_save(ActOrderBook['PZRSprayOpen'])
+
+                # LetPress ----------------------------------------------------------
+                if self.CMem.LetdownSetM == 1:
+                    self._send_control_save(ActOrderBook['LetdownPresSetA'])
+
             # ----------------------------- Level -------------------------------------------------
             if self.PID_Mode:
                 PID_out = self.PID_Lev.update(self.CMem.PZRLevl, 1)
