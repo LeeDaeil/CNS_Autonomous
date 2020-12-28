@@ -178,7 +178,8 @@ class ReplayBuffer:
     def add_time_ep(self):
         self.tot_time_ep += 1
 
-
+    def get_time_ep(self):
+        return self.tot_time_ep
 
 class SoftQNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3):
@@ -469,8 +470,8 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
         # training loop
         for eps in range(max_episodes):
             # Buffer <-
-            replay_buffer.add_ep()
-            cur_ep_ = replay_buffer.get_ep()
+            replay_buffer.add_time_ep()
+            cur_ep_t_ = replay_buffer.get_time_ep()
 
             # CNS reset <-
             state = env.reset(file_name=f'{id}_{eps}')
@@ -483,13 +484,17 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
                 old_action = deepcopy(action)
 
                 # TENSORBOARD_LOG <- 플랜트 변수 로그
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Pres', {f'Ep{cur_ep_}': env.CMem.PZRPres}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Level', {f'Ep{cur_ep_}': env.CMem.PZRLevl}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Chaging', {f'Ep{cur_ep_}': env.CMem.FV122}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Letdown', {f'Ep{cur_ep_}': env.CMem.HV142}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/Spray', {f'Ep{cur_ep_}': env.CMem.PZRSprayPos}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZRTemp', {f'Ep{cur_ep_}': env.CMem.PZRTemp}, step)
-                TENSORBOARD_LOG.add_scalars('Log/Plant_log/CoreTemp', {f'Ep{cur_ep_}': env.CMem.ExitCoreT}, step)
+                TENSORBOARD_LOG.add_scalar(f'Log/Plant_log/Ep{cur_ep_t_}/PZR_Pres', env.CMem.PZRPres, step)
+                TENSORBOARD_LOG.add_scalar(f'Log/Plant_log/Ep{cur_ep_t_}/PZR_Level', env.CMem.PZRLevl, step)
+
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Pres', {f'Ep{cur_ep_}': env.CMem.PZRPres}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZR_Level', {f'Ep{cur_ep_}': env.CMem.PZRLevl}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/Chaging', {f'Ep{cur_ep_}': env.CMem.FV122}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/Letdown', {f'Ep{cur_ep_}': env.CMem.HV142}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/Spray', {f'Ep{cur_ep_}': env.CMem.PZRSprayPos}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/PZRTemp', {f'Ep{cur_ep_}': env.CMem.PZRTemp}, step)
+                # TENSORBOARD_LOG.add_scalars('Log/Plant_log/CoreTemp', {f'Ep{cur_ep_}': env.CMem.ExitCoreT}, step)
+
                 # <<- COMMONTOOL
                 fig_db = {
                     'PZRPres': env.CMem.PZRPres,
@@ -507,7 +512,7 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
 
                 # TENSORBOARD_LOG <-
                 Wm['ep_acur'] += reward
-                TENSORBOARD_LOG.add_scalars('Log/Reward', {f'Ep{cur_ep_}': reward}, step)
+                TENSORBOARD_LOG.add_scalars('Log/Reward', {f'Ep{cur_ep_t_}': reward}, step)
 
                 # Buffer <-
                 if env.PID_Mode == False:
@@ -530,6 +535,9 @@ def worker(id, sac_trainer, replay_buffer, max_episodes, max_steps, batch_size,
 
                 # Done ep ??
                 if done:
+                    replay_buffer.add_ep()
+                    cur_ep_ = replay_buffer.get_ep()
+
                     print(f"END_EP [{cur_ep_}]|"
                           f"Ep AccR [{Wm['ep_acur']}]|"
                           f"EP q1 [{Wm['ep_q1']}]|"
