@@ -225,7 +225,7 @@ class PolicyNetwork(nn.Module):
         x = F.relu(self.linear3(x))
         x = F.relu(self.linear4(x))
 
-        mean = (self.mean_linear(x))
+        mean = (torch.clamp(self.mean_linear(x), -2, 2))
         # mean    = F.leaky_relu(self.mean_linear(x))
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
@@ -242,6 +242,7 @@ class PolicyNetwork(nn.Module):
         normal = Normal(0, 1)
         z = normal.sample(mean.shape)
         action_0 = torch.tanh(mean + std * z.cuda())  # TanhNormal distribution as actions; reparameterization trick
+
         action = self.action_range * action_0
         log_prob = Normal(mean, std).log_prob(mean + std * z.cuda()) - torch.log(
             1. - action_0.pow(2) + epsilon) - np.log(self.action_range)
@@ -249,6 +250,7 @@ class PolicyNetwork(nn.Module):
         # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability,
         # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
         log_prob = log_prob.sum(dim=1, keepdim=True)
+
         return action, log_prob, z, mean, log_std
 
     def get_action(self, state, deterministic):
@@ -256,7 +258,6 @@ class PolicyNetwork(nn.Module):
         # print(state)
         mean, log_std = self.forward(state)
         std = log_std.exp()
-
 
         normal = Normal(0, 1)
         z = normal.sample(mean.shape).cuda()

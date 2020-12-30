@@ -181,21 +181,21 @@ class ENVCNS(CNS):
 
         if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) ** 2
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) ** 2
             # 제어
             if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
         else:                                       # 기포 생성 이후
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) ** 2
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) ** 2
             # 제어
             if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
             # 단계적 목표
 
-        r = r1 + r2 + c + g + step
+        r = r1/2 + r2/2 + c + g + step
         self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|{step}|'
         return r
 
@@ -313,8 +313,8 @@ class ENVCNS(CNS):
                 pass
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
-            self.PID_Prs.SetPoint = 30
-            self.PID_Prs_S.SetPoint = 30
+            self.PID_Prs.SetPoint = 27
+            self.PID_Prs_S.SetPoint = 27
             self.PID_Lev.SetPoint = 30
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
@@ -350,8 +350,8 @@ class ENVCNS(CNS):
                 # HV142 ----------------------------------------------------------
                 # A[0] HV142
                 # AMod[0] = -1
-                # if self.CMem.HV142 != 0:
-                #     self._send_control_save(ActOrderBook['LetdownValveClose'])
+                if self.CMem.HV142 != 0:
+                    self._send_control_save(ActOrderBook['LetdownValveClose'])
 
                 # Spray ----------------------------------------------------------
                 # A[0] PZR spray ## 12.14

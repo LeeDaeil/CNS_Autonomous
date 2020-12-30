@@ -175,10 +175,13 @@ class Mainwindow(QWidget):
     def update_plot(self):
         self.setWindowTitle(f'AGENT_{self.button.nub}')
         if not self.stopbutton.cond_stop:
-            self.GP.plot(self.mem.get_ENV_val(self.button.nub),
-                         self.mem.get_ENV_ActDis(self.button.nub),
-                         self.mem.get_ENV_reward_val(self.button.nub),
-                         )
+            try:
+                self.GP.plot(self.mem.get_ENV_val(self.button.nub),
+                             self.mem.get_ENV_ActDis(self.button.nub),
+                             self.mem.get_ENV_reward_val(self.button.nub),
+                             )
+            except:
+                pass
 
     def NEXTPAGE(self):
         target_nub = self.button.nub + 1
