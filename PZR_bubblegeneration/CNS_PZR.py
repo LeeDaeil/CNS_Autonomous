@@ -183,16 +183,16 @@ class ENVCNS(CNS):
             # 압력
             r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=10, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
             # 제어
-            if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
+            # if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
         else:                                       # 기포 생성 이후
             # 압력
             r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=10, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
             # 제어
-            if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
+            # if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
             # 단계적 목표
 
         r = r1 + r2 + c + g + step
@@ -207,7 +207,7 @@ class ENVCNS(CNS):
             1: abs(self.CMem.PZRPres - self.PID_Prs.SetPoint) >= 10,
             2: self.CMem.PZRLevl <= 25,
 
-            3: self.CMem.CTIME > 550 * 25 and self.CMem.PZRLevl > 98,
+            3: self.CMem.CTIME > 550 * 50 and self.CMem.PZRLevl > 98,
         }
 
         if self.CMem.ExitCoreT > 176:
@@ -313,8 +313,8 @@ class ENVCNS(CNS):
                 pass
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
-            self.PID_Prs.SetPoint = 27
-            self.PID_Prs_S.SetPoint = 27
+            self.PID_Prs.SetPoint = 30
+            self.PID_Prs_S.SetPoint = 30
             self.PID_Lev.SetPoint = 30
             # ----------------------------- PRESS -------------------------------------------------
             if self.PID_Mode:
@@ -423,7 +423,7 @@ class ENVCNS(CNS):
         """
         # Old Data (time t) ---------------------------------------
         AMod = self.send_act(A)
-        self.want_tick = int(25)
+        self.want_tick = int(50)
 
         # New Data (time t+1) -------------------------------------
         super(ENVCNS, self).step()                  # 전체 CNS mem run-Freeze 하고 mem 업데이트
