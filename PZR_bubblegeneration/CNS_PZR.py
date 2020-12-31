@@ -173,29 +173,29 @@ class ENVCNS(CNS):
                 r += max_val
             else:
                 if curent_val > set_val:
-                    r += (distance_normal - (curent_val - set_val)) / 10
+                    r += (distance_normal - (curent_val - set_val)) / distance_normal
                 else:
-                    r += (distance_normal - (- curent_val + set_val)) / 10
+                    r += (distance_normal - (- curent_val + set_val)) / distance_normal
             r = np.clip(r, 0, max_val)
             return r
 
         if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) ** 2
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) ** 2
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=10, distance_normal=70)
             # 제어
             if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
         else:                                       # 기포 생성 이후
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) ** 2
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) ** 2
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=10, distance_normal=70)
             # 제어
             if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
             # 단계적 목표
 
-        r = r1/2 + r2/2 + c + g + step
+        r = r1 + r2 + c + g + step
         self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|{step}|'
         return r
 

@@ -225,7 +225,8 @@ class PolicyNetwork(nn.Module):
         x = F.relu(self.linear3(x))
         x = F.relu(self.linear4(x))
 
-        mean = (torch.clamp(self.mean_linear(x), -2, 2))
+        # mean = (torch.clamp(self.mean_linear(x), -2, 2))
+        mean = self.mean_linear(x)
         # mean    = F.leaky_relu(self.mean_linear(x))
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
@@ -573,13 +574,13 @@ def ShareParameters(adamoptim):
 
 if __name__ == '__main__':
 
-    replay_buffer_size = 1e6
+    replay_buffer_size = 1e7 #1e6
     num_workers = 10  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
     explore_steps = 0  # for random action sampling in the beginning of training
-    batch_size = 640
+    batch_size = 64 #640
     update_itr = 1
     action_itr = 3
     AUTO_ENTROPY = True
