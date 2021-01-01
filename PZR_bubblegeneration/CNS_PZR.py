@@ -165,7 +165,7 @@ class ENVCNS(CNS):
         :return:
         """
         r = 0
-        r1, r2, c, g, step = 0, 0, 0, 0, 1
+        r1, r2, c, g, step = 0, 0, 0, 0, 0
 
         def get_distance_r(curent_val, set_val, max_val, distance_normal):
             r = 0
@@ -179,20 +179,20 @@ class ENVCNS(CNS):
             r = np.clip(r, 0, max_val)
             return r
 
-        if self.CMem.PZRLevl >= 95:                 # 기포 생성 이전
+        if self.CMem.PZRLevl >= 40:                 # 기포 생성 이전
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 10
             # 제어
-            # if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
+            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.01
         else:                                       # 기포 생성 이후
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70)
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 10
             # 제어
-            # if abs(A[0]) < 0.6 or abs(A[1]) < 0.6: c+= 1
+            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.01
             # 단계적 목표
 
         r = r1 + r2 + c + g + step
@@ -216,14 +216,14 @@ class ENVCNS(CNS):
         if self.CMem.ExitCoreT > 176:
             if cond[4] and cond[5]:
                 d = True
-                r += 100
+                r = 1
             else:
                 d = True
-                r = -100
+                r = -1
         else:
             if cond[1] or cond[2] or cond[3]:
                 d = True
-                r = -100
+                r = -1
             else:
                 pass
         if d: print(cond)
@@ -385,11 +385,12 @@ class ENVCNS(CNS):
                     self._send_control_save(ActOrderBook['ChargingValveClose'])
             else:
                 # A[2] FV122
-                if abs(A[1]) < 0.6:
-                    self._send_control_save(ActOrderBook['ChargingValveStay'])
-                else:
-                    if A[1] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
-                    else: self._send_control_save(ActOrderBook['ChargingValveOpen'])
+                if self.CMem.PZRLevl < 40:
+                    if abs(A[1]) < 0.6:
+                        self._send_control_save(ActOrderBook['ChargingValveStay'])
+                    else:
+                        if A[1] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
+                        else: self._send_control_save(ActOrderBook['ChargingValveOpen'])
             # ----------------------------- ----- -------------------------------------------------
         # =========================================================================================
         # Delta

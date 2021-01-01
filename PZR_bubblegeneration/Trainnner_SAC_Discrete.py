@@ -179,8 +179,8 @@ class SoftQNetwork(nn.Module):
         super(SoftQNetwork, self).__init__()
 
         self.linear1 = nn.Linear(num_inputs + num_actions, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        # self.linear2 = nn.Linear(hidden_size, hidden_size)
+        # self.linear3 = nn.Linear(hidden_size, hidden_size)
         self.linear4 = nn.Linear(hidden_size, 1)
 
         self.linear4.weight.data.uniform_(-init_w, init_w)
@@ -189,8 +189,8 @@ class SoftQNetwork(nn.Module):
     def forward(self, state, action):
         x = torch.cat([state, action], 1)  # the dim 0 is number of samples
         x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
+        # x = F.relu(self.linear2(x))
+        # x = F.relu(self.linear3(x))
         x = self.linear4(x)
         return x
 
@@ -204,8 +204,8 @@ class PolicyNetwork(nn.Module):
         self.log_std_max = log_std_max
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        # self.linear2 = nn.Linear(hidden_size, hidden_size)
+        # self.linear3 = nn.Linear(hidden_size, hidden_size)
         self.linear4 = nn.Linear(hidden_size, hidden_size)
 
         self.mean_linear = nn.Linear(hidden_size, num_actions)
@@ -221,8 +221,8 @@ class PolicyNetwork(nn.Module):
 
     def forward(self, state):
         x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
+        # x = F.relu(self.linear2(x))
+        # x = F.relu(self.linear3(x))
         x = F.relu(self.linear4(x))
 
         # mean = (torch.clamp(self.mean_linear(x), -2, 2))
@@ -326,8 +326,9 @@ class SAC_Trainer():
         self.policy_net = self.policy_net.cuda()
         self.log_alpha = self.log_alpha.cuda()
 
-    def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99,
-               soft_tau=1e-2):
+    def update(self, batch_size, reward_scale=5., auto_entropy=True, target_entropy=-2, gamma=0.99,
+               soft_tau=0.005):
+        # soft_tau=1e-2
         state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
         # print('sample:', state, action,  reward, done)
 
@@ -580,7 +581,7 @@ if __name__ == '__main__':
     max_episodes = 1000
     max_steps = 2000
     explore_steps = 0  # for random action sampling in the beginning of training
-    batch_size = 64
+    batch_size = 640
     update_itr = 1
     action_itr = 3
     AUTO_ENTROPY = True
