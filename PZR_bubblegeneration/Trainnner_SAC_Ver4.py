@@ -491,6 +491,9 @@ def worker(id, sac_trainer, replay_buffer, monitoring_mem, max_episodes, max_ste
                     action, mean_, std_ = sac_trainer.policy_net.sample_action(state)
                 old_action = deepcopy(action)
 
+                if replay_buffer.get_length() > 4:
+                    print(replay_buffer.sample(2))
+
                 # MonitoringMem <-
                 monitoring_mem.push_ENV_val(id, CNSMem=env.mem)
 
@@ -576,7 +579,7 @@ def ShareParameters(adamoptim):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e7 #1e6
-    num_workers = 10  # or: mp.cpu_count()
+    num_workers = 2  # or: mp.cpu_count()
     # hyper-parameters for RL training, no need for sharing across processes
     max_episodes = 1000
     max_steps = 2000
