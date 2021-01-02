@@ -64,18 +64,18 @@ class ENVCNS(CNS):
             ('ZINST65',    1, 0,   160),     # RCSPressure
             ('ZINST63',    1, 0,   100),     # PZRLevel
             # ('UUPPPL',     1, 0,   200),     # Core Exit Temperature
-            ('UPRZ',       1, 0,   300),     # PZR Temperature
+            # ('UPRZ',       1, 0,   300),     # PZR Temperature
 
             # ('ZINST36',  1, 0,   0),      # Letdown Pressrue
 
-            ('SetPres',    1, 0,   100),      # Pres-Setpoint
+            # ('SetPres',    1, 0,   100),      # Pres-Setpoint
             # ('SetLevel',   1, 0,   30),      # Level-Setpoint
-            ('ErrPres',    1, 0,   100),     # RCSPressure - setpoint
-            ('UpPres',     1, 0,   100),     # RCSPressure - Up
-            ('DownPres',   1, 0,   100),     # RCSPressure - Down
-            ('ErrLevel',   1, 0,   100),     # PZRLevel - setpoint
-            ('UpLevel',    1, 0,   100),     # PZRLevel - Up
-            ('DownLevel',  1, 0,   100),     # PZRLevel - Down
+            # ('ErrPres',    1, 0,   100),     # RCSPressure - setpoint
+            # ('UpPres',     1, 0,   100),     # RCSPressure - Up
+            # ('DownPres',   1, 0,   100),     # RCSPressure - Down
+            # ('ErrLevel',   1, 0,   100),     # PZRLevel - setpoint
+            # ('UpLevel',    1, 0,   100),     # PZRLevel - Up
+            # ('DownLevel',  1, 0,   100),     # PZRLevel - Down
         ]
 
         self.action_space = 2       # TODO HV142 [0], Spray [1], FV122 [2]
@@ -183,16 +183,16 @@ class ENVCNS(CNS):
             # 압력
             r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 10
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 20
             # 제어
-            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.01
+            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.05
         else:                                       # 기포 생성 이후
             # 압력
             r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
             # 수위
-            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 10
+            r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 20
             # 제어
-            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.01
+            if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.05
             # 단계적 목표
 
         r = r1 + r2 + c + g + step
@@ -243,7 +243,13 @@ class ENVCNS(CNS):
         :param A: A 액션 [0, 0, 0] <- act space에 따라서
         :return: AMod: 수정된 액션
         """
-        A = [round(A[_], 1) for _ in range(len(A))]
+        for i in range(len(A)):
+            if abs(A[i]) < 0.6:
+                A[i] = 0
+            else:
+                if A[i] < 0: A[i] = -1
+                else: A[i] = 1
+        # A = [round(A[_], 1) for _ in range(len(A))]
         AMod = A
         ActOrderBook = {
             'ChargingValveOpen': (['KSWO101', 'KSWO102'], [0, 1]),
@@ -301,8 +307,10 @@ class ENVCNS(CNS):
                 if abs(A[0]) < 0.6:
                     self._send_control_save(ActOrderBook['LetdownValveStay'])
                 else:
-                    if A[0] < 0: self._send_control_save(ActOrderBook['LetdownValveClose'])
-                    else: self._send_control_save(ActOrderBook['LetdownValveOpen'])
+                    if A[0] < 0:
+                        self._send_control_save(ActOrderBook['LetdownValveClose'])
+                    else:
+                        self._send_control_save(ActOrderBook['LetdownValveOpen'])
                 # A[1] PZR spray
                 # AMod[1] = 0
             # ----------------------------- Level -------------------------------------------------
@@ -316,7 +324,6 @@ class ENVCNS(CNS):
                 #     self._send_control_save(ActOrderBook['ChargingValveClose'])
             else:
                 # A[2] FV122
-                # AMod[2] = 0
                 pass
             # ----------------------------- ----- -------------------------------------------------
         else:                                                               # 가압기 기포 생성 이후
@@ -389,8 +396,10 @@ class ENVCNS(CNS):
                     if abs(A[1]) < 0.6:
                         self._send_control_save(ActOrderBook['ChargingValveStay'])
                     else:
-                        if A[1] < 0: self._send_control_save(ActOrderBook['ChargingValveClose'])
-                        else: self._send_control_save(ActOrderBook['ChargingValveOpen'])
+                        if A[1] < 0:
+                            self._send_control_save(ActOrderBook['ChargingValveClose'])
+                        else:
+                            self._send_control_save(ActOrderBook['ChargingValveOpen'])
             # ----------------------------- ----- -------------------------------------------------
         # =========================================================================================
         # Delta
