@@ -1,0 +1,11 @@
+cINIT	INTEGER	CNS Initial Nub
+cMAL	INTEGER	CNS Mal function True/False
+cMALA	INTEGER	CNS Mal function Activation or not
+cMALC	INTEGER	CNS Mal function Case
+cMALCA	INTEGER	CNS Mal function Case actication or not
+cMALO	INTEGER	CNS Mal function Option
+cMALT	INTEGER	CNS Mal function Time
+cMALC2	INTEGER	CNS Mal function Case
+cMALCA2	INTEGER	CNS Mal function Case actication or not
+cMALO2	INTEGER	CNS Mal function Option
+cMALT2	INTEGER	CNS Mal function Time

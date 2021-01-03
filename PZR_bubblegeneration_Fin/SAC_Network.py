@@ -44,7 +44,6 @@ class ActorNet(BaseNetwork):
             self.L3 = nn.Linear(512, 512)
             self.L_a_prob = nn.Linear(512, nub_a)
 
-
     def forward(self, s):
         """
         s = [batch, seq_len, input_size] is given to CLSTM and LSTM
@@ -73,10 +72,15 @@ class ActorNet(BaseNetwork):
         action_probs = F.softmax(self.L_a_prob(x), dim=1)
         return action_probs
 
+    def get_act(self, s):
+        s = torch.FloatTensor(s).unsqueeze(0)
+        action_probs = self.forward(s)
+        action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
+        return action.detach().cpu().numpy()[0]
+
     def sample(self, s):
         action_probs = self.forward(s)
         action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
-
         action_distribution = Categorical(action_probs)
         action_ = action_distribution.sample().view(-1, 1)              # pi_theta(s_t)
 
@@ -84,7 +88,7 @@ class ActorNet(BaseNetwork):
         z = (action_probs == 0.0).float() * 1e-8
         log_probs = torch.log(action_probs + z)                         # log(pi_theta(s_t))
 
-        return action, action_, action_probs, log_probs
+        return action.detach().cpu().numpy()[0], action_, action_probs, log_probs
 
 
 class CriticNet(BaseNetwork):
@@ -111,7 +115,6 @@ class CriticNet(BaseNetwork):
             self.L2 = nn.Linear(256, 512)
             self.L3 = nn.Linear(512, 512)
             self.L_q = nn.Linear(512, 1)
-
 
     def forward(self, s):
         if self.net_type == 'DNN':
