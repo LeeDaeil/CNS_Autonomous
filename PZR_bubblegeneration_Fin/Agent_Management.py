@@ -9,7 +9,7 @@ from PZR_bubblegeneration_Fin import SAC_Discrete
 
 # 1. Initial config
 backup_fold_name = '/Back'
-save_fold_names = ['/Model', '/DB', '/TFBoard']
+save_fold_names = ['/Model', '/DB', '/DB_ep', '/DB_ep_srd', '/DB_ep_net', '/TFBoard']
 
 # 2. Make folders and back up save folders
 dirpath = os.path.dirname(os.path.realpath(__file__))

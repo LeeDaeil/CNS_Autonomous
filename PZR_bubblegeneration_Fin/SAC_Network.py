@@ -72,15 +72,10 @@ class ActorNet(BaseNetwork):
         action_probs = F.softmax(self.L_a_prob(x), dim=1)
         return action_probs
 
-    def get_act(self, s, ex_mode):
-        s = torch.FloatTensor(s)#.unsqueeze(0)
+    def get_act(self, s):
+        s = torch.FloatTensor(s).unsqueeze(0)
         action_probs = self.forward(s)
-        if ex_mode: # Exploit
-            action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
-        else: # Explore
-            action_distribution = Categorical(action_probs)
-            action = action_distribution.sample().view(-1, 1)              # pi_theta(s_t)
-
+        action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
         return action.detach().cpu().numpy()
 
     def sample(self, s):
