@@ -5,6 +5,7 @@ Builder: Daeil Lee 2021-01-03
 import os
 import shutil
 from datetime import datetime
+from PZR_bubblegeneration_Fin import SAC_Discrete
 
 # 1. Initial config
 backup_fold_name = '/Back'
@@ -40,3 +41,4 @@ if True in check_dirpath:
 [os.mkdir(dirpath + fold_) for fold_ in save_fold_names]
 
 # 3. Call RL Model and run
+Agents = SAC_Discrete.SAC()

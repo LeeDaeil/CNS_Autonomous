@@ -83,17 +83,23 @@ class SAC:
 
     def _call_env(self):
         _CNS_info = {
-            0: ['192.168.0.4', 7101, False],
-            1: ['192.168.0.4', 7102, False],
-            2: ['192.168.0.4', 7103, False],
-            3: ['192.168.0.4', 7104, False],
-            4: ['192.168.0.4', 7105, False],
-            #
-            5: ['192.168.0.9', 7201, False],
-            6: ['192.168.0.9', 7202, False],
-            7: ['192.168.0.9', 7203, False],
-            8: ['192.168.0.9', 7204, False],
-            9: ['192.168.0.9', 7205, False],
+            0: ['192.168.0.211', 7101, False],           #CNS1
+            1: ['192.168.0.211', 7102, False],
+            # 2: ['192.168.0.211', 7103, False],
+            # 3: ['192.168.0.211', 7104, False],
+            # 4: ['192.168.0.211', 7105, False],
+            # #
+            # 5: ['192.168.0.212', 7201, False],           #CNS2
+            # 6: ['192.168.0.212', 7202, False],
+            # 7: ['192.168.0.212', 7203, False],
+            # 8: ['192.168.0.212', 7204, False],
+            # 9: ['192.168.0.212', 7205, False],
+            # #
+            # 10: ['192.168.0.213', 7301, False],           #CNS3
+            # 11: ['192.168.0.213', 7302, False],
+            # 12: ['192.168.0.213', 7303, False],
+            # 13: ['192.168.0.213', 7304, False],
+            # 14: ['192.168.0.213', 7305, False],
         }
 
         # Set CNS
@@ -262,9 +268,12 @@ class SAC:
             print(f'Time:[{datetime.now().minute}:{datetime.now().second}]'
                   f'Global_info:[{self.episode}/{max_episodes}][{steps}/{max_steps}]'
                   f'Env_info: {[env_.ENVStep for env_ in envs]}')
-
+            print(s)
             # s 에대한 a 예측
-            a = self.Actor_Policy_Net.get_act(s)
+            if steps > 500:
+                a = self.Actor_Policy_Net.get_act(s, ex_mode=True)
+            else:
+                a = self.Actor_Policy_Net.get_act(s, ex_mode=False)
 
             # CNS Step <-
             next_s, r, d, _ = self._pool_one_step(envs, a)
