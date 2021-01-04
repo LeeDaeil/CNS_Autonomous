@@ -10,6 +10,8 @@ import torch.optim as opt
 import torch.nn.functional as F
 import numpy as np
 import asyncio
+
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait
 from datetime import datetime
 from PZR_bubblegeneration_Fin.SAC_Memory import ReplayBuffer
 from PZR_bubblegeneration_Fin.SAC_Network import ActorNet, CriticNet
@@ -20,13 +22,13 @@ class SAC:
     def __init__(self,
                  # info
                  net_type='DNN',
-                 lr=0.0003, alpha=1, gamma=0.99, tau=0.002,
+                 lr=0.0003, alpha=1, gamma=0.99, tau=0.005,
 
                  # mem_info
                  capacity=1e6, seq_len=2,
 
                  # Agent Run info
-                 max_episodes=10, max_steps=100, batch_size=5,
+                 max_episodes=1000, max_steps=1e6, batch_size=64,
                  ):
         # -----------------------------------------------------------------------------------------
         self.alpha = alpha
@@ -35,6 +37,9 @@ class SAC:
         # -----------------------------------------------------------------------------------------
         # Call ENV
         self.envs, self.agent_n, self.a_dim, self.s_dim = self._call_env()
+
+        # make Thread Pool
+        self.pool = ThreadPoolExecutor(len(self.envs))
 
         #
         self.a_dim = 3
@@ -81,14 +86,14 @@ class SAC:
             0: ['192.168.0.4', 7101, False],
             1: ['192.168.0.4', 7102, False],
             2: ['192.168.0.4', 7103, False],
-            # 3: ['192.168.0.4', 7104, False],
-            # 4: ['192.168.0.4', 7105, False],
+            3: ['192.168.0.4', 7104, False],
+            4: ['192.168.0.4', 7105, False],
             #
-            # 5: ['192.168.0.9', 7201, False],
-            # 6: ['192.168.0.9', 7202, False],
-            # 7: ['192.168.0.9', 7203, False],
-            # 8: ['192.168.0.9', 7204, False],
-            # 9: ['192.168.0.9', 7205, False],
+            5: ['192.168.0.9', 7201, False],
+            6: ['192.168.0.9', 7202, False],
+            7: ['192.168.0.9', 7203, False],
+            8: ['192.168.0.9', 7204, False],
+            9: ['192.168.0.9', 7205, False],
         }
 
         # Set CNS
@@ -133,7 +138,7 @@ class SAC:
         entropies, expect_q = self._update_cal_policy_entropy(s)
 
         Actor_policy_loss = entropies - expect_q
-        Actor_policy_loss_mean = Actor_policy_loss.mean()
+        Actor_policy_loss_mean = torch.mean(Actor_policy_loss)
         # print(f'Actor_policy_loss_mean:\n{Actor_policy_loss_mean}')
 
         self.Actor_Policy_Net_Opt.zero_grad()
@@ -148,6 +153,8 @@ class SAC:
         for Q_net_, Q_target_net_ in zip(Q_nets, Q_target_nets):
             for Q_net_para_, Q_target_net_para_ in zip(Q_net_.parameters(), Q_target_net_.parameters()):
                 Q_target_net_para_.data.copy_(self.tau * Q_net_para_.data + (1 - self.tau) * Q_target_net_para_.data)
+
+        return Critic_Q1_loss_mean.detach(), Critic_Q2_loss_mean.detach(), Actor_policy_loss_mean.detach()
 
     def _update_cal_q(self, s):
         q1 = self.Critic_Q_Net1(s)
@@ -193,77 +200,103 @@ class SAC:
 
         return entropies, expect_q
 
-    def _run_all_envs_init(self, envs, ep):
-        for env_ in envs:
-            env_.reset(file_name=f'{ep}')
-            ep += 1
-        return ep
+    def _pool_one_step(self, envs, actions):
+        def __pool_one_step(env, a):
+            next_s, r, d, _ = env.step(a)
+            return next_s, r, d, _
 
-    def _run_env_init(self, env, ep):
-        env.reset(file_name=f'{ep}')
-        return 1
+        futures = [self.pool.submit(__pool_one_step, env_, a) for env_, a in zip(envs, actions)]
+        wait(futures)
+
+        out = [pack_out.result() for pack_out in futures]
+
+        next_s = [out[_][0].tolist() for _ in range(len(envs))]
+        r = [out[_][1] for _ in range(len(envs))]
+        d = [out[_][2] for _ in range(len(envs))]
+        a = [out[_][3] for _ in range(len(envs))]
+        return next_s, r, d, a
+
+    def _pool_reset(self, envs):
+        def __pool_reset(env, ep):
+            env.reset(file_name=f'{ep}')
+
+        calculate_ep = []
+        for i in range(len(envs)):
+            calculate_ep.append(self.episode)
+            self.episode += 1
+
+        futures = [self.pool.submit(__pool_reset, env_, ep_) for env_, ep_ in zip(envs, calculate_ep)]
+        wait(futures)
+        print('All Env Reset !!')
+
+    def _pool_done_reset(self, envs, dones):
+        done_envs = []
+        done_envs_ep = []
+        for i in range(len(envs)):
+            if dones[i]:
+                done_envs.append(envs[i])
+                done_envs_ep.append(self.episode)
+                self.episode += 1
+
+        def __pool_done_reset(env, ep):
+            env.reset(file_name=f'{ep}')
+
+        futures = [self.pool.submit(__pool_done_reset, env_, ep_) for env_, ep_ in zip(done_envs, done_envs_ep)]
+        wait(futures)
 
     def _run(self,
              envs, replay_buffer,
              max_episodes, max_steps, batch_size):
         print('Run' + '=' * 50)
         steps = 0
-        episodes = 0
+        self.episode = 0
 
-        episodes = self._run_all_envs_init(envs, episodes)  # 초기 ep 에이전트 수만큼 증가
+        self._pool_reset(envs)
+        next_s, r, d, _ = self._pool_one_step(envs, actions=[[0] for _ in range(len(envs))])
+        s = next_s
 
-        async def one_step(env, a):
-            next_s, r, d, _ = env.step(a)
-            return next_s, r, d, _
+        # Worker mem
+        Wm = {i: {'ep_acur': 0, 'ep_q1': 0, 'ep_q2': 0, 'ep_p': 0} for i in range(len(envs))}
 
-        async def all_env_one_step(one_step_, envs, actions):
-            fs = {one_step_(env_, a_) for env_, a_ in zip(envs, actions)}
-            for f in asyncio.as_completed(fs):
-                next_s, r, d, _ = await f
-                print(next_s)
-
-        loop = asyncio.get_event_loop()
-        while steps < max_steps and episodes < max_episodes:
+        while steps < max_steps and self.episode < max_episodes:
             print(f'Time:[{datetime.now().minute}:{datetime.now().second}]'
-                  f'Global_info:[{episodes}/{max_episodes}][{steps}/{max_steps}]'
+                  f'Global_info:[{self.episode}/{max_episodes}][{steps}/{max_steps}]'
                   f'Env_info: {[env_.ENVStep for env_ in envs]}')
 
-            loop.run_until_complete(all_env_one_step(one_step, envs, [[0], [1], [0]]))
+            # s 에대한 a 예측
+            a = self.Actor_Policy_Net.get_act(s)
 
-            # asyncio.run(warp_cns(envs, [[0], [1]]))
-            # All agent run
-            # for env_ in envs:       # 비동기적 처리 방안 찾아야함.
-            #     if env_.ENVStep < 3:
-            #         # LSTM 이나 초기 x 스텝은 아무 액션 안함
-            #         next_s, r, d, _ = env_.step([0])
-            #         env_.s = next_s
-            #     else:
-            #         a = self.Actor_Policy_Net.get_act(env_.s)   # a = [0] or [1] or [2]
-            #
-            #         # CNS Step <-
-            #         next_s, r, d, _ = env_.step(a)
-            #
-            #         # Buffer <-
-            #         replay_buffer.push(env_.s, a, r, next_s, d)
-            #
-            #         # s <- next_s
-            #         env_.s = next_s
-            #
-            #         # learn
-            #         if replay_buffer.get_length() > batch_size:
-            #             mini_batch = replay_buffer.sample(batch_size, per=False)
-            #             self._update(mini_batch)
-            #
-            #         # Done ep ??
-            #         if d:
-            #             # Global episode +1 and initial env
-            #             episodes += self._run_env_init(env_, episodes)
-            #
-            #     steps += 1  # Global Step +1
+            # CNS Step <-
+            next_s, r, d, _ = self._pool_one_step(envs, a)
+
+            # Buffer <-
+            for s_, a_, r_, next_s_, d_, id in zip(s, a, r, next_s, d, range(len(envs))):
+                Wm[id]['ep_acur'] += r_
+                replay_buffer.push(s_, a_, r_, next_s_, d_)
+
+            # s <- next_s
+            s = next_s
+
+            # learn
+            if replay_buffer.get_length() > batch_size:
+                mini_batch = replay_buffer.sample(batch_size, per=False)
+                q1_loss, q2_loss, p_loss = self._update(mini_batch)
+                print(q1_loss, q2_loss, p_loss)
+
+            # Done ep ??
+            for d_, id in zip(d, range(len(envs))):
+                if d_:
+                    print(Wm[id])
+                    for _ in Wm[id].keys():
+                        Wm[id][_] = 0
+
+            self._pool_done_reset(envs, d)
+
+            steps += len(envs)
 
         # End
         print(f'Done Training:'
-              f'[{episodes}/{max_episodes}]'
+              f'[{self.episode}/{max_episodes}]'
               f'[{steps}/{max_steps}]' + '=' * 50)
 
 

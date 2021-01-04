@@ -73,10 +73,14 @@ class ActorNet(BaseNetwork):
         return action_probs
 
     def get_act(self, s):
-        s = torch.FloatTensor(s).unsqueeze(0)
+        s = torch.FloatTensor(s) #.unsqueeze(0)
         action_probs = self.forward(s)
         action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
-        return action.detach().cpu().numpy()[0]
+
+        action_distribution = Categorical(action_probs)
+        action_ = action_distribution.sample().view(-1, 1)              # pi_theta(s_t)
+
+        return action_.detach().cpu().numpy()
 
     def sample(self, s):
         action_probs = self.forward(s)
