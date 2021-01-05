@@ -17,6 +17,9 @@ from PZR_bubblegeneration_Fin.SAC_Memory import ReplayBuffer
 from PZR_bubblegeneration_Fin.SAC_Network import ActorNet, CriticNet
 from PZR_bubblegeneration_Fin.CNS_PZR import ENVCNS
 
+from torch.utils.tensorboard import SummaryWriter
+WRITER = SummaryWriter('./TFBoard')
+
 
 class SAC:
     def __init__(self,
@@ -28,7 +31,7 @@ class SAC:
                  capacity=1e6, seq_len=2,
 
                  # Agent Run info
-                 max_episodes=1000, max_steps=1e6, batch_size=64,
+                 max_episodes=1e6, max_steps=1e6, batch_size=640,
                  ):
         # -----------------------------------------------------------------------------------------
         self.alpha = alpha
@@ -271,6 +274,7 @@ class SAC:
         print('Run' + '=' * 50)
         steps = 0
         self.episode = 0
+        self.writer_ep = 0
         # Worker mem
         self.Wd = {i: {'ep_acur': 0, 'ep_q1': 0, 'ep_q2': 0, 'ep_p': 0, 'ep':0} for i in range(self.agent_n)}
 
@@ -328,6 +332,16 @@ class SAC:
                                 f"{self.Wd[id]['ep_q2']},{self.Wd[id]['ep_q2']/envs[id].ENVStep},"
                                 f"{self.Wd[id]['ep_p']},{self.Wd[id]['ep_p']/envs[id].ENVStep},"
                                 f"{self.Wd[id]['ep_acur']},{self.Wd[id]['ep_acur']/envs[id].ENVStep}\n")
+
+                    self.writer_ep += 1
+                    WRITER.add_scalar('Loss/q1', self.Wd[id]['ep_q1'], self.writer_ep)
+                    WRITER.add_scalar('Loss/q2', self.Wd[id]['ep_q2'], self.writer_ep)
+                    WRITER.add_scalar('Loss/p', self.Wd[id]['ep_p'], self.writer_ep)
+                    WRITER.add_scalar('Loss/r', self.Wd[id]['ep_acur'], self.writer_ep)
+                    WRITER.add_scalar('Loss-av/q1-av', self.Wd[id]['ep_q1']/envs[id].ENVStep, self.writer_ep)
+                    WRITER.add_scalar('Loss-av/q1-av', self.Wd[id]['ep_q2']/envs[id].ENVStep, self.writer_ep)
+                    WRITER.add_scalar('Loss-av/p-av', self.Wd[id]['ep_p']/envs[id].ENVStep, self.writer_ep)
+                    WRITER.add_scalar('Loss-av/r-av', self.Wd[id]['ep_acur']/envs[id].ENVStep, self.writer_ep)
 
                     for _ in self.Wd[id].keys():
                         self.Wd[id][_] = 0

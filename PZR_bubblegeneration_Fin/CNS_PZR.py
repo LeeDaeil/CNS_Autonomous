@@ -48,6 +48,7 @@ class ENVCNS(CNS):
         self.AcumulatedReward = 0
         self.ENVStep = 0
         self.LoggerPath = 'DB'
+        self.ENVLoggerPath = 'DB_ENV'
         self.want_tick = 5  # 1sec
         self.time_leg = 1
         self.Loger_txt = ''
@@ -101,7 +102,7 @@ class ENVCNS(CNS):
             #     f.write('==' * 20 + '\n')
             pass
         else:
-            with open(f'{self.Name}.txt', 'a') as f:
+            with open(f'./{self.ENVLoggerPath}/{self.Name}.txt', 'a') as f:
                 f.write(f'[{cr_time}]|{self.Loger_txt}\n')
 
     def normalize(self, x, x_round, x_min, x_max):
