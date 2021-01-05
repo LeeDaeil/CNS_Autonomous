@@ -59,7 +59,7 @@ class ENVCNS(CNS):
             ('BHV142',     1, 0,   0),       # Letdown(HV142)
             # ('WRHRCVC',    1, 0,   0),       # RHR to CVCS Flow
             # ('WNETLD',     1, 0,   10),      # Total Letdown Flow
-            ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
+            # ('BFV122',     1, 0,   0),       # ChargingValve(FV122)
             # ('WNETCH',     1, 0,   10),      # Total Charging Flow
             ('ZINST66',    1, 0,   30),      # PZR spray
             ('ZINST65',    1, 0,   160),     # RCSPressure
@@ -182,21 +182,21 @@ class ENVCNS(CNS):
 
         if self.CMem.PZRLevl >= 40:                 # 기포 생성 이전
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
             r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 20
             # 제어
-            # if abs(A[0]) < 0.6: c+= 0.05
+            if A[0] == 0: c += 0.1
         else:                                       # 기포 생성 이후
             # 압력
-            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10) / 10
+            r1 += get_distance_r(self.CMem.PZRPres, self.PID_Prs.SetPoint, max_val=1, distance_normal=10)
             # 수위
             r2 += get_distance_r(self.CMem.PZRLevl, self.PID_Lev.SetPoint, max_val=1, distance_normal=70) / 20
             # 제어
             # if abs(A[0]) < 0.6 and abs(A[1]) < 0.6: c+= 0.05
             # 단계적 목표
 
-        r = r1 + r2 + c + g + step
+        r = r1 + c #+ r2 + c + g + step
         self.Loger_txt += f'R|{r}|{r1}|{r2}|{c}|{step}|'
         return r
 
@@ -217,14 +217,14 @@ class ENVCNS(CNS):
         if self.CMem.ExitCoreT > 176:
             if cond[4] and cond[5]:
                 d = True
-                r = 1
+                # r = 1
             else:
                 d = True
-                r = -1
+                # r = -1
         else:
             if cond[1] or cond[2] or cond[3]:
                 d = True
-                r = -1
+                # r = -1
             else:
                 pass
         if d: print(cond)

@@ -7,14 +7,14 @@ from concurrent.futures import ThreadPoolExecutor, wait
 
 
 # 1. Initial config
-DB_fold_name = '/DB_ep_srd'
+DB_fold_name = '/DB_ep_srd\Pick'
 s_dim = 5
 names = [f's{_}' for _ in range(s_dim)] + ['r', 'd']
 
 # 2. Make folders and back up save folders
 dirpath = os.path.dirname(os.path.realpath(__file__))
 dirpath_files = os.listdir(dirpath + DB_fold_name)
-dirpath_files = [f'.{DB_fold_name}/{dirpath_file}' for dirpath_file in dirpath_files][0:4]
+dirpath_files = [f'.{DB_fold_name}/{dirpath_file}' for dirpath_file in dirpath_files]
 dirpath_files_nub = len(dirpath_files)
 print(dirpath_files)
 
@@ -52,5 +52,5 @@ futures = [pool.submit(read_db, file, i, names) for file, i in zip(dirpath_files
 wait(futures)
 
 for i in range(dirpath_files_nub):
-    plt.plot(DB_GlBAL[i]['DB']['r'])
+    plt.plot(DB_GlBAL[i]['DB']['s4'])
 plt.show()

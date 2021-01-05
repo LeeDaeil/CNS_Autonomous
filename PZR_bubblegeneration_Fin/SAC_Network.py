@@ -69,26 +69,27 @@ class ActorNet(BaseNetwork):
             x = F.relu(self.L2(x[-1, :, :]))
             x = F.relu(self.L3(x))
 
-        action_probs = F.softmax(self.L_a_prob(x), dim=1)
+        # action_probs = F.softmax(self.L_a_prob(x), dim=1)
+        action_probs = self.L_a_prob(x)
         return action_probs
 
     def get_act(self, s):
         s = torch.FloatTensor(s).unsqueeze(0)
         action_probs = self.forward(s)
         action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
-        return action.detach().cpu().numpy()
+        return action
 
     def sample(self, s):
         action_probs = self.forward(s)
-        action = torch.argmax(action_probs, dim=1, keepdim=True)        # a_t
+        action_probs = F.softmax(action_probs, dim=1)
         action_distribution = Categorical(action_probs)
-        action_ = action_distribution.sample().view(-1, 1)              # pi_theta(s_t)
+        action = action_distribution.sample().view(-1, 1)              # pi_theta(s_t)
 
         # 0 값 방지
         z = (action_probs == 0.0).float() * 1e-8
         log_probs = torch.log(action_probs + z)                         # log(pi_theta(s_t))
 
-        return action.detach().cpu().numpy()[0], action_, action_probs, log_probs
+        return action, action_probs, log_probs
 
 
 class CriticNet(BaseNetwork):
@@ -100,7 +101,7 @@ class CriticNet(BaseNetwork):
             self.L1 = nn.Linear(nub_s, 256)
             self.L2 = nn.Linear(256, 512)
             self.L3 = nn.Linear(512, 512)
-            self.L_q = nn.Linear(512, 1)
+            self.L_q = nn.Linear(512, nub_a)
 
         if self.net_type == 'LSTM':
             self.L1 = nn.LSTM(nub_s, 256, 1)

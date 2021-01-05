@@ -13,7 +13,7 @@ import asyncio
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait
 from datetime import datetime
-from PZR_bubblegeneration_Fin.SAC_Memory import ReplayBuffer
+from PZR_bubblegeneration_Fin.Memory import ReplayBuffer
 from PZR_bubblegeneration_Fin.SAC_Network import ActorNet, CriticNet
 from PZR_bubblegeneration_Fin.CNS_PZR import ENVCNS
 
@@ -31,7 +31,7 @@ class SAC:
                  capacity=1e6, seq_len=2,
 
                  # Agent Run info
-                 max_episodes=1e6, max_steps=1e6, batch_size=640,
+                 max_episodes=1e6, max_steps=1e6, batch_size=10,
                  ):
         # -----------------------------------------------------------------------------------------
         self.alpha = alpha
@@ -60,9 +60,13 @@ class SAC:
         # Copy parameters from Critic_Q_Nets to Critoc_Q_Target_Nets
         for critic_q_target, critic_q, i in zip(self.Critic_Q_Target_Net1s, self.Critic_Q_Net1s, range(len(self.envs))):
             critic_q_target.load_state_dict(critic_q.state_dict())
+            for critic_q_target_para in critic_q_target.parameters():
+                critic_q_target_para.requires_grad = False
             critic_q.save(path=f'./Model/Critic_Q_net1_{i}')
         for critic_q_target, critic_q, i in zip(self.Critic_Q_Target_Net2s, self.Critic_Q_Net2s, range(len(self.envs))):
             critic_q_target.load_state_dict(critic_q.state_dict())
+            for critic_q_target_para in critic_q_target.parameters():
+                critic_q_target_para.requires_grad = False
             critic_q.save(path=f'./Model/Critic_Q_net2_{i}')
 
         # Save Models policy
@@ -91,21 +95,21 @@ class SAC:
         _CNS_info = {
             0: ['192.168.0.211', 7101, False],           #CNS1
             1: ['192.168.0.211', 7102, False],
-            2: ['192.168.0.211', 7103, False],
-            3: ['192.168.0.211', 7104, False],
-            4: ['192.168.0.211', 7105, False],
-            #
-            5: ['192.168.0.212', 7201, False],           #CNS2
-            6: ['192.168.0.212', 7202, False],
-            7: ['192.168.0.212', 7203, False],
-            8: ['192.168.0.212', 7204, False],
-            9: ['192.168.0.212', 7205, False],
-            #
-            10: ['192.168.0.213', 7301, False],           #CNS3
-            11: ['192.168.0.213', 7302, False],
-            12: ['192.168.0.213', 7303, False],
-            13: ['192.168.0.213', 7304, False],
-            14: ['192.168.0.213', 7305, False],
+            # 2: ['192.168.0.211', 7103, False],
+            # 3: ['192.168.0.211', 7104, False],
+            # 4: ['192.168.0.211', 7105, False],
+            # #
+            # 5: ['192.168.0.212', 7201, False],           #CNS2
+            # 6: ['192.168.0.212', 7202, False],
+            # 7: ['192.168.0.212', 7203, False],
+            # 8: ['192.168.0.212', 7204, False],
+            # 9: ['192.168.0.212', 7205, False],
+            # #
+            # 10: ['192.168.0.213', 7301, False],           #CNS3
+            # 11: ['192.168.0.213', 7302, False],
+            # 12: ['192.168.0.213', 7303, False],
+            # 13: ['192.168.0.213', 7304, False],
+            # 14: ['192.168.0.213', 7305, False],
         }
 
         # Set CNS
@@ -125,7 +129,7 @@ class SAC:
 
         # -------------------------------------------------------------------------------------
         # Update the Q-function or Critic network's parameters
-        q1, q2 = self._update_cal_q(s, i)
+        q1, q2 = self._update_cal_q(s, a, i)
         target_q = self._update_cal_target_q(r, s_next, d, i)
 
         Critic_Q1_loss = 0.5 * F.mse_loss(q1, target_q.detach())
@@ -178,9 +182,11 @@ class SAC:
 
         return Critic_Q1_loss_mean.detach().cpu().numpy(), Critic_Q2_loss_mean.detach().cpu().numpy(), Actor_policy_loss_mean.detach().cpu().numpy()
 
-    def _update_cal_q(self, s, i):
+    def _update_cal_q(self, s, a, i):
         q1 = self.Critic_Q_Net1s[i](s)
         q2 = self.Critic_Q_Net2s[i](s)
+        q1 = q1.gather(1, a.long())
+        q2 = q2.gather(1, a.long())
         return q1, q2
 
     def _update_cal_target_q(self, r, s_next, d, i):
@@ -268,6 +274,16 @@ class SAC:
         futures = [self.pool.submit(__pool_done_reset, env_, ep_) for env_, ep_ in zip(done_envs, done_envs_ep)]
         wait(futures)
 
+    def _run_exploit(self, net, s):
+        with torch.no_grad():
+            a = net.get_act(s)
+        return a.item()
+
+    def _run_explore(self, net, s):
+        with torch.no_grad():
+            a, _, _ = net.sample(s)
+        return a.item()
+
     def _run(self,
              envs, replay_buffer,
              max_episodes, max_steps, batch_size):
@@ -288,7 +304,8 @@ class SAC:
                   f'Env_info: {[env_.ENVStep for env_ in envs]}')
 
             # s 에대한 a 예측
-            a = [self.Actor_Policy_Nets[i].get_act(s[i]) for i in range(self.agent_n)]
+            # a = [self.Actor_Policy_Nets[i].get_act(s[i]) for i in range(self.agent_n)]  # a[0] tensor([[0]])
+            a = [[self._run_exploit(self.Actor_Policy_Nets[i], s[i])] for i in range(self.agent_n)] # a[0] [0]
 
             # CNS Step <-
             next_s, r, d, _ = self._pool_one_step(envs, a)
@@ -339,7 +356,7 @@ class SAC:
                     WRITER.add_scalar('Loss/p', self.Wd[id]['ep_p'], self.writer_ep)
                     WRITER.add_scalar('Loss/r', self.Wd[id]['ep_acur'], self.writer_ep)
                     WRITER.add_scalar('Loss-av/q1-av', self.Wd[id]['ep_q1']/envs[id].ENVStep, self.writer_ep)
-                    WRITER.add_scalar('Loss-av/q1-av', self.Wd[id]['ep_q2']/envs[id].ENVStep, self.writer_ep)
+                    WRITER.add_scalar('Loss-av/q2-av', self.Wd[id]['ep_q2']/envs[id].ENVStep, self.writer_ep)
                     WRITER.add_scalar('Loss-av/p-av', self.Wd[id]['ep_p']/envs[id].ENVStep, self.writer_ep)
                     WRITER.add_scalar('Loss-av/r-av', self.Wd[id]['ep_acur']/envs[id].ENVStep, self.writer_ep)
 
