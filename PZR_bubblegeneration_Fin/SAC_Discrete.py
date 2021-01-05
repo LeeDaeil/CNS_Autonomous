@@ -31,12 +31,17 @@ class SAC:
                  capacity=1e6, seq_len=2,
 
                  # Agent Run info
-                 max_episodes=1e6, max_steps=1e6, batch_size=10,
+                 max_episodes=1e6, max_steps=1e6, interval_steps=10, target_update_interval=500,
+                 batch_size=128,
                  ):
         # -----------------------------------------------------------------------------------------
         self.alpha = alpha
         self.gamma = gamma
         self.tau = tau
+        self.interval_steps = interval_steps
+        self.target_update_interval = target_update_interval
+        # -----------------------------------------------------------------------------------------
+        self._log_set()
         # -----------------------------------------------------------------------------------------
         # Call ENV
         self.envs, self.agent_n, self.a_dim, self.s_dim = self._call_env()
@@ -89,34 +94,42 @@ class SAC:
                   f'ComIP{self.envs[i].Remote_ip}-ComPort{self.envs[i].Remote_port}')
 
         # Agent Run -------------------------------------------------------------------------------
-        self._run(self.envs, self.replay_buffer, max_episodes, max_steps, batch_size)
+        self._run(self.envs, self.replay_buffer, max_episodes, max_steps, interval_steps,
+                  target_update_interval, batch_size)
+
+    def _log_set(self):
+        with open('Debug_logger.txt', 'w') as f: f.write(f'[{datetime.now()}]\n')
+
+    def _log(self, txt):
+        with open('Debug_logger.txt', 'a') as f: f.write(f'[{datetime.now()}]\t{txt}\n')
 
     def _call_env(self):
         _CNS_info = {
             0: ['192.168.0.211', 7101, False],           #CNS1
             1: ['192.168.0.211', 7102, False],
-            # 2: ['192.168.0.211', 7103, False],
-            # 3: ['192.168.0.211', 7104, False],
-            # 4: ['192.168.0.211', 7105, False],
-            # #
-            # 5: ['192.168.0.212', 7201, False],           #CNS2
-            # 6: ['192.168.0.212', 7202, False],
-            # 7: ['192.168.0.212', 7203, False],
-            # 8: ['192.168.0.212', 7204, False],
-            # 9: ['192.168.0.212', 7205, False],
-            # #
-            # 10: ['192.168.0.213', 7301, False],           #CNS3
-            # 11: ['192.168.0.213', 7302, False],
-            # 12: ['192.168.0.213', 7303, False],
-            # 13: ['192.168.0.213', 7304, False],
-            # 14: ['192.168.0.213', 7305, False],
+            2: ['192.168.0.211', 7103, False],
+            3: ['192.168.0.211', 7104, False],
+            4: ['192.168.0.211', 7105, False],
+            #
+            5: ['192.168.0.212', 7201, False],           #CNS2
+            6: ['192.168.0.212', 7202, False],
+            7: ['192.168.0.212', 7203, False],
+            8: ['192.168.0.212', 7204, False],
+            9: ['192.168.0.212', 7205, False],
+            #
+            10: ['192.168.0.213', 7301, False],           #CNS3
+            11: ['192.168.0.213', 7302, False],
+            12: ['192.168.0.213', 7303, False],
+            13: ['192.168.0.213', 7304, False],
+            14: ['192.168.0.213', 7305, False],
         }
 
         # Set CNS
         envs = [ENVCNS(Name=i, IP=_CNS_info[i][0], PORT=_CNS_info[i][1]) for i in range(len(_CNS_info))]
         return envs, len(_CNS_info), envs[0].action_space, envs[0].observation_space
 
-    def _update(self, mini_batch, i):
+    def _update(self, mini_batch, i, target_update):
+        self._log(txt=f'call_update_{i}'+'='*50)
         s, a, r, s_next, d = mini_batch
 
         # print('_update_mini_batch:\n', s, s_next, a, r, d)
@@ -134,7 +147,9 @@ class SAC:
 
         Critic_Q1_loss = 0.5 * F.mse_loss(q1, target_q.detach())
         Critic_Q2_loss = 0.5 * F.mse_loss(q2, target_q.detach())
-
+        self._log(txt=f'q1_{q1}_{target_q}')
+        self._log(txt=f'q1_{q2}_{target_q}')
+        
         Critic_Q1_loss_mean = torch.mean(Critic_Q1_loss)
         Critic_Q2_loss_mean = torch.mean(Critic_Q2_loss)
 
@@ -173,12 +188,14 @@ class SAC:
 
         # -------------------------------------------------------------------------------------
         # Update the Target Q network: soft-Q update
-        Q_nets = [self.Critic_Q_Net1s[i], self.Critic_Q_Net2s[i]]
-        Q_target_nets = [self.Critic_Q_Target_Net1s[i], self.Critic_Q_Target_Net2s[i]]
+        if target_update:
+            self._log(txt='target_update')
+            Q_nets = [self.Critic_Q_Net1s[i], self.Critic_Q_Net2s[i]]
+            Q_target_nets = [self.Critic_Q_Target_Net1s[i], self.Critic_Q_Target_Net2s[i]]
 
-        for Q_net_, Q_target_net_ in zip(Q_nets, Q_target_nets):
-            for Q_net_para_, Q_target_net_para_ in zip(Q_net_.parameters(), Q_target_net_.parameters()):
-                Q_target_net_para_.data.copy_(self.tau * Q_net_para_.data + (1 - self.tau) * Q_target_net_para_.data)
+            for Q_net_, Q_target_net_ in zip(Q_nets, Q_target_nets):
+                for Q_net_para_, Q_target_net_para_ in zip(Q_net_.parameters(), Q_target_net_.parameters()):
+                    Q_target_net_para_.data.copy_(self.tau * Q_net_para_.data + (1 - self.tau) * Q_target_net_para_.data)
 
         return Critic_Q1_loss_mean.detach().cpu().numpy(), Critic_Q2_loss_mean.detach().cpu().numpy(), Actor_policy_loss_mean.detach().cpu().numpy()
 
@@ -284,9 +301,15 @@ class SAC:
             a, _, _ = net.sample(s)
         return a.item()
 
+    def _run_learn(self, steps, interval_steps):
+        return steps % interval_steps == 0
+
+    def _run_update_target(self):
+        return
+
     def _run(self,
              envs, replay_buffer,
-             max_episodes, max_steps, batch_size):
+             max_episodes, max_steps, interval_steps, target_update_interval, batch_size):
         print('Run' + '=' * 50)
         steps = 0
         self.episode = 0
@@ -324,10 +347,12 @@ class SAC:
             s = next_s
 
             # learn
-            if replay_buffer.get_length() > batch_size:
+            if replay_buffer.get_length() > batch_size and self._run_learn(steps=steps, interval_steps=interval_steps):
+                target_update = True if steps % target_update_interval == 0 else False
+
                 for i in range(self.agent_n):
                     mini_batch = replay_buffer.sample(batch_size, per=False)
-                    q1_loss, q2_loss, p_loss = self._update(mini_batch, i)
+                    q1_loss, q2_loss, p_loss = self._update(mini_batch, i, target_update)
 
                     with open(f'./DB_ep/{self.Wd[i]["ep"]}.txt', 'a') as f:
                         f.write(f"{q1_loss},{q2_loss},{p_loss}\n")
