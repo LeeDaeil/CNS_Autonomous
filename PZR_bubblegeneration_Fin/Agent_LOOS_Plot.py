@@ -29,14 +29,17 @@ def read_db(file, i, names):
     global DB_GlBAL, DB_TOTAL
     print(f'Call {file}')
 
-    if 'tot.txt' in file:
-        temp = pd.read_csv(file, names=['i', 'q1', 'q1_av', 'q2', 'q2_av',
-                                        'p', 'p_av', 'r', 'r_av'])
-        DB_TOTAL = {'DB': temp, 'File_Name': file}
-    else:
-        temp = pd.read_csv(file, names=names)
-        DB_GlBAL[i] = {'DB': temp, 'File_Name': file}
-        return temp, file, i
+    try:
+        if 'tot.txt' in file:
+            temp = pd.read_csv(file, names=['i', 'q1', 'q1_av', 'q2', 'q2_av',
+                                            'p', 'p_av', 'r', 'r_av'])
+            DB_TOTAL = {'DB': temp, 'File_Name': file}
+        else:
+            temp = pd.read_csv(file, names=names)
+            DB_GlBAL[i] = {'DB': temp, 'File_Name': file}
+            return temp, file, i
+    except Exception as e:
+        print(e)
 
 pool = ThreadPoolExecutor(dirpath_files_nub)
 futures = [pool.submit(read_db, file, i, names) for file, i in zip(dirpath_files, range(dirpath_files_nub))]

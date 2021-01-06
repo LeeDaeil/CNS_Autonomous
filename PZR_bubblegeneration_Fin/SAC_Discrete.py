@@ -31,7 +31,7 @@ class SAC:
                  capacity=1e6, seq_len=2,
 
                  # Agent Run info
-                 max_episodes=1e6, max_steps=1e6, interval_steps=10, target_update_interval=500,
+                 max_episodes=1e6, max_steps=1e6, interval_steps=15, target_update_interval=15,
                  batch_size=128,
                  ):
         # -----------------------------------------------------------------------------------------
@@ -149,7 +149,7 @@ class SAC:
         Critic_Q2_loss = 0.5 * F.mse_loss(q2, target_q.detach())
         self._log(txt=f'q1_{q1}_{target_q}')
         self._log(txt=f'q1_{q2}_{target_q}')
-        
+
         Critic_Q1_loss_mean = torch.mean(Critic_Q1_loss)
         Critic_Q2_loss_mean = torch.mean(Critic_Q2_loss)
 
@@ -210,7 +210,7 @@ class SAC:
         with torch.no_grad():
             Actor_s_next_out = self.Actor_Policy_Nets[i].sample(s_next)
             # print('_Actor_Policy_Net_next_Out:\n', Actor_s_next_out)
-            _, action_next_, action_probs_next, log_probs_next = Actor_s_next_out
+            action_next_, action_probs_next, log_probs_next = Actor_s_next_out
 
             q1_target = self.Critic_Q_Target_Net1s[i](s_next)
             q2_target = self.Critic_Q_Target_Net2s[i](s_next)
@@ -230,7 +230,7 @@ class SAC:
     def _update_cal_policy_entropy(self, s, i):
         Actor_s_out = self.Actor_Policy_Nets[i].sample(s)
         # print('_Actor_Policy_Net_Out:\n', Actor_s_out)
-        _, action_, action_probs, log_probs = Actor_s_out
+        action_, action_probs, log_probs = Actor_s_out
 
         with torch.no_grad():
             q1_ = self.Critic_Q_Net1s[i](s)
